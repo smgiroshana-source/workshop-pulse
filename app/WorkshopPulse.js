@@ -608,7 +608,7 @@ export default function App() {
       follow_up: "📞 Follow Up Done",
       closed: "🏁 Close Job",
     }
-    return labels[nextStage] || `Next -> ${ns.label}`
+    return labels[nextStage] || `Next → ${ns.label}`
   }
   const canAdvance = () => {
     if (jobPaused) return false
@@ -773,7 +773,7 @@ export default function App() {
   }
   const updateInvItem = (iid, patch) => { const upd = inv => ({ ...inv, items: inv.items.map(i => i.id === iid ? { ...i, ...patch, is_modified: true } : i) }); setInvoices(p => p.map(inv => inv.id === selInv.id ? upd(inv) : inv)); setSelInv(prev => upd(prev)) }
   const removeInvItem = (iid) => { setInvoices(p => p.map(inv => inv.id === selInv.id ? { ...inv, items: inv.items.filter(i => i.id !== iid) } : inv)); setSelInv(prev => ({ ...prev, items: prev.items.filter(i => i.id !== iid) })) }
-  const setInvStatus = (s) => { const patch = { status: s }; if (s === "finalized") patch.finalized_at = new Date().toISOString(); setInvoices(p => p.map(inv => inv.id === selInv.id ? { ...inv, ...patch } : inv)); setSelInv(prev => ({ ...prev, ...patch })); tt(`-> ${s}`) }
+  const setInvStatus = (s) => { const patch = { status: s }; if (s === "finalized") patch.finalized_at = new Date().toISOString(); setInvoices(p => p.map(inv => inv.id === selInv.id ? { ...inv, ...patch } : inv)); setSelInv(prev => ({ ...prev, ...patch })); tt(`→ ${s}`) }
   const calcStatus = (inv) => {
     const ip = invInsPayments(inv); const cb = invCustBalance(inv)
     if (cb <= 0 && ip.length === 0 && invCustPaidTotal(inv) >= invNet(inv)) return "paid"
@@ -808,7 +808,7 @@ export default function App() {
     const ns = calcStatus(updated)
     setInvoices(p => p.map(inv => inv.id === selInv.id ? { ...inv, payments: np, status: ns } : inv))
     setSelInv(prev => ({ ...prev, payments: np, status: ns }))
-    tt(`-> ${newStatus}`)
+    tt(`→ ${newStatus}`)
   }
   const applyCustomerDiscount = (d) => {
     setInvoices(p => p.map(inv => inv.id === selInv.id ? { ...inv, customer_discount: d } : inv))
@@ -1005,7 +1005,7 @@ export default function App() {
 
           {/* QUOTE TAB */}
           {pqTab === "quote" && <>
-            <div style={{ fontSize: 13, color: C.sub, marginBottom: 14 }}>Fill supplier name & quoted price for each part -> send to insurance for price approval.</div>
+            <div style={{ fontSize: 13, color: C.sub, marginBottom: 14 }}>Fill supplier name &amp; quoted price for each part, then send to insurance for price approval.</div>
             {partsQuotation.map((p, idx) => <div key={p.id} style={{ ...card, padding: "14px 16px", marginBottom: 8 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
                 <span style={{ fontSize: 17, fontWeight: 600 }}>{idx + 1}. {p.partName}</span>
@@ -1525,7 +1525,7 @@ export default function App() {
 
         {/* Vehicle & Customer */}
         <div style={card}>
-          <div style={{ fontSize: 14, fontWeight: 600, color: C.sub, textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 14 }}>Vehicle & Customer</div>
+          <div style={{ fontSize: 14, fontWeight: 600, color: C.sub, textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 14 }}>Vehicle &amp; Customer</div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
             <div><div style={{ fontSize: 14, color: C.sub, marginBottom: 5, fontWeight: 500 }}>Vehicle Reg</div><input value={jobInfo.vehicle_reg} onChange={e => setJobInfo({ ...jobInfo, vehicle_reg: e.target.value })} placeholder="CBB-9636" style={{ ...inp, fontFamily: MONO, fontWeight: 700, fontSize: 20 }} /></div>
             <div><div style={{ fontSize: 14, color: C.sub, marginBottom: 5, fontWeight: 500 }}>Customer</div><input value={jobInfo.customer_name} onChange={e => setJobInfo({ ...jobInfo, customer_name: e.target.value })} placeholder="Mr. Kasun" style={inp} /></div>
@@ -1792,7 +1792,7 @@ export default function App() {
 
       {/* ══════ CATEGORY ══════ */}
       {screen === "est_cat" && <>
-        <NavBar title={`${cat.icon} ${cat.label}`} subtitle="Check -> rate -> Enter -> next" onBack={() => { if (activeCat === 0) { if (selEst) setScreen("est_review"); else setScreen("est_parts") } else setActiveCat(activeCat - 1) }} />
+        <NavBar title={`${cat.icon} ${cat.label}`} subtitle="Check, rate, enter, next" onBack={() => { if (activeCat === 0) { if (selEst) setScreen("est_review"); else setScreen("est_parts") } else setActiveCat(activeCat - 1) }} />
         <div style={{ display: "flex", gap: 4, marginBottom: 16, background: C.card, borderRadius: 14, padding: 5, boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
           {jobCats.map((c, i) => { const cnt = estEntries.filter(e => e.category === c.key).length; return <div key={c.key} onClick={() => setActiveCat(i)} style={{ flex: 1, textAlign: "center", padding: "10px 0", borderRadius: 12, cursor: "pointer", background: i === activeCat ? c.color + "12" : "transparent" }}>
             <div style={{ fontSize: 22 }}>{c.icon}</div>
@@ -1907,7 +1907,7 @@ export default function App() {
 
       {/* ══════ APPROVAL ENTRY ══════ */}
       {screen === "approve_entry" && <>
-        <NavBar title={`${aCat.icon} ${aCat.label}`} subtitle="Your price -> Approved price" onBack={() => setScreen("approve")} />
+        <NavBar title={`${aCat.icon} ${aCat.label}`} subtitle="Your price vs Approved price" onBack={() => setScreen("approve")} />
         <div style={{ display: "flex", gap: 4, marginBottom: 16, background: C.card, borderRadius: 14, padding: 5, boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
           {jobCats.map((c, i) => { const ci = approvalItems.filter(x => x.category === c.key); const done = ci.filter(x => x.approved_rate !== null || x.approval_status === "use_same").length; return ci.length ? <div key={c.key} onClick={() => setApprovalCat(i)} style={{ flex: 1, textAlign: "center", padding: "10px 0", borderRadius: 12, cursor: "pointer", background: i === approvalCat ? c.color + "12" : "transparent" }}>
             <div style={{ fontSize: 22 }}>{c.icon}</div>
