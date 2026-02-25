@@ -1278,6 +1278,7 @@ export default function App() {
                 </div>
                 <div style={{ fontSize: 13, color: C.sub, marginTop: 4 }}>{customerMatch.customer_name} · {customerMatch.customer_phone} · {customerMatch.vehicle_make} {customerMatch.vehicle_model}</div>
               </div>}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
               <div style={{ marginBottom: 10 }}>
                 <div style={{ fontSize: 14, color: er.customer_name ? C.red : C.sub, marginBottom: 5, fontWeight: 500 }}>Name <span style={{ color: C.red }}>*</span></div>
                 <input value={nj.customer_name} onChange={e => set("customer_name", e.target.value)} placeholder="Mr. Kasun" style={{ ...inp, border: errBorder("customer_name") }} />
@@ -2134,3 +2135,4 @@ export default function App() {
     </div>
   )
 }
+
