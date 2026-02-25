@@ -1102,7 +1102,7 @@ export default function App() {
               <div style={{ fontSize: 16, fontWeight: 600, color: C.sub }}>Prices not yet approved</div>
               <div style={{ fontSize: 14, color: C.muted, marginTop: 4 }}>Complete the Approve tab first</div>
             </div> : <>
-              <div style={{ fontSize: 13, color: C.sub, marginBottom: 14 }}>Enter actual cost per part. Supplier invoice is at approved price -- your margin is the difference.</div>
+              <div style={{ fontSize: 13, color: C.sub, marginBottom: 14 }}>Enter actual cost per part. Supplier invoice is at approved price — your margin is the difference.</div>
               
               {/* Per-part actual costs */}
               {partsQuotation.map((p, idx) => {
@@ -1200,7 +1200,7 @@ export default function App() {
             </div>
           </div>)}
           {!customerConfirmed && <div style={{ marginTop: 14 }}>
-            <div style={{ fontSize: 14, color: C.orange, marginBottom: 8, fontWeight: 500 }}>⚠️ Customer hasn't confirmed -- PO not sent</div>
+            <div style={{ fontSize: 14, color: C.orange, marginBottom: 8, fontWeight: 500 }}>⚠️ Customer hasn't confirmed — PO not sent</div>
             <button onClick={() => { confirmCustomer(); setShowPQScreen(false) }} style={{ ...btn(C.accent, "#fff") }}>✓ Customer Confirmed</button>
           </div>}
           {customerConfirmed && <div style={{ fontSize: 14, color: C.green, fontWeight: 600, textAlign: "center", marginTop: 14 }}>✓ Customer confirmed -- share PO with purchasing</div>}
@@ -1325,10 +1325,10 @@ export default function App() {
                 </div>}
               </div>}
               {nj.job_type === "direct" && <div style={{ padding: "12px 16px", background: C.green + "08", borderRadius: 12, border: `1px solid ${C.green}30` }}>
-                <span style={{ fontSize: 15, color: C.green, fontWeight: 600 }}>💰 Non-insurance -- estimate + full pipeline</span>
+                <span style={{ fontSize: 15, color: C.green, fontWeight: 600 }}>💰 Non-insurance — estimate + full pipeline</span>
               </div>}
               {nj.job_type === "quick" && <div style={{ padding: "12px 16px", background: C.orange + "08", borderRadius: 12, border: `1px solid ${C.orange}30` }}>
-                <span style={{ fontSize: 15, color: C.orange, fontWeight: 600 }}>⚡ Quick job -- no estimate, no pipeline, no photo needed</span>
+                <span style={{ fontSize: 15, color: C.orange, fontWeight: 600 }}>⚡ Quick job — no estimate, no pipeline, no photo needed</span>
               </div>}
             </div>
 
@@ -1609,7 +1609,7 @@ export default function App() {
                   <input type="number" value={item.cost || ""} onChange={e => setJobCosts(prev => prev.map(c => c.id === item.id ? { ...c, cost: Number(e.target.value) || 0, confirmed: false } : c))} style={{ ...inp, flex: 1, fontSize: 17, fontFamily: MONO, padding: "10px 14px" }} placeholder="0" />
                   <div onClick={() => { if (!item.name.trim()) { tt("⚠️ Enter item name first"); return } setJobCosts(prev => prev.map(c => c.id === item.id ? { ...c, confirmed: !c.confirmed } : c)) }} style={{ padding: "8px 14px", borderRadius: 10, background: item.confirmed ? C.green : C.bg, color: item.confirmed ? "#fff" : C.muted, fontWeight: 600, fontSize: 13, cursor: "pointer", border: `1px solid ${item.confirmed ? C.green : C.border}`, flexShrink: 0 }}>{item.confirmed ? "✓" : "Confirm"}</div>
                 </div>
-              </> : <div style={{ fontSize: 13, color: C.accent, fontWeight: 500 }}>👷 No cost -- charge set freely on invoice</div>}
+              </> : <div style={{ fontSize: 13, color: C.accent, fontWeight: 500 }}>👷 No cost — charge set freely on invoice</div>}
             </div>)}
           
             {/* Add item buttons */}
@@ -1727,8 +1727,8 @@ export default function App() {
                 </div>
                 <div style={{ fontSize: 16, color: C.sub }}>{est.label} · {est.entries.length} items{(est.sundries || []).length > 0 ? ` + ${est.sundries.length} sundries` : ""}</div>
                 <div style={{ display: "flex", gap: 12, marginTop: 8, alignItems: "center" }}>
-                  <span onClick={() => { setSelEst(est); setEstParts([...est.parts]); setEstEntries([...est.entries]); setSundryItems([...(est.sundries || [])]); setActiveCat(0); setScreen("est_review") }} style={{ fontSize: 16, fontWeight: 500, color: C.accent, cursor: "pointer" }}>View -></span>
-                  {est.status === "draft" && isInsurance && <span onClick={() => startApproval(est)} style={{ fontSize: 16, fontWeight: 500, color: C.green, cursor: "pointer" }}>Approve -></span>}
+                  <span onClick={() => { setSelEst(est); setEstParts([...est.parts]); setEstEntries([...est.entries]); setSundryItems([...(est.sundries || [])]); setActiveCat(0); setScreen("est_review") }} style={{ fontSize: 16, fontWeight: 500, color: C.accent, cursor: "pointer" }}>View →</span>
+                  {est.status === "draft" && isInsurance && <span onClick={() => startApproval(est)} style={{ fontSize: 16, fontWeight: 500, color: C.green, cursor: "pointer" }}>Approve →</span>}
                   <span onClick={() => generateEstimatePDF(est)} style={{ fontSize: 15, fontWeight: 500, color: C.purple, cursor: "pointer" }}>📄 PDF</span>
                 </div>
               </div>
@@ -1787,7 +1787,7 @@ export default function App() {
           <span style={{ flex: 1, fontSize: 17 }}>{p.name}</span>
           <span onClick={() => removePart(p.id)} style={{ color: C.red, fontSize: 18, cursor: "pointer", padding: 6 }}>✕</span>
         </div>)}
-        {estParts.length > 0 && <button onClick={() => { setActiveCat(0); setScreen("est_cat") }} style={{ ...btn(C.accent, "#fff"), marginTop: 10 }}>Next -> {jobCats[0].icon} {jobCats[0].label}</button>}
+        {estParts.length > 0 && <button onClick={() => { setActiveCat(0); setScreen("est_cat") }} style={{ ...btn(C.accent, "#fff"), marginTop: 10 }}>Next → {jobCats[0].icon} {jobCats[0].label}</button>}
         {selEst && estParts.length > 0 && <button onClick={() => setScreen("est_review")} style={{ ...btn(C.bg, C.accent), marginTop: 8 }}>2190 Back to Review</button>}
       </>}
 
@@ -1822,7 +1822,7 @@ export default function App() {
           </div>
         })}
         <div style={{ marginTop: 16 }}>
-          {activeCat < jobCats.length - 1 ? <button onClick={() => setActiveCat(activeCat + 1)} style={{ ...btn(jobCats[activeCat + 1].color, "#fff") }}>Next -> {jobCats[activeCat + 1].icon} {jobCats[activeCat + 1].label}</button>
+          {activeCat < jobCats.length - 1 ? <button onClick={() => setActiveCat(activeCat + 1)} style={{ ...btn(jobCats[activeCat + 1].color, "#fff") }}>Next → {jobCats[activeCat + 1].icon} {jobCats[activeCat + 1].label}</button>
             : <button onClick={() => setScreen("est_review")} style={{ ...btn(C.accent, "#fff") }}>Review Estimate</button>}
         </div>
       </>}
@@ -1937,7 +1937,7 @@ export default function App() {
           </div>
         })}
         <div style={{ marginTop: 16 }}>
-          {approvalCat < 3 && approvalItems.some(i => i.category === CATS[approvalCat + 1]?.key) ? <button onClick={() => setApprovalCat(approvalCat + 1)} style={{ ...btn(CATS[approvalCat + 1].color, "#fff") }}>Next -> {CATS[approvalCat + 1].icon} {CATS[approvalCat + 1].label}</button>
+          {approvalCat < 3 && approvalItems.some(i => i.category === CATS[approvalCat + 1]?.key) ? <button onClick={() => setApprovalCat(approvalCat + 1)} style={{ ...btn(CATS[approvalCat + 1].color, "#fff") }}>Next → {CATS[approvalCat + 1].icon} {CATS[approvalCat + 1].label}</button>
             : <button onClick={() => setScreen("approve_summary")} style={{ ...btn(C.accent, "#fff") }}>View Summary</button>}
         </div>
         <div style={{ position: "fixed", bottom: 0, left: isTablet ? 380 : 0, right: 0, background: C.card, borderTop: `1px solid ${C.border}`, padding: "14px 24px", maxWidth: isTablet ? undefined : 480, margin: isTablet ? undefined : "0 auto", zIndex: 50, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -2042,7 +2042,7 @@ export default function App() {
                 <div style={{ fontSize: 12, color: C.muted, marginTop: 2 }}>{new Date(p.date).toLocaleDateString("en-LK", { year: "numeric", month: "short", day: "numeric" })}</div>
                 {p.photo && <img src={p.photo} onClick={() => { const d = { id: "ins_ph_" + p.id, dataUrl: p.photo, label: "Insurance Release Letter" }; setJobDocs(prev => { const ex = prev.find(x => x.id === d.id); return ex ? prev : [...prev, d] }); setShowImage(d.id) }} style={{ height: 50, marginTop: 6, borderRadius: 6, border: `1px solid ${C.border}`, cursor: "pointer", objectFit: "cover" }} alt="" />}
                 <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
-                  {p.ins_status === "recorded" && <button onClick={() => updateInsStatus(p.id, "pending")} style={{ padding: "6px 14px", borderRadius: 8, border: "none", background: C.accent + "15", color: C.accent, fontWeight: 600, fontSize: 13, cursor: "pointer" }}>-> Mark Pending</button>}
+                  {p.ins_status === "recorded" && <button onClick={() => updateInsStatus(p.id, "pending")} style={{ padding: "6px 14px", borderRadius: 8, border: "none", background: C.accent + "15", color: C.accent, fontWeight: 600, fontSize: 13, cursor: "pointer" }}>→ Mark Pending</button>}
                   {p.ins_status === "pending" && <button onClick={() => updateInsStatus(p.id, "received")} style={{ padding: "6px 14px", borderRadius: 8, border: "none", background: C.green + "15", color: C.green, fontWeight: 600, fontSize: 13, cursor: "pointer" }}>✓ Received</button>}
                   {p.ins_status === "received" && <span style={{ fontSize: 13, color: C.green }}>✓ Money received</span>}
                 </div>
@@ -2135,4 +2135,5 @@ export default function App() {
     </div>
   )
 }
+
 
