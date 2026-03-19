@@ -43,20 +43,20 @@ export default function NewJobScreen() {
             // Normalize on blur
             const norm = normalizeReg(nj.vehicle_reg)
             if (norm !== nj.vehicle_reg) set("vehicle_reg", norm)
-          }} placeholder="CBB 5949" style={{ ...inp, fontFamily: MONO, fontWeight: 700, fontSize: 22, border: errBorder("vehicle_reg") }} />
+          }} placeholder="e.g. CBB-9636" autoComplete="off" style={{ ...inp, fontFamily: MONO, fontWeight: 700, fontSize: 22, border: errBorder("vehicle_reg") }} />
           {nj.vehicle_reg && normalizeReg(nj.vehicle_reg) !== nj.vehicle_reg && <div style={{ fontSize: 12, color: C.accent, marginTop: 4 }}>→ {normalizeReg(nj.vehicle_reg)}</div>}
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
           <div style={{ position: "relative" }}>
             <div style={{ fontSize: 14, color: er.vehicle_make ? C.red : C.sub, marginBottom: 5, fontWeight: 500 }}>Make <span style={{ color: C.red }}>*</span></div>
-            <input value={nj.vehicle_make} onChange={e => { set("vehicle_make", e.target.value); const q = e.target.value.toLowerCase(); setNewJobMakeSugg(q.length >= 1 ? VEHICLE_MAKES.filter(m => m.toLowerCase().includes(q)) : []) }} onFocus={() => { if (!nj.vehicle_make) setNewJobMakeSugg(VEHICLE_MAKES) }} onBlur={() => setTimeout(() => setNewJobMakeSugg([]), 200)} placeholder="Toyota" style={{ ...inp, border: errBorder("vehicle_make") }} />
+            <input value={nj.vehicle_make} onChange={e => { set("vehicle_make", e.target.value); const q = e.target.value.toLowerCase(); setNewJobMakeSugg(q.length >= 1 ? VEHICLE_MAKES.filter(m => m.toLowerCase().includes(q)) : []) }} onFocus={() => { if (!nj.vehicle_make) setNewJobMakeSugg(VEHICLE_MAKES) }} onBlur={() => setTimeout(() => setNewJobMakeSugg([]), 200)} placeholder="e.g. Toyota" autoComplete="off" style={{ ...inp, border: errBorder("vehicle_make") }} />
             {newJobMakeSugg.length > 0 && <div style={{ position: "absolute", top: "100%", left: 0, right: 0, background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, zIndex: 20, maxHeight: 200, overflowY: "auto", boxShadow: "0 10px 40px rgba(0,0,0,0.12)", marginTop: 4 }}>
               {newJobMakeSugg.map(m => <div key={m} onMouseDown={() => { set("vehicle_make", m); setNewJobMakeSugg([]) }} style={{ padding: "14px 18px", fontSize: 17, cursor: "pointer", borderBottom: `1px solid ${C.border}` }}>{m}</div>)}
             </div>}
           </div>
           <div>
             <div style={{ fontSize: 14, color: er.vehicle_model ? C.red : C.sub, marginBottom: 5, fontWeight: 500 }}>Model <span style={{ color: C.red }}>*</span></div>
-            <input value={nj.vehicle_model} onChange={e => set("vehicle_model", e.target.value)} placeholder="Aqua" style={{ ...inp, border: errBorder("vehicle_model") }} />
+            <input value={nj.vehicle_model} onChange={e => set("vehicle_model", e.target.value)} placeholder="e.g. Aqua" autoComplete="off" style={{ ...inp, border: errBorder("vehicle_model") }} />
           </div>
         </div>
       </div>
@@ -77,7 +77,7 @@ export default function NewJobScreen() {
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
         <div style={{ marginBottom: 10 }}>
           <div style={{ fontSize: 14, color: er.customer_name ? C.red : C.sub, marginBottom: 5, fontWeight: 500 }}>Name <span style={{ color: C.red }}>*</span></div>
-          <input value={nj.customer_name} onChange={e => set("customer_name", e.target.value)} placeholder="Mr. Kasun" style={{ ...inp, border: errBorder("customer_name") }} />
+          <input value={nj.customer_name} onChange={e => set("customer_name", e.target.value)} placeholder="Customer name" autoComplete="off" style={{ ...inp, border: errBorder("customer_name") }} />
         </div>
         <div>
           <div style={{ fontSize: 14, color: er.customer_phone ? C.red : C.sub, marginBottom: 5, fontWeight: 500 }}>Phone <span style={{ color: C.red }}>*</span></div>
@@ -94,7 +94,7 @@ export default function NewJobScreen() {
             // Show normalized preview
             const ph = normalizePhone(nj.customer_phone)
             if (ph.valid && ph.normalized !== nj.customer_phone) set("customer_phone", ph.normalized)
-          }} placeholder="0771234567" style={{ ...inp, fontFamily: MONO, border: errBorder("customer_phone") }} />
+          }} placeholder="07X XXXX XXX" autoComplete="off" style={{ ...inp, fontFamily: MONO, border: errBorder("customer_phone") }} />
           {er.phone_msg && <div style={{ fontSize: 12, color: C.red, marginTop: 4, fontWeight: 600 }}>⚠️ {er.phone_msg}</div>}
           {nj.customer_phone && !er.customer_phone && (() => { const ph = normalizePhone(nj.customer_phone); return ph.valid && ph.normalized !== nj.customer_phone ? <div style={{ fontSize: 12, color: C.accent, marginTop: 4 }}>→ {ph.normalized}</div> : null })()}
         </div>

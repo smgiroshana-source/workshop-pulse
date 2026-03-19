@@ -1,8 +1,8 @@
 "use client"
 import { useState } from "react"
-import { WorkshopProvider, useWorkshop, C, FONT, MONO, btn, btnSm, inp, card, pill, Sheet, NavBar, ALL_STAGES, fmt, regSearchKey, phoneSearchKey } from "./WorkshopContext"
+import { WorkshopProvider, useWorkshop, C, FONT, MONO, btn, btnSm, inp, card, pill, Sheet, NavBar, ALL_STAGES, fmt, regSearchKey, phoneSearchKey, SP } from "./WorkshopContext"
 import { useAuth } from "./AuthGate"
-import { uploadPhoto } from "./supabase"
+import { uploadPhoto, deletePhoto } from "./supabase"
 import UserManagement from "./screens/UserManagement"
 import HomeScreen from "./screens/HomeScreen"
 import NewJobScreen from "./screens/NewJobScreen"
@@ -86,7 +86,11 @@ function AppInner() {
           </div>
         </div>
 
-        <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search reg, customer, make..." style={{ ...inp, background: C.card, fontSize: isTablet ? 15 : 17, marginBottom: 12, boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }} />
+        <div style={{ position: "relative", marginBottom: 12 }}>
+          <span style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", fontSize: 16, pointerEvents: "none" }}>🔍</span>
+          <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search vehicles..." style={{ ...inp, background: C.card, fontSize: isTablet ? 15 : 17, paddingLeft: 42, boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }} />
+          {searchQuery && <span onClick={() => setSearchQuery("")} style={{ position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)", fontSize: 18, cursor: "pointer", color: C.muted, padding: 4 }}>✕</span>}
+        </div>
 
         {/* Dashboard summary cards */}
         {homeTab === "active" && (() => {
@@ -95,13 +99,13 @@ function AppInner() {
           const partsWaiting = active.filter(j => (j.estimates || []).flatMap(e => (e.approved_entries || e.entries || []).filter(en => en.category === "replace")).some(p => !j.partsArrived?.[p.id])).length
           const overdue = jobs.filter(j => j.onHold && j.holdUntil && new Date(j.holdUntil) < new Date()).length
           const metrics = [
-            { label: "Active", value: active.length, color: C.accent, action: () => { setFilterStage("all") } },
-            { label: "Est. Pending", value: pendingEst, color: C.orange, action: () => { setFilterStage("est_pending") } },
-            { label: "Parts Wait", value: partsWaiting, color: C.purple, action: () => {} },
-            { label: "Overdue", value: overdue, color: C.red, action: () => { setHomeTab("on_hold") } },
+            { label: "Active", value: active.length, color: C.accent, action: () => { setSearchQuery(""); setHomeTab("active"); setFilterStage("all") } },
+            { label: "Est. Pending", value: pendingEst, color: C.orange, action: () => { setSearchQuery(""); setHomeTab("active"); setFilterStage("est_pending") } },
+            { label: "Parts Wait", value: partsWaiting, color: C.purple, action: () => { setSearchQuery(""); setHomeTab("active"); setFilterStage("parts_waiting") } },
+            { label: "Overdue", value: overdue, color: C.red, action: () => { setSearchQuery(""); setHomeTab("on_hold") } },
           ].filter(m => m.value > 0 || m.label === "Active")
           return <div style={{ display: "flex", gap: 8, overflowX: "auto", marginBottom: 12, paddingBottom: 2 }}>
-            {metrics.map(m => <div key={m.label} onClick={m.action} style={{ flex: "0 0 auto", minWidth: 100, background: C.card, borderRadius: 14, padding: "10px 14px", boxShadow: "0 1px 3px rgba(0,0,0,0.06)", cursor: "pointer", borderBottom: `3px solid ${m.color}` }}>
+            {metrics.map(m => <div key={m.label} onClick={m.action} style={{ flex: "0 0 auto", minWidth: 100, background: C.card, borderRadius: 14, padding: "10px 14px", boxShadow: "0 1px 3px rgba(0,0,0,0.06)", cursor: "pointer", borderBottom: `3px solid ${m.color}`, minHeight: 72 }}>
               <div style={{ fontSize: 24, fontWeight: 700, color: m.color, fontFamily: MONO }}>{m.value}</div>
               <div style={{ fontSize: 11, color: C.sub, fontWeight: 600, marginTop: 2 }}>{m.label}</div>
             </div>)}
@@ -111,22 +115,29 @@ function AppInner() {
         {/* Active / On Hold / Closed tabs */}
         <div style={{ display: "flex", gap: 0, marginBottom: 12, background: C.card, borderRadius: 14, padding: 4, boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
           {[["active", "Active", jobs.filter(j => !j.onHold && j.stage !== "closed").length], ["on_hold", "📌 On Hold", jobs.filter(j => j.onHold).length], ["closed", "🏁 Closed", jobs.filter(j => j.stage === "closed").length]].map(([k, l, cnt]) => (
-            <div key={k} onClick={() => { setHomeTab(k); setFilterStage("all") }} style={{ flex: 1, textAlign: "center", padding: "10px 0", borderRadius: 12, cursor: "pointer", background: homeTab === k ? (k === "on_hold" ? C.orange + "12" : k === "closed" ? C.sub + "12" : C.accent + "12") : "transparent", color: homeTab === k ? (k === "on_hold" ? C.orange : k === "closed" ? C.sub : C.accent) : C.muted, fontSize: 14, fontWeight: 600, transition: "all 0.2s" }}>{l} ({cnt})</div>
+            <div key={k} onClick={() => { setHomeTab(k); setFilterStage("all") }} style={{ flex: 1, textAlign: "center", padding: "12px 0", borderRadius: 12, minHeight: 44, cursor: "pointer", background: homeTab === k ? (k === "on_hold" ? C.orange + "12" : k === "closed" ? C.sub + "12" : C.accent + "12") : "transparent", color: homeTab === k ? (k === "on_hold" ? C.orange : k === "closed" ? C.sub : C.accent) : C.muted, fontSize: 14, fontWeight: 600, transition: "all 0.2s" }}>{l} ({cnt})</div>
           ))}
         </div>
 
         {/* Stage filter pills -- active tab only */}
         {homeTab === "active" && (
           <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 12, marginBottom: 4 }}>
-            <div onClick={() => setFilterStage("all")} style={{ padding: "10px 16px", borderRadius: 20, fontSize: isTablet ? 13 : 14, fontWeight: 600, cursor: "pointer", flexShrink: 0, background: filterStage === "all" ? C.accent : C.card, color: filterStage === "all" ? "#fff" : C.sub, border: `1px solid ${filterStage === "all" ? C.accent : C.border}` }}>All ({jobs.filter(j => !j.onHold && j.stage !== "closed").length})</div>
-            {Object.entries(ALL_STAGES).filter(([, s]) => s.label !== "Closed").map(([key, s]) => { const cnt = jobs.filter(j => j.stage === key && !j.onHold).length; return cnt > 0 ? <div key={key} onClick={() => setFilterStage(filterStage === key ? "all" : key)} style={{ padding: "10px 16px", borderRadius: 20, fontSize: isTablet ? 13 : 14, fontWeight: 600, cursor: "pointer", flexShrink: 0, whiteSpace: "nowrap", background: filterStage === key ? s.color + "15" : C.card, color: filterStage === key ? s.color : C.sub, border: `1px solid ${filterStage === key ? s.color + "50" : C.border}` }}>{s.icon} {s.label} ({cnt})</div> : null })}
+            {filterStage === "parts_waiting" && <div onClick={() => setFilterStage("all")} style={{ padding: "12px 18px", borderRadius: 20, minHeight: 44, fontSize: isTablet ? 13 : 14, fontWeight: 600, cursor: "pointer", flexShrink: 0, whiteSpace: "nowrap", background: C.purple + "15", color: C.purple, border: `1px solid ${C.purple}50` }}>{"\uD83D\uDCE6"} Parts Waiting ×</div>}
+            <div onClick={() => setFilterStage("all")} style={{ padding: "12px 18px", borderRadius: 20, minHeight: 44, fontSize: isTablet ? 13 : 14, fontWeight: 600, cursor: "pointer", flexShrink: 0, background: filterStage === "all" ? C.accent : C.card, color: filterStage === "all" ? "#fff" : C.sub, border: `1px solid ${filterStage === "all" ? C.accent : C.border}` }}>All ({jobs.filter(j => !j.onHold && j.stage !== "closed").length})</div>
+            {Object.entries(ALL_STAGES).filter(([, s]) => s.label !== "Closed").map(([key, s]) => { const cnt = jobs.filter(j => j.stage === key && !j.onHold).length; return cnt > 0 ? <div key={key} onClick={() => setFilterStage(filterStage === key ? "all" : key)} style={{ padding: "12px 18px", borderRadius: 20, minHeight: 44, fontSize: isTablet ? 13 : 14, fontWeight: 600, cursor: "pointer", flexShrink: 0, whiteSpace: "nowrap", background: filterStage === key ? s.color + "15" : C.card, color: filterStage === key ? s.color : C.sub, border: `1px solid ${filterStage === key ? s.color + "50" : C.border}` }}>{s.icon} {s.label} ({cnt})</div> : null })}
           </div>
         )}
 
         {/* Job cards */}
         {(() => {
           let filtered = homeTab === "on_hold" ? jobs.filter(j => j.onHold) : homeTab === "closed" ? jobs.filter(j => j.stage === "closed") : jobs.filter(j => !j.onHold && j.stage !== "closed")
-          if (homeTab === "active" && filterStage !== "all") filtered = filtered.filter(j => j.stage === filterStage)
+          if (homeTab === "active" && filterStage !== "all") {
+            if (filterStage === "parts_waiting") {
+              filtered = filtered.filter(j => (j.estimates || []).flatMap(e => (e.approved_entries || e.entries || []).filter(en => en.category === "replace")).some(p => !j.partsArrived?.[p.id]))
+            } else {
+              filtered = filtered.filter(j => j.stage === filterStage)
+            }
+          }
           if (searchQuery.trim()) { const q = searchQuery.toLowerCase().replace(/[\s\-]/g, ""); filtered = filtered.filter(j => { const reg = regSearchKey(j.jobInfo.vehicle_reg); const phone = phoneSearchKey(j.jobInfo.customer_phone); const name = (j.jobInfo.customer_name || "").toLowerCase(); const make = (j.jobInfo.vehicle_make || "").toLowerCase(); const num = (j.jobNumber || "").toLowerCase(); return reg.includes(q) || phone.includes(q) || name.includes(q) || make.includes(q) || num.includes(q) }) }
           // Sort
           const stageKeys = Object.keys(ALL_STAGES)
@@ -215,7 +226,7 @@ function AppInner() {
                   const thumb = (j.jobDocs || [])[0]?.dataUrl
                   const isSel = activeJobId === j.id
                   return (
-                    <div key={j.id} onClick={e => { e.stopPropagation(); openJob(j); setSidebarExpanded(false) }} onMouseEnter={e => { setHoverJobId(j.id); setHoverY(e.clientY) }} onMouseLeave={() => setHoverJobId(null)} style={{ marginBottom: 6, cursor: "pointer", borderRadius: 12, overflow: "hidden", border: isSel ? `2px solid ${C.accent}` : `2px solid transparent`, background: isSel ? C.accent + "08" : C.card, transition: "all 0.2s" }}>
+                    <div key={j.id} onClick={e => { e.stopPropagation(); setHoverJobId(null); openJob(j); setSidebarExpanded(false) }} onMouseEnter={e => { setHoverJobId(j.id); setHoverY(e.clientY) }} onMouseLeave={() => setHoverJobId(null)} style={{ marginBottom: 6, cursor: "pointer", borderRadius: 12, overflow: "hidden", border: isSel ? `2px solid ${C.accent}` : `2px solid transparent`, background: isSel ? C.accent + "08" : C.card, transition: "all 0.2s" }}>
                       {thumb ? <img src={thumb} style={{ width: "100%", height: 52, objectFit: "cover", display: "block" }} alt="" /> : <div style={{ width: "100%", height: 52, background: C.bg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20 }}>🚗</div>}
                       <div style={{ padding: "4px 4px 5px", textAlign: "center" }}>
                         <div style={{ fontFamily: MONO, fontSize: 11, fontWeight: 700, lineHeight: 1.2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{j.jobInfo.vehicle_reg || "--"}</div>
@@ -243,12 +254,12 @@ function AppInner() {
         </div>
       )}
 
-      {/* TABLET: Vehicle photo popup on hover */}
-      {isTablet && hoverJobId && (() => {
+      {/* TABLET: Vehicle photo popup on hover (only in collapsed sidebar, not when job is selected) */}
+      {isTablet && hoverJobId && hoverJobId !== activeJobId && sidebarCollapsed && (() => {
         const hj = jobs.find(j => j.id === hoverJobId)
         const photo = (hj?.jobDocs || [])[0]?.dataUrl
         return photo ? (
-          <div style={{ position: "fixed", left: sidebarCollapsed ? 90 : 392, top: Math.min(hoverY - 40, window.innerHeight - 240), zIndex: 200, background: C.card, borderRadius: 16, padding: 6, boxShadow: "0 12px 40px rgba(0,0,0,0.22)", border: `1px solid ${C.border}`, pointerEvents: "none", transition: "left 0.25s ease, top 0.15s ease" }}>
+          <div style={{ position: "fixed", left: 90, top: Math.min(hoverY - 40, window.innerHeight - 240), zIndex: 200, background: C.card, borderRadius: 16, padding: 6, boxShadow: "0 12px 40px rgba(0,0,0,0.22)", border: `1px solid ${C.border}`, pointerEvents: "none" }}>
             <img src={photo} style={{ width: 240, height: 180, objectFit: "cover", borderRadius: 12 }} alt="" />
             <div style={{ padding: "6px 8px", fontSize: 14, fontWeight: 700, color: C.sub, textAlign: "center" }}>{hj.jobInfo.vehicle_reg} · {hj.jobInfo.vehicle_make}</div>
           </div>
@@ -271,8 +282,23 @@ function AppInner() {
           return d ? (
             <div onClick={() => setShowImage(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.92)", zIndex: 1000, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 20 }}>
               {d.label && <div style={{ color: "#fff", fontSize: 16, fontWeight: 600, marginBottom: 12, opacity: 0.8 }}>{d.label}</div>}
-              <img src={d.dataUrl} style={{ maxWidth: "100%", maxHeight: "75vh", borderRadius: 16 }} alt="" />
-              <button onClick={() => setShowImage(null)} style={{ ...btnSm("#fff", C.text), width: "auto", marginTop: 20, padding: "14px 40px" }}>Close</button>
+              <img src={d.dataUrl} style={{ maxWidth: "100%", maxHeight: "70vh", borderRadius: 16 }} alt="" />
+              <div style={{ display: "flex", gap: 12, marginTop: 20 }}>
+                <button onClick={(e) => { e.stopPropagation(); setShowImage(null) }} style={{ ...btnSm("#fff", C.text), width: "auto", padding: "14px 40px" }}>Close</button>
+                <button onClick={async (e) => {
+                  e.stopPropagation()
+                  if (!confirm("Delete this photo?")) return
+                  try {
+                    await deletePhoto(d.dataUrl)
+                    setJobDocs(prev => prev.filter(x => x.id !== d.id))
+                    setShowImage(null)
+                    tt("🗑️ Photo deleted")
+                  } catch (err) {
+                    console.error("Delete failed:", err)
+                    tt("❌ Failed to delete photo")
+                  }
+                }} style={{ ...btnSm("#ff3b30", "#fff"), width: "auto", padding: "14px 40px" }}>🗑️ Delete</button>
+              </div>
             </div>
           ) : null
         })()}

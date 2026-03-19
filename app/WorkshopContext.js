@@ -7,16 +7,22 @@ export const C = {
   bg: "#F2F2F7", card: "#FFFFFF", text: "#000000", sub: "#6C6C70", muted: "#AEAEB2",
   accent: "#007AFF", green: "#34C759", orange: "#FF9500", red: "#FF3B30", purple: "#AF52DE",
   border: "#E5E5EA", sheetBg: "rgba(0,0,0,0.4)",
+  // Semantic tokens
+  accentLight: "#007AFF12", focusRing: "#007AFF40",
+  successBg: "#34C75910", warningBg: "#FF950010", errorBg: "#FF3B3010",
 }
+export const SP = { xs: 4, sm: 8, md: 12, lg: 16, xl: 20, xxl: 24, xxxl: 32 }
 export const FONT = "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', sans-serif"
 export const MONO = "'SF Mono', ui-monospace, 'Menlo', monospace"
 export const fmt = n => Number(n || 0).toLocaleString("en-LK", { minimumFractionDigits: 2 })
 
-export const card = { background: C.card, borderRadius: 16, padding: "18px", marginBottom: 12, boxShadow: "0 0.5px 1px rgba(0,0,0,0.05)" }
+export const card = { background: C.card, borderRadius: 16, padding: SP.lg, marginBottom: SP.md, boxShadow: "0 0.5px 1px rgba(0,0,0,0.05)" }
 export const pill = (color) => ({ fontSize: 13, fontWeight: 600, color, background: color + "15", padding: "5px 12px", borderRadius: 20 })
-export const btn = (bg, color) => ({ border: "none", borderRadius: 14, padding: "16px 24px", fontSize: 18, fontWeight: 600, cursor: "pointer", color: color || "#fff", background: bg || C.accent, fontFamily: FONT, width: "100%", textAlign: "center", letterSpacing: "-0.3px" })
-export const btnSm = (bg, color) => ({ ...btn(bg, color), padding: "12px 18px", fontSize: 16, borderRadius: 12 })
-export const inp = { width: "100%", boxSizing: "border-box", padding: "16px 18px", background: C.bg, border: "none", borderRadius: 14, color: C.text, fontSize: 17, fontFamily: FONT, outline: "none", letterSpacing: "-0.2px" }
+export const btn = (bg, color) => ({ border: "none", borderRadius: 12, padding: "16px 24px", fontSize: 17, fontWeight: 600, cursor: "pointer", color: color || "#fff", background: bg || C.accent, fontFamily: FONT, width: "100%", textAlign: "center", letterSpacing: "-0.3px", minHeight: 52, transition: "opacity 0.15s" })
+export const btnSm = (bg, color) => ({ ...btn(bg, color), padding: "12px 18px", fontSize: 15, borderRadius: 10, minHeight: 44 })
+export const btnOutline = (color) => ({ border: `1.5px solid ${color || C.accent}`, borderRadius: 12, padding: "14px 20px", fontSize: 15, fontWeight: 600, cursor: "pointer", color: color || C.accent, background: "transparent", fontFamily: FONT, width: "100%", textAlign: "center", minHeight: 48, transition: "background 0.15s" })
+export const btnText = (color) => ({ border: "none", borderRadius: 8, padding: "10px 16px", fontSize: 15, fontWeight: 600, cursor: "pointer", color: color || C.accent, background: "transparent", fontFamily: FONT, textAlign: "center", minHeight: 44 })
+export const inp = { width: "100%", boxSizing: "border-box", padding: "14px 16px", background: C.bg, border: "2px solid transparent", borderRadius: 12, color: C.text, fontSize: 17, fontFamily: FONT, outline: "none", letterSpacing: "-0.2px", transition: "border-color 0.2s, box-shadow 0.2s" }
 
 export const CATS_PAINT = [
   { key: "remove_refix", label: "Remove-Refix", short: "R/R", icon: "🔩", color: C.accent },

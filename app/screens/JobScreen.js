@@ -1,7 +1,7 @@
 "use client"
-import { useState } from "react"
+import React, { useState } from "react"
 import { useWorkshop } from "../WorkshopContext"
-import { C, FONT, MONO, inp, btn, btnSm, card, pill, Sheet, NavBar, ALL_STAGES, VEHICLE_MAKES, INSURANCE_COMPANIES, INV_STATUS, fmt } from "../WorkshopContext"
+import { C, FONT, MONO, inp, btn, btnSm, btnOutline, btnText, card, pill, Sheet, NavBar, ALL_STAGES, VEHICLE_MAKES, INSURANCE_COMPANIES, INV_STATUS, fmt, SP } from "../WorkshopContext"
 import { uploadPhoto } from "../supabase"
 
 export default function JobScreen() {
@@ -157,11 +157,16 @@ export default function JobScreen() {
           <span style={{ fontSize: 15, fontWeight: 600, color: C.orange }}>⏸ Main job paused</span>
           <span onClick={() => { setJobPaused(false); tt("▶ Resumed") }} style={{ fontSize: 14, fontWeight: 600, color: C.accent, cursor: "pointer" }}>▶ Resume</span>
         </div>}
-        <div style={{ display: "flex", gap: 4, flexWrap: isTablet ? "nowrap" : "wrap", overflowX: isTablet ? "auto" : "visible", paddingBottom: 4 }}>
-          {pipeline.map((key, i) => { const s = ALL_STAGES[key]; const active = key === jobStage; const past = i < stageIdx; return <div key={key} style={{ flex: "0 0 auto", textAlign: "center", padding: "8px 10px", borderRadius: 12, background: active ? s.color + "15" : past ? C.green + "06" : "transparent", border: active ? `3px solid ${s.color}` : "1px solid transparent", boxShadow: active ? `0 2px 8px ${s.color}30` : "none", minWidth: 64, opacity: past ? 0.7 : 1 }}>
-            <div style={{ fontSize: 20 }}>{past ? "✓" : s.icon}</div>
-            <div style={{ fontSize: 11, fontWeight: active ? 700 : 500, color: active ? s.color : past ? C.green : C.muted, marginTop: 2, whiteSpace: "nowrap" }}>{s.label}</div>
-          </div> })}
+        <div style={{ display: "flex", alignItems: "center", overflowX: "auto", padding: "8px 4px" }}>
+          {pipeline.map((key, i) => { const s = ALL_STAGES[key]; const active = key === jobStage; const past = i < stageIdx; const showLabel = active || i === stageIdx - 1 || i === stageIdx + 1; return <React.Fragment key={key}>
+            {i > 0 && <div style={{ height: 2, flex: "1 1 8px", minWidth: 8, maxWidth: 24, background: past ? C.green : C.border }} />}
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", flexShrink: 0 }}>
+              {active ? <div style={{ width: 36, height: 36, borderRadius: 18, background: s.color + "15", border: `3px solid ${s.color}`, boxShadow: `0 2px 8px ${s.color}30`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16 }}>{s.icon}</div>
+                : past ? <div style={{ width: 20, height: 20, borderRadius: 10, background: C.green, display: "flex", alignItems: "center", justifyContent: "center" }}><span style={{ color: "#fff", fontSize: 11, fontWeight: 700 }}>✓</span></div>
+                : <div style={{ width: 16, height: 16, borderRadius: 8, background: C.border }} />}
+              {showLabel && <div style={{ fontSize: 10, fontWeight: active ? 700 : 500, color: active ? s.color : past ? C.green : C.muted, marginTop: 3, whiteSpace: "nowrap", textAlign: "center" }}>{s.label}</div>}
+            </div>
+          </React.Fragment> })}
         </div>
         {/* Next action */}
         {canAdvance() && <button onClick={() => {
@@ -246,7 +251,7 @@ export default function JobScreen() {
 
         {jobStage === "follow_up" && <>
           <div style={{ display: "flex", gap: 8, marginTop: 10, overflowX: "auto", paddingBottom: 4 }}>
-            {["No issues -- happy", "Minor concern noted", "Warranty callback needed"].map(q => <div key={q} onClick={() => setFollowUpNote(prev => prev ? prev + ". " + q : q)} style={{ padding: "6px 12px", borderRadius: 20, background: C.bg, border: `1px solid ${C.border}`, fontSize: 13, color: C.sub, cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0 }}>{q}</div>)}
+            {["No issues -- happy", "Minor concern noted", "Warranty callback needed"].map(q => <div key={q} onClick={() => setFollowUpNote(prev => prev ? prev + ". " + q : q)} style={{ padding: "10px 16px", borderRadius: 20, background: C.bg, border: `1px solid ${C.border}`, fontSize: 13, color: C.sub, cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0 }}>{q}</div>)}
           </div>
 
           <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
@@ -341,7 +346,7 @@ export default function JobScreen() {
               </div>
             </div>
             <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
-              <button onClick={cancelEditDetails} style={{ ...btnSm(C.bg, C.sub), flex: 1, border: `1px solid ${C.border}` }}>Cancel</button>
+              <button onClick={cancelEditDetails} style={{ ...btnSm("transparent", C.sub), flex: 1, border: `1px solid ${C.border}`, background: "transparent" }}>Cancel</button>
               <button onClick={saveEditDetails} style={{ ...btnSm(C.green, "#fff"), flex: 1 }}>✓ Save</button>
             </div>
           </>}
@@ -353,12 +358,12 @@ export default function JobScreen() {
         <SectionHead title={`Photos (${jobDocs.length})`} icon="📷" sectionKey="photos" badge={<div onClick={(e) => { e.stopPropagation(); setShowUploadMenu("job") }} style={{ fontSize: 15, fontWeight: 500, color: C.accent, cursor: "pointer" }}>+ Add</div>} />
         {isSectionOpen("photos") && <>
         {isUploading && <div style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "6px 12px", background: C.accent + "10", borderRadius: 10, marginBottom: 8, fontSize: 13, color: C.accent, fontWeight: 600 }}>⏳ Uploading...</div>}
-        {jobDocs.length > 0 && <div style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 4, alignItems: "flex-end" }}>
-          {jobDocs.map((d, i) => {
+        {jobDocs.length > 0 && <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(90px, 1fr))", gap: 8 }}>
+          {jobDocs.map((d) => {
             const tagColor = d.label === "Vehicle" ? C.accent : d.label === "Before" ? C.orange : d.label === "After" ? C.green : C.sub
-            return <div key={d.id} style={{ flexShrink: 0, position: "relative" }}>
-            <img src={d.dataUrl} onClick={() => setShowImage(d.id)} style={{ width: i === 0 ? 180 : 90, height: i === 0 ? 136 : 68, objectFit: "cover", borderRadius: i === 0 ? 14 : 12, cursor: "pointer", border: i === 0 ? `2px solid ${C.accent}30` : `2px solid ${tagColor}25` }} alt="" />
-            <div style={{ position: "absolute", bottom: 4, left: 4, right: 4, background: tagColor + "dd", color: "#fff", fontSize: i === 0 ? 11 : 10, fontWeight: 600, borderRadius: 6, padding: "2px 6px", textAlign: "center", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{d.label || "General"}</div>
+            return <div key={d.id} style={{ position: "relative", overflow: "hidden", borderRadius: 12 }}>
+            <img src={d.dataUrl} onClick={() => setShowImage(d.id)} style={{ width: "100%", aspectRatio: "1", objectFit: "cover", borderRadius: 12, cursor: "pointer", display: "block" }} alt="" />
+            <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, background: `linear-gradient(transparent, ${tagColor}cc)`, color: "#fff", fontSize: 10, fontWeight: 600, padding: "12px 6px 4px", textAlign: "center", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{d.label || "General"}</div>
           </div>})}
         </div>}
         {jobStage === "qc" && !jobDocs.some(d => d.label === "After") && <div style={{ background: C.orange + "08", border: `2px dashed ${C.orange}40`, borderRadius: 12, padding: "14px 16px", marginTop: 10, textAlign: "center" }}>
@@ -454,7 +459,7 @@ export default function JobScreen() {
         {replaceParts.map(p => {
           const arrived = !!partsArrived[p.id]
           return <div key={p.id} onClick={() => setPartsArrived(prev => ({ ...prev, [p.id]: !prev[p.id] }))} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 0", borderBottom: `1px solid ${C.border}`, cursor: "pointer" }}>
-            <div style={{ width: 40, height: 40, borderRadius: 10, border: `2px solid ${arrived ? C.green : C.border}`, background: arrived ? C.green + "12" : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            <div style={{ width: 44, height: 44, borderRadius: 10, border: `2px solid ${arrived ? C.green : C.border}`, background: arrived ? C.green + "12" : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
               {arrived && <span style={{ color: C.green, fontSize: 20, fontWeight: 700 }}>✓</span>}
             </div>
             <div style={{ flex: 1 }}>
@@ -483,9 +488,9 @@ export default function JobScreen() {
         {partsQuotation.length > 3 && <div style={{ fontSize: 13, color: C.muted, marginTop: 4 }}>+{partsQuotation.length - 3} more</div>}
         <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
           <button onClick={() => { setShowPQScreen(true); setPqTab(pqStatus === "submitted" || pqStatus === "approved" ? "approve" : "quote") }} style={{ ...btnSm(isInsurance ? C.purple : C.accent, "#fff"), flex: 1 }}>{pqStatus === "approved" ? "View" : isInsurance ? (pqStatus === "submitted" ? "Record Approval" : "Edit Prices") : "View PO"}</button>
-          {isInsurance && pqStatus === "approved" && <button onClick={() => { setShowPQScreen(true); setPqTab("cost") }} style={{ ...btnSm(C.accent + "12", C.accent), flex: 1 }}>💰 Costs</button>}
-          <button onClick={() => sharePQ("whatsapp")} style={{ ...btnSm(C.green + "12", C.green), flex: 1 }}>WhatsApp</button>
-          <button onClick={() => sharePQ("copy")} style={{ ...btnSm(C.bg, C.sub), flex: 0 }}>📋</button>
+          {isInsurance && pqStatus === "approved" && <button onClick={() => { setShowPQScreen(true); setPqTab("cost") }} style={{ ...btnText(C.accent), flex: 1 }}>💰 Costs</button>}
+          <button onClick={() => sharePQ("whatsapp")} style={{ ...btnText(C.green), flex: 1 }}>WhatsApp</button>
+          <button onClick={() => sharePQ("copy")} style={{ ...btnText(C.sub), flex: 0 }}>📋</button>
         </div>
         {pqStatus === "approved" && (() => {
           const filled = partsQuotation.filter(p => p.suppliedBy)
