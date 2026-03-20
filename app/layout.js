@@ -1,3 +1,4 @@
+export const dynamic = "force-dynamic"
 export const metadata = { title: "Workshop Pulse", description: "MacForce Auto Engineering - Workshop Management" }
 export default function RootLayout({ children }) {
   return (<html lang="en"><head><style dangerouslySetInnerHTML={{ __html: `
