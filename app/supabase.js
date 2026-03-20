@@ -1,12 +1,12 @@
 import { createClient } from "@supabase/supabase-js"
 
-export const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-)
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder.supabase.co"
+const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "placeholder"
+
+export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
 
 const BUCKET = "job-photos"
-const BASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL + "/storage/v1/object/public/" + BUCKET + "/"
+const BASE_URL = SUPABASE_URL + "/storage/v1/object/public/" + BUCKET + "/"
 
 // Upload a File or Blob to storage, return public URL
 export async function uploadPhoto(file, path) {
