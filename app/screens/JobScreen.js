@@ -4,6 +4,201 @@ import { useWorkshop } from "../WorkshopContext"
 import { C, FONT, MONO, inp, btn, btnSm, btnOutline, btnText, card, pill, Sheet, NavBar, ALL_STAGES, VEHICLE_MAKES, INSURANCE_COMPANIES, INV_STATUS, fmt, SP } from "../WorkshopContext"
 import { uploadPhoto } from "../supabase"
 
+// ═══ QUICK JOB COSTS — One-Line Entry with Category Dropdown ═══
+function QuickJobCosts({ jobCosts, setJobCosts, invoices, generateMinorInvoice, setSelInv, setScreen, saveCurrentJob, setJobs, activeJobId, setActiveJobId, setHomeTab, tt }) {
+  const [addName, setAddName] = useState("")
+  const [addCost, setAddCost] = useState("")
+  const [addType, setAddType] = useState("part")
+  const [costTab, setCostTab] = useState("purchased") // purchased | later | ex_stock
+  const [addStockNo, setAddStockNo] = useState("")
+  const [editingId, setEditingId] = useState(null)
+  const [editCost, setEditCost] = useState("")
+
+  const materialItems = jobCosts.filter(c => c.type !== "labour")
+  const confirmedCount = materialItems.filter(c => c.confirmed).length
+  const allConfirmed = materialItems.length > 0 && confirmedCount === materialItems.length
+  const totalCost = materialItems.reduce((s, c) => s + (c.cost || 0), 0)
+  const pendingCost = materialItems.filter(c => !c.confirmed).length
+
+  const cats = [
+    { key: "part", label: "Part", color: C.green },
+    { key: "sundry", label: "Sundry", color: C.purple },
+    { key: "outsource", label: "Outsource", color: C.orange },
+    { key: "labour", label: "Labour", color: C.accent },
+  ]
+  const activeCat = cats.find(c => c.key === addType) || cats[0]
+  // Sundry: no source options (no cost, no ex stock, no later — just name)
+  const isSundry = addType === "sundry"
+  const isLabourCat = addType === "labour"
+  const showSource = !isSundry && !isLabourCat
+  const showCost = showSource && costTab !== "later" && costTab !== "ex_stock"
+  const showStockNo = showSource && costTab === "ex_stock"
+
+  const addItem = () => {
+    if (!addName.trim()) { tt("⚠️ Enter item name"); return }
+    if (showCost && !addCost) { tt("⚠️ Enter cost"); return }
+    if (showStockNo && !addStockNo.trim()) { tt("⚠️ Enter stock number"); return }
+    const newItem = {
+      id: "jc" + Date.now(), name: addName.trim(), type: addType,
+      source: isLabourCat || isSundry ? null : costTab === "ex_stock" ? "ex_stock" : costTab === "later" ? "later" : "purchased",
+      cost: isSundry || isLabourCat || costTab === "ex_stock" || costTab === "later" ? 0 : (Number(addCost) || 0),
+      confirmed: isLabourCat ? false : costTab === "later" ? false : true,
+      stockNo: showStockNo ? addStockNo.trim() : null,
+    }
+    setJobCosts(prev => [...prev, newItem])
+    setAddName(""); setAddCost(""); setAddStockNo("")
+    tt(`✓ ${activeCat.label} added`)
+  }
+
+  const saveEditCost = (id) => {
+    setJobCosts(prev => prev.map(c => c.id === id ? { ...c, cost: Number(editCost) || 0, confirmed: true } : c))
+    setEditingId(null); setEditCost("")
+    tt("✓ Cost updated")
+  }
+
+  return (
+    <div style={{ ...card, padding: SP.lg, border: `2px solid ${C.orange}30` }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: SP.md }}>
+        <span style={{ fontSize: 15, fontWeight: 700, color: C.text }}>⚡ Quick Job Costs</span>
+        {jobCosts.length > 0 && <span style={{ fontSize: 12, fontWeight: 700, color: pendingCost > 0 ? C.orange : C.green }}>
+          {pendingCost > 0 ? `${pendingCost} pending cost` : "✓ All set"}
+        </span>}
+      </div>
+
+      {/* Category selector — word labels */}
+      <div style={{ display: "flex", gap: 0, background: C.bg, borderRadius: 10, padding: 3, marginBottom: SP.sm }}>
+        {cats.map(c => (
+          <div key={c.key} onClick={() => { setAddType(c.key); if (c.key === "sundry" || c.key === "labour") setCostTab("purchased") }} style={{
+            flex: 1, textAlign: "center", padding: "10px 4px", borderRadius: 8,
+            fontSize: 13, fontWeight: addType === c.key ? 700 : 500, cursor: "pointer",
+            background: addType === c.key ? c.color + "15" : "transparent",
+            color: addType === c.key ? c.color : C.muted,
+            boxShadow: addType === c.key ? "0 1px 3px rgba(0,0,0,0.08)" : "none",
+            transition: "all 0.15s",
+          }}>{c.label}</div>
+        ))}
+      </div>
+
+      {/* Source toggle — only for Part & Outsource (not Sundry or Labour) */}
+      {showSource && (
+        <div style={{ display: "flex", gap: 6, marginBottom: SP.sm }}>
+          {[
+            { key: "later", label: "Add Cost Later" },
+            { key: "ex_stock", label: "Ex Stock" },
+          ].map(t => (
+            <div key={t.key} onClick={() => setCostTab(costTab === t.key ? "purchased" : t.key)} style={{
+              padding: "8px 14px", borderRadius: 8, fontSize: 13, fontWeight: costTab === t.key ? 700 : 500, cursor: "pointer",
+              background: costTab === t.key ? (t.key === "later" ? C.orange + "15" : C.purple + "15") : C.bg,
+              color: costTab === t.key ? (t.key === "later" ? C.orange : C.purple) : C.muted,
+              border: `1px solid ${costTab === t.key ? (t.key === "later" ? C.orange + "40" : C.purple + "40") : C.border}`,
+              whiteSpace: "nowrap", transition: "all 0.15s",
+            }}>{t.label}</div>
+          ))}
+        </div>
+      )}
+
+      {/* Input row: [Name] [Cost/StockNo] [+] */}
+      <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: SP.lg }}>
+        <input value={addName} onChange={e => setAddName(e.target.value)} autoComplete="off"
+          onKeyDown={e => { if (e.key === "Enter") addItem() }}
+          placeholder={isLabourCat ? "Labour item..." : isSundry ? "Sundry item..." : "Item name..."}
+          style={{ ...inp, flex: 1, fontSize: 15, fontWeight: 600, background: C.card, padding: "12px 14px" }} />
+        {showCost && (
+          <input type="number" value={addCost} onChange={e => setAddCost(e.target.value)}
+            placeholder="Cost" onKeyDown={e => { if (e.key === "Enter") addItem() }}
+            style={{ ...inp, width: 110, flex: "0 0 110px", fontSize: 16, fontFamily: MONO, fontWeight: 700, background: C.card, padding: "12px 14px", textAlign: "right" }} />
+        )}
+        {showStockNo && (
+          <input value={addStockNo} onChange={e => setAddStockNo(e.target.value)}
+            placeholder="Stock #" onKeyDown={e => { if (e.key === "Enter") addItem() }} autoComplete="off"
+            style={{ ...inp, width: 110, flex: "0 0 110px", fontSize: 14, fontWeight: 600, background: C.card, padding: "12px 14px" }} />
+        )}
+        <div onClick={addItem} style={{
+          width: 48, height: 48, borderRadius: 12, cursor: "pointer", flexShrink: 0,
+          background: activeCat.color, color: "#fff", fontWeight: 700, fontSize: 22,
+          display: "flex", alignItems: "center", justifyContent: "center",
+        }}>+</div>
+      </div>
+
+      {/* Added Items List */}
+      {jobCosts.length > 0 && <>
+        {jobCosts.map(item => {
+          const cfg = cats.find(c => c.key === item.type) || cats[0]
+          const isPending = !item.confirmed && item.type !== "labour"
+          const isEditing = editingId === item.id
+
+          return (
+            <div key={item.id} style={{
+              display: "flex", alignItems: "center", gap: SP.sm, padding: "10px 12px",
+              background: isPending ? C.orange + "06" : item.confirmed ? C.card : C.card,
+              borderRadius: 10, border: `1px solid ${isPending ? C.orange + "30" : C.border}`, marginBottom: 4,
+            }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: cfg.color, background: cfg.color + "12", padding: "2px 8px", borderRadius: 6, flexShrink: 0 }}>{cfg.label}</div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 14, fontWeight: 600, color: C.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.name}</div>
+                <div style={{ fontSize: 11, color: C.muted }}>
+                  {item.source === "ex_stock" && <>Ex-Stock{item.stockNo ? ` · #${item.stockNo}` : ""}</>}
+                  {item.source === "purchased" && item.cost > 0 && "Purchased"}
+                  {item.source === "later" && "Cost pending"}
+                  {!item.source && item.type === "sundry" && "Sundry"}
+                </div>
+              </div>
+
+              {/* Cost display or edit — not for sundry or labour */}
+              {item.type !== "labour" && item.type !== "sundry" && !isEditing && (
+                item.confirmed ? (
+                  <span style={{ fontFamily: MONO, fontSize: 14, fontWeight: 700, color: C.text, flexShrink: 0 }}>
+                    {item.source === "ex_stock" ? <span style={{ fontSize: 12, color: C.muted }}>#{item.stockNo || "—"}</span> : Number(item.cost || 0).toLocaleString()}
+                  </span>
+                ) : (
+                  <div onClick={() => { setEditingId(item.id); setEditCost(String(item.cost || "")) }}
+                    style={{ padding: "4px 10px", borderRadius: 8, background: C.orange + "15", color: C.orange, fontSize: 12, fontWeight: 700, cursor: "pointer", flexShrink: 0 }}>
+                    + Cost
+                  </div>
+                )
+              )}
+
+              {/* Inline cost edit */}
+              {isEditing && (
+                <div style={{ display: "flex", gap: 4, alignItems: "center", flexShrink: 0 }}>
+                  <input type="number" value={editCost} onChange={e => setEditCost(e.target.value)} autoFocus
+                    onKeyDown={e => { if (e.key === "Enter") saveEditCost(item.id); if (e.key === "Escape") setEditingId(null) }}
+                    style={{ width: 90, padding: "6px 8px", fontSize: 15, fontFamily: MONO, fontWeight: 700, borderRadius: 8, border: `2px solid ${C.accent}`, outline: "none", textAlign: "right" }} placeholder="0" />
+                  <div onClick={() => saveEditCost(item.id)} style={{ padding: "6px 10px", borderRadius: 8, background: C.green, color: "#fff", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>✓</div>
+                </div>
+              )}
+
+              {item.type === "labour" && <span style={{ fontSize: 12, color: C.accent, fontWeight: 600, flexShrink: 0 }}>Invoice</span>}
+
+              {item.confirmed && !isEditing && <span style={{ color: C.green, fontSize: 14, flexShrink: 0 }}>✓</span>}
+
+              <span onClick={() => setJobCosts(prev => prev.filter(c => c.id !== item.id))}
+                style={{ fontSize: 16, color: C.muted, cursor: "pointer", flexShrink: 0, padding: "4px", lineHeight: 1 }}>×</span>
+            </div>
+          )
+        })}
+
+        {/* Summary */}
+        <div style={{ display: "flex", justifyContent: "space-between", padding: "12px 0", marginTop: SP.sm, borderTop: `1px solid ${C.border}` }}>
+          <span style={{ fontSize: 14, color: C.sub }}>{jobCosts.length} item{jobCosts.length !== 1 ? "s" : ""}</span>
+          <span style={{ fontFamily: MONO, fontSize: 18, fontWeight: 700, color: C.text }}>Rs. {totalCost.toLocaleString()}</span>
+        </div>
+
+        {/* Actions */}
+        {!invoices.length && <button onClick={generateMinorInvoice} style={{ ...btn(pendingCost === 0 ? C.accent : C.muted, "#fff"), marginTop: SP.sm, opacity: pendingCost === 0 ? 1 : 0.6 }}>
+          {pendingCost > 0 ? `${pendingCost} items need cost` : "📄 Create Invoice"}
+        </button>}
+        {invoices.length > 0 && <button onClick={() => { setSelInv(invoices[0]); setScreen("inv_detail") }} style={{ ...btn(C.accent + "15", C.accent), marginTop: SP.sm }}>📄 View Invoice</button>}
+        {invoices.length > 0 && invoices[0].payments?.length > 0 && <button onClick={() => {
+          saveCurrentJob()
+          setJobs(prev => prev.map(j => j.id === activeJobId ? { ...j, stage: "closed", onHold: false, jobCosts: [...jobCosts] } : j))
+          tt("🏁 Quick job closed"); setActiveJobId(null); setScreen("home"); setHomeTab("closed")
+        }} style={{ ...btn(C.green, "#fff"), marginTop: SP.sm }}>🏁 Close Job</button>}
+      </>}
+    </div>
+  )
+}
+
 export default function JobScreen() {
   const {
     screen, setScreen,
@@ -379,71 +574,8 @@ export default function JobScreen() {
         </>}
       </div>
 
-      {/* ═══ MINOR JOB -- Direct Cost Entry + Close ═══ */}
-      {isMinorJob && <div style={{ ...card, padding: "14px 16px", border: `2px solid ${C.orange}40` }}>
-        {(() => {
-          const materialItems = jobCosts.filter(c => c.type !== "labour")
-          const confirmedCount = materialItems.filter(c => c.confirmed).length
-          const allConfirmed = materialItems.length > 0 && confirmedCount === materialItems.length
-          return <>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-            <span style={{ fontSize: 14, fontWeight: 600, color: C.sub, textTransform: "uppercase", letterSpacing: 0.8 }}>⚡ Quick Job -- Costs</span>
-            {jobCosts.length > 0 && <span style={{ fontSize: 12, fontWeight: 700, color: allConfirmed ? C.green : C.orange }}>{allConfirmed ? "✓ All confirmed" : `${confirmedCount}/${materialItems.length} materials confirmed`}</span>}
-          </div>
-
-          {jobCosts.length === 0 && <div style={{ padding: "20px 0", textAlign: "center", color: C.muted, fontSize: 15 }}>No costs added yet. Tap below to add parts, sundries, or labour.</div>}
-
-          {jobCosts.map(item => <div key={item.id} style={{ padding: "10px 12px", background: item.type === "labour" ? C.accent + "04" : item.confirmed ? C.green + "06" : C.bg, borderRadius: 10, border: `1px solid ${item.type === "labour" ? C.accent + "20" : item.confirmed ? C.green + "30" : C.border}`, marginBottom: 6 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-              <input value={item.name} placeholder="Item name..." onChange={e => setJobCosts(prev => prev.map(c => c.id === item.id ? { ...c, name: e.target.value } : c))} style={{ flex: 1, padding: "6px 10px", fontSize: 15, fontWeight: 600, background: item.name ? "transparent" : C.orange + "08", border: item.name ? "none" : `1px solid ${C.orange}40`, borderRadius: 8, color: C.text, fontFamily: FONT, outline: "none" }} />
-              <span onClick={() => setJobCosts(prev => prev.filter(c => c.id !== item.id))} style={{ fontSize: 12, color: C.red, cursor: "pointer", marginLeft: 8, flexShrink: 0 }}>Remove</span>
-            </div>
-            <div style={{ display: "flex", gap: 6, marginBottom: 6, flexWrap: "wrap" }}>
-              {["part", "sundry", "outsource", "labour"].map(t => <div key={t} onClick={() => setJobCosts(prev => prev.map(c => c.id === item.id ? { ...c, type: t, source: t === "labour" ? null : c.source, confirmed: t === "labour" ? false : c.confirmed } : c))} style={{ padding: "5px 10px", borderRadius: 16, fontSize: 12, fontWeight: item.type === t ? 700 : 500, background: item.type === t ? (t === "part" ? C.green : t === "sundry" ? C.purple : t === "outsource" ? C.orange : C.accent) + "15" : C.bg, color: item.type === t ? (t === "part" ? C.green : t === "sundry" ? C.purple : t === "outsource" ? C.orange : C.accent) : C.muted, border: `1px solid ${item.type === t ? "transparent" : C.border}`, cursor: "pointer" }}>{t === "part" ? "🔧 Part" : t === "sundry" ? "📎 Sundry" : t === "outsource" ? "📦 Outsource" : "👷 Labour"}</div>)}
-            </div>
-            {item.type !== "labour" ? <>
-              <div style={{ display: "flex", gap: 6, marginBottom: 6 }}>
-                {["purchased", "ex_stock"].map(s => <div key={s} onClick={() => setJobCosts(prev => prev.map(c => c.id === item.id ? { ...c, source: s } : c))} style={{ padding: "5px 12px", borderRadius: 16, fontSize: 12, fontWeight: item.source === s ? 700 : 500, background: item.source === s ? (s === "purchased" ? C.green : C.purple) + "15" : C.bg, color: item.source === s ? (s === "purchased" ? C.green : C.purple) : C.muted, border: `1px solid ${item.source === s ? "transparent" : C.border}`, cursor: "pointer" }}>{s === "purchased" ? "🛒 Purchased" : "📎 Ex-Stock"}</div>)}
-              </div>
-              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                <span style={{ fontSize: 13, color: C.muted, flexShrink: 0 }}>Cost Rs.</span>
-                <input type="number" value={item.cost || ""} onChange={e => setJobCosts(prev => prev.map(c => c.id === item.id ? { ...c, cost: Number(e.target.value) || 0, confirmed: false } : c))} style={{ ...inp, flex: 1, fontSize: 17, fontFamily: MONO, padding: "10px 14px" }} placeholder="0" />
-                <div onClick={() => { if (!item.name.trim()) { tt("⚠️ Enter item name first"); return } setJobCosts(prev => prev.map(c => c.id === item.id ? { ...c, confirmed: !c.confirmed } : c)) }} style={{ padding: "8px 14px", borderRadius: 10, background: item.confirmed ? C.green : C.bg, color: item.confirmed ? "#fff" : C.muted, fontWeight: 600, fontSize: 13, cursor: "pointer", border: `1px solid ${item.confirmed ? C.green : C.border}`, flexShrink: 0 }}>{item.confirmed ? "✓" : "Confirm"}</div>
-              </div>
-            </> : <div style={{ fontSize: 13, color: C.accent, fontWeight: 500 }}>👷 No cost — charge set freely on invoice</div>}
-          </div>)}
-
-          {/* Add item buttons */}
-          <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-            <div onClick={() => setJobCosts(prev => [...prev, { id: "jc" + Date.now(), name: "", type: "part", source: "purchased", cost: 0, confirmed: false }])} style={{ flex: 1, padding: "12px 0", textAlign: "center", border: `2px dashed ${C.border}`, borderRadius: 12, cursor: "pointer", color: C.green, fontWeight: 600, fontSize: 14 }}>+ 🔧 Part</div>
-            <div onClick={() => setJobCosts(prev => [...prev, { id: "jc" + Date.now(), name: "", type: "labour", source: null, cost: 0, confirmed: false }])} style={{ flex: 1, padding: "12px 0", textAlign: "center", border: `2px dashed ${C.border}`, borderRadius: 12, cursor: "pointer", color: C.accent, fontWeight: 600, fontSize: 14 }}>+ 👷 Labour</div>
-          </div>
-          <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
-            <div onClick={() => setJobCosts(prev => [...prev, { id: "jc" + Date.now(), name: "", type: "sundry", source: "ex_stock", cost: 0, confirmed: false }])} style={{ flex: 1, padding: "12px 0", textAlign: "center", border: `2px dashed ${C.border}`, borderRadius: 12, cursor: "pointer", color: C.purple, fontWeight: 600, fontSize: 14 }}>+ 📎 Sundry</div>
-            <div onClick={() => setJobCosts(prev => [...prev, { id: "jc" + Date.now(), name: "", type: "outsource", source: "purchased", cost: 0, confirmed: false }])} style={{ flex: 1, padding: "12px 0", textAlign: "center", border: `2px dashed ${C.border}`, borderRadius: 12, cursor: "pointer", color: C.orange, fontWeight: 600, fontSize: 14 }}>+ 📦 Outsource</div>
-          </div>
-
-          {/* Summary */}
-          {jobCosts.length > 0 && <div style={{ background: C.bg, borderRadius: 10, padding: "10px 14px", marginTop: 10 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, color: C.sub }}>
-              <span>Material Cost</span>
-              <span style={{ fontFamily: MONO, fontWeight: 700, color: C.text }}>Rs. {materialItems.reduce((s, c) => s + (c.cost || 0), 0).toLocaleString()}</span>
-            </div>
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: C.muted, marginTop: 4 }}>
-              <span>{materialItems.length} material{materialItems.length !== 1 ? "s" : ""} + {jobCosts.filter(c => c.type === "labour").length} labour</span>
-            </div>
-          </div>}
-
-          {/* Create Invoice */}
-          {!invoices.length && jobCosts.length > 0 && <button onClick={generateMinorInvoice} style={{ ...btn(allConfirmed ? C.accent : C.muted, "#fff"), marginTop: 10, fontSize: 16, opacity: allConfirmed ? 1 : 0.6 }}>📄 Create Invoice</button>}
-          {invoices.length > 0 && <button onClick={() => { setSelInv(invoices[0]); setScreen("inv_detail") }} style={{ ...btn(C.accent + "15", C.accent), marginTop: 10, fontSize: 16 }}>📄 View Invoice</button>}
-          {invoices.length > 0 && invoices[0].payments?.length > 0 && <button onClick={() => {
-            saveCurrentJob() // save invoices and all state before navigating away
-            setJobs(prev => prev.map(j => j.id === activeJobId ? { ...j, stage: "closed", onHold: false, jobCosts: [...jobCosts] } : j))
-            tt("🏁 Quick job closed"); setActiveJobId(null); setScreen("home"); setHomeTab("closed")
-          }} style={{ ...btn(C.green, "#fff"), marginTop: 8, fontSize: 16 }}>🏁 Close Job</button>}
-        </>})()}
-      </div>}
+      {/* ═══ QUICK JOB -- Streamlined Cost Entry ═══ */}
+      {isMinorJob && <QuickJobCosts jobCosts={jobCosts} setJobCosts={setJobCosts} invoices={invoices} generateMinorInvoice={generateMinorInvoice} setSelInv={setSelInv} setScreen={setScreen} saveCurrentJob={saveCurrentJob} setJobs={setJobs} activeJobId={activeJobId} setActiveJobId={setActiveJobId} setHomeTab={setHomeTab} tt={tt} />}
 
       {/* Parts Tracker */}
       {hasReplaceParts && <div style={{ ...card, padding: "14px 16px", border: allPartsArrived ? `2px solid ${C.green}30` : `1px solid ${C.border}` }}>

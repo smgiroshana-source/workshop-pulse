@@ -83,19 +83,20 @@ export default function AuthGate({ children }) {
   const [tableExists, setTableExists] = useState(true)
 
   useEffect(() => {
-    const timeout = setTimeout(() => setLoading(false), 5000)
+    let resolved = false
+    const done = (s) => { if (!resolved) { resolved = true; setSession(s || null); setLoading(false) } }
+    // Hard timeout — never stay on loading screen more than 3 seconds
+    const timeout = setTimeout(() => done(null), 3000)
     supabase.auth.getSession().then(({ data: { session } }) => {
       clearTimeout(timeout)
-      setSession(session)
-      setLoading(false)
+      done(session)
     }).catch(() => {
       clearTimeout(timeout)
-      setLoading(false)
+      done(null)
     })
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       clearTimeout(timeout)
-      setSession(session)
-      setLoading(false)
+      done(session)
     })
     return () => { clearTimeout(timeout); subscription.unsubscribe() }
   }, [])
@@ -119,7 +120,8 @@ export default function AuthGate({ children }) {
       return
     }
 
-    // Check DB for role
+    // Check DB for role (with timeout)
+    const roleTimeout = setTimeout(() => { setRoleLoading(false); setAccessDenied(true) }, 8000)
     ensureRolesTable().then(exists => {
       setTableExists(exists)
       if (!exists) {
@@ -129,11 +131,13 @@ export default function AuthGate({ children }) {
         } else {
           setAccessDenied(true)
         }
+        clearTimeout(roleTimeout)
         setRoleLoading(false)
         return
       }
 
       getUserRole(email).then(role => {
+        clearTimeout(roleTimeout)
         if (!role) {
           setAccessDenied(true)
         } else if (role === "disabled") {
@@ -155,7 +159,12 @@ export default function AuthGate({ children }) {
     if (error) setError(error.message)
   }
 
-  const signOut = () => supabase.auth.signOut()
+  const signOut = async () => {
+    try { await supabase.auth.signOut() } catch {}
+    setSession(null)
+    setUserRole(null)
+    setAccessDenied(false)
+  }
 
   // Loading state
   if (loading || roleLoading) {

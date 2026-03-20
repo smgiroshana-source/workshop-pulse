@@ -26,6 +26,7 @@ export default function InvoiceDetail() {
     insPhotoRef,
     confirmDel, setConfirmDel,
     activeJobId,
+    jobStage, setJobStage, setJobs, setActiveJobId, homeTab, setHomeTab,
     isInsurance, isDirectJob,
     invTotal, invNet, invInsPayments, invCustPayments, invInsTotal, invCustPaidTotal,
     invCustDiscount, invCustPortion, invCustOwes, invCustBalance, invTotalDiscount, invFullyPaid,
@@ -162,6 +163,19 @@ export default function InvoiceDetail() {
         {selInv.status === "finalized" && <button onClick={() => setInvStatus("sent")} style={{ ...btn(C.orange, "#fff"), marginBottom: 10 }}>Mark as Sent</button>}
         {selInv.status !== "draft" && <button onClick={() => setInvStatus("draft")} style={{ ...btn(C.bg, C.accent) }}>Edit Invoice</button>}
       </div>
+
+      {/* Close Job (for quick jobs that are fully paid) */}
+      {invFullyPaid(selInv) && jobStage !== "closed" && (
+        <button onClick={() => {
+          if (!confirm("Close this job?")) return
+          setJobs(prev => prev.map(j => j.id === activeJobId ? { ...j, stage: "closed" } : j))
+          setJobStage("closed")
+          tt("🏁 Job closed")
+          setActiveJobId(null)
+          setScreen("home")
+          setHomeTab("closed")
+        }} style={{ ...btn(C.green, "#fff"), marginTop: 12, marginBottom: 8 }}>🏁 Close Job</button>
+      )}
 
       {/* Payment Form */}
       <input ref={insPhotoRef} type="file" accept="image/*" style={{ display: "none" }} onChange={async e => { const f = e.target.files[0]; if (f) { tt("⏳ Uploading…"); try { const url = await uploadPhoto(f, `${activeJobId}/ins-pay-${Date.now()}.jpg`); setInsPayPhoto(url); tt("📷 Photo attached") } catch { tt("❌ Upload failed") } } e.target.value = "" }} />

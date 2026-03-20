@@ -210,7 +210,38 @@ export function WorkshopProvider({ children }) {
   const [confirmDelEst, setConfirmDelEst] = useState(null)
   const [showSubFlowPrompt, setShowSubFlowPrompt] = useState(false)
   const [showArchived, setShowArchived] = useState(false)
-  const [homeTab, setHomeTab] = useState("active") // active | on_hold | closed
+  const [homeTab, setHomeTab] = useState("active") // active | on_hold | closed | store
+
+  // ═══ STORE / PROCUREMENT ═══
+  const [purchaseOrders, setPurchaseOrders] = useState([])
+  const [grns, setGrns] = useState([])
+  const storeSyncRef = useRef(false)
+  // Load from Supabase
+  useEffect(() => {
+    supabase.from("store_data").select("*").eq("id", "main").single()
+      .then(({ data }) => {
+        if (data?.data) {
+          setPurchaseOrders(data.data.purchaseOrders || [])
+          setGrns(data.data.grns || [])
+        }
+        storeSyncRef.current = true
+      })
+  }, [])
+  // Sync store data to Supabase (debounced)
+  const storeDirtyRef = useRef(false)
+  const storeTimerRef = useRef(null)
+  useEffect(() => {
+    if (!storeSyncRef.current) return
+    storeDirtyRef.current = true
+    if (storeTimerRef.current) clearTimeout(storeTimerRef.current)
+    storeTimerRef.current = setTimeout(() => {
+      if (!storeDirtyRef.current) return
+      supabase.from("store_data").upsert({ id: "main", data: { purchaseOrders, grns }, updated_at: new Date().toISOString() })
+        .then(({ error }) => { if (error) console.error("Store sync error:", error) })
+      storeDirtyRef.current = false
+    }, 1000)
+    return () => { if (storeTimerRef.current) clearTimeout(storeTimerRef.current) }
+  }, [purchaseOrders, grns])
   // Parts Quotation (insurance) / PO (direct)
   const [partsQuotation, setPartsQuotation] = useState([]) // [{id, partName, estLabel, supplier, quotedPrice, approvedPrice, remarks}]
   const [pqStatus, setPqStatus] = useState("draft") // draft | submitted | approved
@@ -250,6 +281,7 @@ export function WorkshopProvider({ children }) {
 
   // Load active + on-hold jobs on mount; closed jobs loaded lazily when tab opened
   const [closedLoaded, setClosedLoaded] = useState(false)
+  const [closedCount, setClosedCount] = useState(null) // pre-fetched count before lazy load
 
   const loadJobs = useCallback(() => {
     setLoadError(null)
@@ -269,6 +301,10 @@ export function WorkshopProvider({ children }) {
         loadSucceededRef.current = true
         setLoadError(null)
       })
+    // Fetch closed count separately (lightweight)
+    supabase.from("jobs").select("id", { count: "exact", head: true })
+      .eq("stage", "closed")
+      .then(({ count }) => { if (count != null) setClosedCount(count) })
   }, [])
 
   useEffect(() => { loadJobs() }, [loadJobs])
@@ -629,7 +665,7 @@ export function WorkshopProvider({ children }) {
     const isQuick = newJobInfo.job_type === "quick"
     // Normalize vehicle reg
     const normReg = normalizeReg(newJobInfo.vehicle_reg)
-    if (!normReg.trim()) errs.vehicle_reg = true
+    if (!normReg.trim() || !/^[A-Z]{2,3} \d{4}$/.test(normReg.trim())) { errs.vehicle_reg = true; errs.reg_msg = "Vehicle reg must be 2-3 letters + 4 digits" }
     if (!newJobInfo.customer_name.trim()) errs.customer_name = true
     if (!newJobInfo.vehicle_make.trim()) errs.vehicle_make = true
     if (!newJobInfo.vehicle_model.trim()) errs.vehicle_model = true
@@ -640,7 +676,7 @@ export function WorkshopProvider({ children }) {
     if (newJobInfo.job_type === "insurance" && !newJobInfo.insurance_name) errs.insurance = true
     if (!isQuick && !newJobPhoto) errs.photo = true
     setNewJobErrors(errs)
-    if (Object.keys(errs).length > 0) { tt(errs.phone_msg || (!newJobInfo.job_type ? "⚠️ Select job type" : errs.photo && Object.keys(errs).length === 1 ? "⚠️ Take a vehicle photo" : "⚠️ Fill all required fields")); return }
+    if (Object.keys(errs).length > 0) { tt(errs.reg_msg || errs.phone_msg || (!newJobInfo.job_type ? "⚠️ Select job type" : errs.photo && Object.keys(errs).length === 1 ? "⚠️ Take a vehicle photo" : "⚠️ Fill all required fields")); return }
     const id = "job_" + Date.now()
     const jobNum = String(jobs.length + 1).padStart(3, "0")
     const jobDocs = []
@@ -1003,6 +1039,8 @@ export function WorkshopProvider({ children }) {
     showSubFlowPrompt, setShowSubFlowPrompt,
     showArchived, setShowArchived,
     homeTab, setHomeTab,
+    purchaseOrders, setPurchaseOrders,
+    grns, setGrns,
     partsQuotation, setPartsQuotation,
     pqStatus, setPqStatus,
     pqApprovalPhoto, setPqApprovalPhoto,
@@ -1018,7 +1056,7 @@ export function WorkshopProvider({ children }) {
     collapsedSections, setCollapsedSections, toggleSection,
     sortBy, setSortBy,
     isUploading, setIsUploading,
-    closedLoaded, setClosedLoaded,
+    closedLoaded, setClosedLoaded, closedCount,
     loadError, loadJobs,
     newJobInfo, setNewJobInfo,
     newJobMakeSugg, setNewJobMakeSugg,

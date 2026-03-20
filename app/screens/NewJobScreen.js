@@ -31,20 +31,26 @@ export default function NewJobScreen() {
         <div style={{ marginBottom: 12 }}>
           <div style={{ fontSize: 14, color: er.vehicle_reg ? C.red : C.sub, marginBottom: 5, fontWeight: 500 }}>Vehicle Reg <span style={{ color: C.red }}>*</span></div>
           <input value={nj.vehicle_reg} onChange={e => {
-            const val = e.target.value.toUpperCase()
-            set("vehicle_reg", val)
+            // Only allow letters then digits, auto-format: "XXX 1234"
+            const raw = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "")
+            // Split into letters prefix and digits suffix
+            const letters = raw.replace(/[0-9]/g, "").slice(0, 3)
+            const digits = raw.replace(/[A-Z]/g, "").slice(0, 4)
+            const formatted = digits ? `${letters} ${digits}` : letters
+            set("vehicle_reg", formatted)
             // Lookup in registry
-            const key = regSearchKey(val)
-            if (key.length >= 4) {
+            const key = regSearchKey(formatted)
+            if (key.length >= 5) {
               const match = customerRegistry.byReg[key]
-              if (match) { setCustomerMatch(match) } else { setCustomerMatch(null) }
+              if (match) {
+                setCustomerMatch(match)
+                // Auto-fill make & model from registry
+                if (match.vehicle_make && !nj.vehicle_make) set("vehicle_make", match.vehicle_make)
+                if (match.vehicle_model && !nj.vehicle_model) set("vehicle_model", match.vehicle_model)
+              } else { setCustomerMatch(null) }
             } else { setCustomerMatch(null) }
-          }} onBlur={() => {
-            // Normalize on blur
-            const norm = normalizeReg(nj.vehicle_reg)
-            if (norm !== nj.vehicle_reg) set("vehicle_reg", norm)
-          }} placeholder="e.g. CBB-9636" autoComplete="off" style={{ ...inp, fontFamily: MONO, fontWeight: 700, fontSize: 22, border: errBorder("vehicle_reg") }} />
-          {nj.vehicle_reg && normalizeReg(nj.vehicle_reg) !== nj.vehicle_reg && <div style={{ fontSize: 12, color: C.accent, marginTop: 4 }}>→ {normalizeReg(nj.vehicle_reg)}</div>}
+          }} placeholder="e.g. CBB 9636" autoComplete="off" style={{ ...inp, fontFamily: MONO, fontWeight: 700, fontSize: 22, border: errBorder("vehicle_reg") }} />
+          {nj.vehicle_reg && !/^[A-Z]{2,3} \d{4}$/.test(nj.vehicle_reg.trim()) && nj.vehicle_reg.length > 2 && <div style={{ fontSize: 12, color: C.orange, marginTop: 4 }}>Format: 2-3 letters + 4 digits (e.g. CBB 5949)</div>}
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
           <div style={{ position: "relative" }}>
@@ -63,14 +69,14 @@ export default function NewJobScreen() {
 
       <div style={card}>
         <div style={{ fontSize: 14, fontWeight: 600, color: C.sub, textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 14 }}>Customer</div>
-        {/* Customer match banner */}
-        {customerMatch && <div style={{ padding: "10px 14px", background: C.accent + "08", borderRadius: 12, border: `1px solid ${C.accent}30`, marginBottom: 12 }}>
+        {/* Customer match banner — auto-fills, user can change */}
+        {customerMatch && <div style={{ padding: "12px 14px", background: C.green + "08", borderRadius: 12, border: `1px solid ${C.green}30`, marginBottom: 12 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <span style={{ fontSize: 14, fontWeight: 600, color: C.accent }}>🔍 Returning customer found</span>
+            <span style={{ fontSize: 14, fontWeight: 600, color: C.green }}>✓ Returning vehicle found</span>
             <span onClick={() => {
               setNewJobInfo(p => ({ ...p, customer_name: customerMatch.customer_name, customer_phone: customerMatch.customer_phone, vehicle_make: customerMatch.vehicle_make, vehicle_model: customerMatch.vehicle_model }))
               setCustomerMatch(null); tt("✓ Customer details filled")
-            }} style={{ fontSize: 14, fontWeight: 700, color: C.accent, cursor: "pointer", padding: "4px 12px", background: C.accent + "15", borderRadius: 8 }}>Fill</span>
+            }} style={{ fontSize: 14, fontWeight: 700, color: C.accent, cursor: "pointer", padding: "6px 14px", background: C.accent + "15", borderRadius: 8, minHeight: 36, display: "inline-flex", alignItems: "center" }}>Use Details</span>
           </div>
           <div style={{ fontSize: 13, color: C.sub, marginTop: 4 }}>{customerMatch.customer_name} · {customerMatch.customer_phone} · {customerMatch.vehicle_make} {customerMatch.vehicle_model}</div>
         </div>}

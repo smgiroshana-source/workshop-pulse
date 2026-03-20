@@ -4,7 +4,7 @@ import { WorkshopProvider, useWorkshop, C, FONT, MONO, btn, btnSm, inp, card, pi
 import { useAuth } from "./AuthGate"
 import { uploadPhoto, deletePhoto } from "./supabase"
 import UserManagement from "./screens/UserManagement"
-import HomeScreen from "./screens/HomeScreen"
+import HomeScreen, { ClosedHistory, ClosedJobDetail } from "./screens/HomeScreen"
 import NewJobScreen from "./screens/NewJobScreen"
 import JobScreen from "./screens/JobScreen"
 import EstimateParts from "./screens/EstimateParts"
@@ -14,6 +14,7 @@ import ApprovalUpload from "./screens/ApprovalUpload"
 import ApprovalEntry from "./screens/ApprovalEntry"
 import ApprovalSummary from "./screens/ApprovalSummary"
 import InvoiceDetail from "./screens/InvoiceDetail"
+import StoreScreen from "./screens/StoreScreen"
 
 function AppInner() {
   const {
@@ -57,11 +58,21 @@ function AppInner() {
     setHomeTab,
     sortBy, setSortBy,
     startNewJob,
+    setNewJobInfo,
+    newJobInfo,
     pqPhotoRef,
     uploadRef,
+    closedCount,
+    purchaseOrders, setPurchaseOrders,
+    grns, setGrns,
+    customerRegistry,
   } = useWorkshop()
   const { signOut, isSuperAdmin, role } = useAuth()
   const [showUserMgmt, setShowUserMgmt] = useState(false)
+  const [selectedClosedJob, setSelectedClosedJob] = useState(null)
+  const [rightTab, setRightTab] = useState(null) // null | "store" | "registry" | "payments"
+  const [regSearch, setRegSearch] = useState("")
+  const [regSelectedVehicle, setRegSelectedVehicle] = useState(null) // vehicle reg key for expanded view
 
   // Job list panel (shared between phone home + tablet sidebar)
   function jobListPanel() {
@@ -72,7 +83,7 @@ function AppInner() {
             <div style={{ fontSize: 14, fontWeight: 600, color: C.accent, letterSpacing: 1.5, textTransform: "uppercase" }}>Workshop Pulse <span style={{ fontSize: 11, color: C.muted, fontWeight: 500, letterSpacing: 0 }}>v{APP_VERSION}</span></div>
             <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
               {isSuperAdmin && <div onClick={() => setShowUserMgmt(true)} style={{ fontSize: 12, color: C.accent, cursor: "pointer", padding: "4px 10px", borderRadius: 8, background: C.accent + "10", border: `1px solid ${C.accent}30` }}>👥 Users</div>}
-              <div onClick={signOut} style={{ fontSize: 12, color: C.muted, cursor: "pointer", padding: "4px 10px", borderRadius: 8, background: C.bg, border: `1px solid ${C.border}` }}>Logout</div>
+              <div onClick={signOut} style={{ fontSize: 13, color: C.sub, cursor: "pointer", padding: "8px 14px", borderRadius: 8, background: C.bg, border: `1px solid ${C.border}`, minHeight: 36, display: "flex", alignItems: "center" }}>Logout</div>
             </div>
           </div>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -114,8 +125,8 @@ function AppInner() {
 
         {/* Active / On Hold / Closed tabs */}
         <div style={{ display: "flex", gap: 0, marginBottom: 12, background: C.card, borderRadius: 14, padding: 4, boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
-          {[["active", "Active", jobs.filter(j => !j.onHold && j.stage !== "closed").length], ["on_hold", "📌 On Hold", jobs.filter(j => j.onHold).length], ["closed", "🏁 Closed", jobs.filter(j => j.stage === "closed").length]].map(([k, l, cnt]) => (
-            <div key={k} onClick={() => { setHomeTab(k); setFilterStage("all") }} style={{ flex: 1, textAlign: "center", padding: "12px 0", borderRadius: 12, minHeight: 44, cursor: "pointer", background: homeTab === k ? (k === "on_hold" ? C.orange + "12" : k === "closed" ? C.sub + "12" : C.accent + "12") : "transparent", color: homeTab === k ? (k === "on_hold" ? C.orange : k === "closed" ? C.sub : C.accent) : C.muted, fontSize: 14, fontWeight: 600, transition: "all 0.2s" }}>{l} ({cnt})</div>
+          {[["active", "Active", jobs.filter(j => !j.onHold && j.stage !== "closed").length], ["on_hold", "📌 On Hold", jobs.filter(j => j.onHold).length], ["closed", "🏁 Closed", jobs.filter(j => j.stage === "closed").length || closedCount || 0]].map(([k, l, cnt]) => (
+            <div key={k} onClick={() => { setHomeTab(k); setFilterStage("all"); setSelectedClosedJob(null) }} style={{ flex: 1, textAlign: "center", padding: "12px 0", borderRadius: 12, minHeight: 44, cursor: "pointer", background: homeTab === k ? (k === "on_hold" ? C.orange + "12" : k === "closed" ? C.sub + "12" : C.accent + "12") : "transparent", color: homeTab === k ? (k === "on_hold" ? C.orange : k === "closed" ? C.sub : C.accent) : C.muted, fontSize: 14, fontWeight: 600, transition: "all 0.2s" }}>{l} ({cnt})</div>
           ))}
         </div>
 
@@ -129,8 +140,9 @@ function AppInner() {
         )}
 
         {/* Job cards */}
-        {(() => {
-          let filtered = homeTab === "on_hold" ? jobs.filter(j => j.onHold) : homeTab === "closed" ? jobs.filter(j => j.stage === "closed") : jobs.filter(j => !j.onHold && j.stage !== "closed")
+        {homeTab === "closed" && <ClosedHistory jobs={jobs} searchQuery={searchQuery} openJob={openJob} isTablet={isTablet} activeJobId={activeJobId} onSelectJob={isTablet ? (j) => setSelectedClosedJob(j) : null} selectedJobId={selectedClosedJob?.id} />}
+        {homeTab !== "closed" && (() => {
+          let filtered = homeTab === "on_hold" ? jobs.filter(j => j.onHold) : jobs.filter(j => !j.onHold && j.stage !== "closed")
           if (homeTab === "active" && filterStage !== "all") {
             if (filterStage === "parts_waiting") {
               filtered = filtered.filter(j => (j.estimates || []).flatMap(e => (e.approved_entries || e.entries || []).filter(en => en.category === "replace")).some(p => !j.partsArrived?.[p.id]))
@@ -197,12 +209,181 @@ function AppInner() {
     )
   }
 
-  function emptyDetail() {
+  // Right panel hub — shows when no job is selected on tablet
+  function rightPanelHub() {
+    // Pending payments: jobs with invoices that aren't fully paid
+    const pendingPaymentJobs = jobs.filter(j => {
+      if (j.stage === "closed") return false
+      const invs = j.invoices || []
+      return invs.some(inv => {
+        const total = (inv.entries || []).reduce((s, e) => s + ((e.approved || e.amount || 0) * (e.qty || 1)), 0)
+        const paid = [...(inv.insurance_payments || []), ...(inv.customer_payments || [])].reduce((s, p) => s + (p.amount || 0), 0)
+        return total > 0 && paid < total
+      })
+    })
+
+    // Job type counts
+    const insCount = jobs.filter(j => j.jobInfo?.job_type === "insurance" && j.stage !== "closed").length
+    const directCount = jobs.filter(j => j.jobInfo?.job_type === "direct" && j.stage !== "closed").length
+    const quickCount = jobs.filter(j => j.jobInfo?.job_type === "quick" && j.stage !== "closed").length
+
+    // Customer registry entries
+    const regEntries = Object.values(customerRegistry.byReg || {})
+
+    // If a right tab is selected, show that content
+    if (rightTab === "store") {
+      return <div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
+          <span onClick={() => setRightTab(null)} style={{ fontSize: 14, color: C.accent, cursor: "pointer", fontWeight: 600 }}>← Back</span>
+          <span style={{ fontSize: 20, fontWeight: 700 }}>Store</span>
+        </div>
+        <StoreScreen purchaseOrders={purchaseOrders} grns={grns} setPurchaseOrders={setPurchaseOrders} setGrns={setGrns} tt={tt} />
+      </div>
+    }
+
+    if (rightTab === "registry") {
+      // If a vehicle is selected, show its job history detail
+      if (regSelectedVehicle) {
+        const vehicleJobs = jobs.filter(j => regSearchKey(j.jobInfo.vehicle_reg) === regSelectedVehicle).sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+        const firstJob = vehicleJobs[0]
+        return <div>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
+            <span onClick={() => setRegSelectedVehicle(null)} style={{ fontSize: 14, color: C.accent, cursor: "pointer", fontWeight: 600 }}>← Back</span>
+            <span style={{ fontSize: 20, fontWeight: 700 }}>{firstJob?.jobInfo.vehicle_reg || regSelectedVehicle}</span>
+            <span style={{ fontSize: 14, color: C.muted }}>{firstJob?.jobInfo.vehicle_make} {firstJob?.jobInfo.vehicle_model}</span>
+          </div>
+          <div style={{ fontSize: 13, color: C.sub, marginBottom: 16 }}>{firstJob?.jobInfo.customer_name} · {vehicleJobs.length} job{vehicleJobs.length !== 1 ? "s" : ""}</div>
+          {vehicleJobs.map(j => <ClosedJobDetail key={j.id} job={j} openJob={openJob} />)}
+        </div>
+      }
+
+      // Search filter
+      const q = regSearch.toLowerCase().replace(/[\s\-]/g, "")
+      const filteredEntries = q ? regEntries.filter(r =>
+        regSearchKey(r.vehicle_reg).includes(q) ||
+        (r.customer_name || "").toLowerCase().includes(q) ||
+        (r.vehicle_make || "").toLowerCase().includes(q) ||
+        (r.vehicle_model || "").toLowerCase().includes(q) ||
+        (r.customer_phone || "").replace(/[\s\-]/g, "").includes(q)
+      ) : regEntries
+
+      return <div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
+          <span onClick={() => { setRightTab(null); setRegSearch("") }} style={{ fontSize: 14, color: C.accent, cursor: "pointer", fontWeight: 600 }}>← Back</span>
+          <span style={{ fontSize: 20, fontWeight: 700 }}>Customer Registry</span>
+        </div>
+        <input value={regSearch} onChange={e => setRegSearch(e.target.value)} placeholder="Search vehicle, customer, phone..." style={{ ...inp, marginBottom: 12, width: "100%", boxSizing: "border-box" }} />
+        <div style={{ fontSize: 13, color: C.muted, marginBottom: 12 }}>{filteredEntries.length} vehicle{filteredEntries.length !== 1 ? "s" : ""}{q ? " found" : " registered"}</div>
+        {filteredEntries.length === 0 ? (
+          <div style={{ textAlign: "center", padding: 40, color: C.muted }}>
+            <div style={{ fontSize: 40, marginBottom: 12 }}>{q ? "🔍" : "📋"}</div>
+            <div style={{ fontSize: 16, fontWeight: 600 }}>{q ? "No matching vehicles" : "No vehicles registered yet"}</div>
+            <div style={{ fontSize: 14, marginTop: 6 }}>{q ? "Try a different search term" : "Vehicles are registered when jobs are created"}</div>
+          </div>
+        ) : filteredEntries.map(r => {
+          const vehicleJobCount = jobs.filter(j => regSearchKey(j.jobInfo.vehicle_reg) === regSearchKey(r.vehicle_reg)).length
+          return (
+            <div key={r.vehicle_reg} onClick={() => setRegSelectedVehicle(regSearchKey(r.vehicle_reg))} style={{ ...card, padding: "12px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }}>
+              <div>
+                <div style={{ fontFamily: MONO, fontSize: 16, fontWeight: 700 }}>{r.vehicle_reg}</div>
+                <div style={{ fontSize: 14, color: C.sub }}>{r.customer_name}</div>
+                <div style={{ fontSize: 12, color: C.muted }}>{r.vehicle_make} {r.vehicle_model}{r.customer_phone ? ` · ${r.customer_phone}` : ""}</div>
+              </div>
+              <div style={{ textAlign: "right" }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: C.accent }}>{vehicleJobCount} job{vehicleJobCount !== 1 ? "s" : ""}</div>
+                <div style={{ fontSize: 18, color: C.muted }}>›</div>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    }
+
+    if (rightTab === "payments") {
+      return <div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
+          <span onClick={() => setRightTab(null)} style={{ fontSize: 14, color: C.accent, cursor: "pointer", fontWeight: 600 }}>← Back</span>
+          <span style={{ fontSize: 20, fontWeight: 700 }}>Pending Payments</span>
+        </div>
+        {pendingPaymentJobs.length === 0 ? (
+          <div style={{ textAlign: "center", padding: 40, color: C.muted }}>
+            <div style={{ fontSize: 40, marginBottom: 12 }}>💰</div>
+            <div style={{ fontSize: 16, fontWeight: 600 }}>All payments up to date</div>
+          </div>
+        ) : pendingPaymentJobs.map(j => {
+          const inv = (j.invoices || [])[0]
+          if (!inv) return null
+          const total = (inv.entries || []).reduce((s, e) => s + ((e.approved || e.amount || 0) * (e.qty || 1)), 0)
+          const paid = [...(inv.insurance_payments || []), ...(inv.customer_payments || [])].reduce((s, p) => s + (p.amount || 0), 0)
+          const balance = total - paid
+          const stage = ALL_STAGES[j.stage] || ALL_STAGES.job_received
+          return (
+            <div key={j.id} onClick={() => openJob(j)} style={{ ...card, padding: "12px 16px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div>
+                <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 4 }}>
+                  <span style={{ fontFamily: MONO, fontSize: 16, fontWeight: 700 }}>{j.jobInfo.vehicle_reg}</span>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: stage.color, background: stage.color + "12", padding: "2px 8px", borderRadius: 6 }}>{stage.icon} {stage.label}</span>
+                </div>
+                <div style={{ fontSize: 14, color: C.sub }}>{j.jobInfo.customer_name}</div>
+                <div style={{ fontSize: 12, color: C.muted }}>{j.jobInfo.insurance_name || (j.jobInfo.job_type === "quick" ? "Quick" : "Direct")}</div>
+              </div>
+              <div style={{ textAlign: "right" }}>
+                <div style={{ fontFamily: MONO, fontSize: 18, fontWeight: 700, color: C.red }}>Rs.{balance.toLocaleString()}</div>
+                <div style={{ fontSize: 11, color: C.muted }}>of Rs.{total.toLocaleString()}</div>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    }
+
+    // Default: show hub cards
     return (
-      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "80vh", color: C.muted }}>
-        <div style={{ fontSize: 60, marginBottom: 16, opacity: 0.3 }}>🔧</div>
-        <div style={{ fontSize: 22, fontWeight: 600, marginBottom: 6 }}>Select a job</div>
-        <div style={{ fontSize: 16 }}>Tap a job from the list to see details</div>
+      <div>
+        <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 20, color: C.text }}>Workshop Hub</div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          {/* Store */}
+          <div onClick={() => setRightTab("store")} style={{ ...card, cursor: "pointer", padding: "20px 16px", textAlign: "center", border: `1px solid ${C.purple}20`, transition: "all 0.2s" }}>
+            <div style={{ fontSize: 36, marginBottom: 8 }}>🏪</div>
+            <div style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 4 }}>Store</div>
+            <div style={{ fontSize: 13, color: C.muted }}>PO & GRN</div>
+            <div style={{ fontFamily: MONO, fontSize: 14, fontWeight: 700, color: C.purple, marginTop: 8 }}>{purchaseOrders.length} PO · {grns.length} GRN</div>
+          </div>
+
+          {/* New Job Buttons */}
+          <div style={{ ...card, padding: "16px", border: `1px solid ${C.accent}20`, display: "flex", flexDirection: "column", gap: 8 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: C.muted, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 }}>New Job</div>
+            {[
+              { key: "insurance", label: "Insurance", icon: "🛡️", color: C.accent, count: insCount },
+              { key: "direct", label: "Non-Insurance", icon: "💰", color: C.green, count: directCount },
+              { key: "quick", label: "Quick Job", icon: "⚡", color: C.orange, count: quickCount },
+            ].map(t => (
+              <div key={t.key} onClick={() => { startNewJob(); setNewJobInfo(prev => ({ ...prev, job_type: t.key })) }} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 10, cursor: "pointer", background: t.color + "08", border: `1px solid ${t.color}20`, transition: "all 0.2s" }}>
+                <span style={{ fontSize: 20 }}>{t.icon}</span>
+                <span style={{ fontSize: 14, fontWeight: 600, color: C.text, flex: 1 }}>{t.label}</span>
+                <span style={{ fontSize: 12, fontFamily: MONO, fontWeight: 700, color: t.color }}>{t.count}</span>
+              </div>
+            ))}
+          </div>
+
+          {/* Customer Registry */}
+          <div onClick={() => setRightTab("registry")} style={{ ...card, cursor: "pointer", padding: "20px 16px", textAlign: "center", border: `1px solid ${C.green}20`, transition: "all 0.2s" }}>
+            <div style={{ fontSize: 36, marginBottom: 8 }}>👥</div>
+            <div style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 4 }}>Customers</div>
+            <div style={{ fontSize: 13, color: C.muted }}>Registry</div>
+            <div style={{ fontFamily: MONO, fontSize: 14, fontWeight: 700, color: C.green, marginTop: 8 }}>{regEntries.length} vehicles</div>
+          </div>
+
+          {/* Pending Payments */}
+          <div onClick={() => setRightTab("payments")} style={{ ...card, cursor: "pointer", padding: "20px 16px", textAlign: "center", border: `1px solid ${pendingPaymentJobs.length > 0 ? C.red : C.border}20`, transition: "all 0.2s" }}>
+            <div style={{ fontSize: 36, marginBottom: 8 }}>💳</div>
+            <div style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 4 }}>Payments</div>
+            <div style={{ fontSize: 13, color: C.muted }}>Pending</div>
+            <div style={{ fontFamily: MONO, fontSize: 14, fontWeight: 700, color: pendingPaymentJobs.length > 0 ? C.red : C.green, marginTop: 8 }}>
+              {pendingPaymentJobs.length > 0 ? `${pendingPaymentJobs.length} pending` : "All clear"}
+            </div>
+          </div>
+        </div>
       </div>
     )
   }
@@ -583,7 +764,7 @@ function AppInner() {
         {showUserMgmt && <div style={{ position: "fixed", inset: 0, background: C.bg, zIndex: 2000, overflowY: "auto" }}><UserManagement onBack={() => setShowUserMgmt(false)} /></div>}
 
         {/* Screen router */}
-        {screen === "home" && (isTablet ? emptyDetail() : jobListPanel())}
+        {screen === "home" && (isTablet ? (homeTab === "closed" && selectedClosedJob ? <ClosedJobDetail job={selectedClosedJob} openJob={openJob} /> : rightPanelHub()) : jobListPanel())}
         {screen === "new_job" && <NewJobScreen />}
         {screen === "job" && <JobScreen />}
         {screen === "est_parts" && <EstimateParts />}
