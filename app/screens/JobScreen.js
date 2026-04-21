@@ -317,11 +317,20 @@ export default function JobScreen() {
 
   const SectionHead = ({ title, icon, sectionKey, badge }) => {
     const open = isSectionOpen(sectionKey)
-    return <div onClick={() => toggleSection(sectionKey)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", padding: "4px 0", marginBottom: open ? 14 : 0, marginTop: 8 }}>
-      <span style={{ fontSize: 14, fontWeight: 600, color: C.sub, textTransform: "uppercase", letterSpacing: 0.8 }}>{icon} {title}</span>
-      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+    return <div onClick={() => toggleSection(sectionKey)} style={{
+      display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer",
+      padding: "14px 16px", marginBottom: open ? 12 : 8, marginTop: 12,
+      background: open ? "transparent" : C.card,
+      border: open ? "none" : `1px solid ${C.border}`,
+      borderRadius: 12, minHeight: 52,
+      boxShadow: open ? "none" : "0 1px 2px rgba(0,0,0,0.04)",
+    }}>
+      <span style={{ fontSize: 16, fontWeight: 700, color: C.text, letterSpacing: "-0.2px", display: "flex", alignItems: "center", gap: 8 }}>
+        <span style={{ fontSize: 20 }}>{icon}</span> {title}
+      </span>
+      <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
         {badge}
-        <span style={{ fontSize: 18, color: C.muted, transition: "transform 0.2s", transform: open ? "rotate(0deg)" : "rotate(-90deg)", display: "inline-block" }}>▾</span>
+        <span style={{ fontSize: 16, color: open ? C.accent : C.muted, transition: "transform 0.2s", transform: open ? "rotate(0deg)" : "rotate(-90deg)", display: "inline-block", fontWeight: 700 }}>▾</span>
       </div>
     </div>
   }
