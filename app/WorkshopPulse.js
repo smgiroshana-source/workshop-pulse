@@ -1,8 +1,8 @@
 "use client"
-import { useState } from "react"
+import { useState, useRef, useEffect } from "react"
 import { WorkshopProvider, useWorkshop, C, FONT, MONO, btn, btnSm, inp, card, pill, Sheet, NavBar, ALL_STAGES, fmt, regSearchKey, phoneSearchKey, SP } from "./WorkshopContext"
 import { useAuth } from "./AuthGate"
-import { uploadPhoto, deletePhoto } from "./supabase"
+import { uploadPhoto, deletePhoto, compressForPreview } from "./supabase"
 import UserManagement from "./screens/UserManagement"
 import HomeScreen, { ClosedHistory, ClosedJobDetail } from "./screens/HomeScreen"
 import NewJobScreen from "./screens/NewJobScreen"
@@ -15,6 +15,759 @@ import ApprovalEntry from "./screens/ApprovalEntry"
 import ApprovalSummary from "./screens/ApprovalSummary"
 import InvoiceDetail from "./screens/InvoiceDetail"
 import StoreScreen from "./screens/StoreScreen"
+
+// ── Local date helper (avoids UTC timezone bug) ──
+function localDateStr(d = new Date()) {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+// Convert any date/ISO string to local date-only string
+function toLocalDate(iso) {
+  if (!iso) return ""
+  if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) return iso // already date-only
+  try { return localDateStr(new Date(iso)) } catch { return "" }
+}
+
+function num(v) { const n = Number(v); return isFinite(n) ? n : 0 }
+
+function CashBookScreen({ cashBook, setCashBook, grns, setGrns, jobs, loadClosedJobs, tt, onBack }) {
+  const [tab, setTab] = useState("cash") // cash | bank | history
+  // Load closed jobs on mount so late payments on closed jobs appear in cashbook
+  useEffect(() => { if (loadClosedJobs) loadClosedJobs() }, [loadClosedJobs])
+  const [viewDate, setViewDate] = useState(localDateStr()) // the date being viewed
+  const [addExpDesc, setAddExpDesc] = useState("")
+  const [addExpAmt, setAddExpAmt] = useState("")
+  const [addExpCat, setAddExpCat] = useState("food")
+  const [countAmt, setCountAmt] = useState("")
+  const [countNote, setCountNote] = useState("")
+  const [editingBank, setEditingBank] = useState(false)
+  const [bankBal, setBankBal] = useState(String(num(cashBook.bankBalance)))
+  const [openingCash, setOpeningCash] = useState(String(num(cashBook.openingCash)))
+  const [editingOpening, setEditingOpening] = useState(false)
+  const [editingCount, setEditingCount] = useState(false)
+
+  // Refresh "today" every minute to catch midnight rollover
+  const [today, setTodayState] = useState(localDateStr())
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const d = localDateStr()
+      if (d !== today) setTodayState(d)
+    }, 60000)
+    return () => clearInterval(timer)
+  }, [today])
+
+  const isToday = viewDate === today
+  const isPast = viewDate < today
+
+  const expCategories = [
+    { key: "food", label: "🍽 Food" },
+    { key: "utility", label: "💡 Utility" },
+    { key: "transport", label: "🚗 Transport" },
+    { key: "salary", label: "👷 Salary" },
+    { key: "other", label: "📦 Other" },
+  ]
+
+  // ── Compute cash income for a given date ──
+  function computeIncome(date) {
+    const items = []
+    const seen = new Set() // dedupe by payment id
+    ;(jobs || []).forEach(j => {
+      ;(j.invoices || []).forEach(inv => {
+        // Use payments[] first; fall back to split arrays if payments[] empty
+        const pays = (inv.payments?.length ? inv.payments : [...(inv.insurance_payments || []), ...(inv.customer_payments || [])])
+        pays.forEach(p => {
+          if (!p || !p.date) return
+          const pid = p.id || `${p.date}_${p.amount}_${p.type}`
+          if (seen.has(pid)) return
+          if (toLocalDate(p.date) !== date) return
+          if (p.method === "cash") {
+            items.push({ id: pid, desc: `${j.jobInfo?.vehicle_reg || "Job"} — ${p.type || "payment"}`, amount: num(p.amount), method: "cash" })
+            seen.add(pid)
+          } else if (p.method === "bank_transfer" || p.method === "bank" || p.method === "online") {
+            items.push({ id: pid, desc: `${j.jobInfo?.vehicle_reg || "Job"} — ${p.type || "payment"}${p.method === "online" ? " (online)" : ""}`, amount: num(p.amount), method: "bank" })
+            seen.add(pid)
+          } else if (p.method === "cheque") {
+            items.push({ id: pid, desc: `${j.jobInfo?.vehicle_reg || "Job"} — ${p.type || "payment"}`, amount: num(p.amount), method: "cheque", chequeNo: p.reference })
+            seen.add(pid)
+          }
+        })
+      })
+    })
+    return items
+  }
+
+  // ── Compute expenses for a given date ──
+  function computeExpenses(date) {
+    const items = []
+    grns.forEach(g => {
+      if (!g.paid || !g.paymentDate) return
+      if (toLocalDate(g.paymentDate) !== date) return
+      items.push({
+        id: g.id, desc: `${g.grnNumber} — ${g.supplier}`,
+        amount: num(g.paymentAmount || g.totalAmount),
+        method: g.paymentMethod, grnId: g.id,
+        chequeDate: g.chequeDate
+      })
+    })
+    return items
+  }
+
+  const dayIncome = computeIncome(viewDate)
+  const dayExpenses = computeExpenses(viewDate)
+  const dayMisc = (cashBook.miscExpenses || []).filter(e => e.date === viewDate)
+
+  const cashIn = dayIncome.filter(i => i.method === "cash")
+  const cashOut = dayExpenses.filter(e => e.method === "cash")
+  const bankIn = dayIncome.filter(i => i.method === "bank")
+  const bankOut = dayExpenses.filter(e => e.method === "bank")
+
+  const totalCashIn = cashIn.reduce((s, i) => s + i.amount, 0)
+  const totalCashOut = cashOut.reduce((s, e) => s + e.amount, 0)
+  const totalMisc = dayMisc.reduce((s, e) => s + num(e.amount), 0)
+  const totalExpenses = totalCashOut + totalMisc
+
+  // Opening cash: openingCash in cashBook is always for TODAY at start
+  // For historical dates, we use the stored dailyCounts to reconstruct
+  const prevCount = (cashBook.dailyCounts || []).filter(c => c.date < viewDate).sort((a, b) => b.date.localeCompare(a.date))[0]
+  const prevBalance = isToday ? num(cashBook.openingCash) : (prevCount ? num(prevCount.actualCash) : 0)
+  const calculatedBalance = prevBalance + totalCashIn - totalExpenses
+
+  // Today's cash count
+  const dayCount = (cashBook.dailyCounts || []).find(c => c.date === viewDate)
+  const cashDiff = dayCount ? num(dayCount.actualCash) - calculatedBalance : null
+
+  // ── Pending cheques ──
+  const pendingCheques = grns.filter(g => g.paid && g.paymentMethod === "cheque" && g.chequeDate && !g.chequeCleared && g.chequeDate >= today).sort((a, b) => a.chequeDate.localeCompare(b.chequeDate))
+  const dueTodayCheques = grns.filter(g => g.paid && g.paymentMethod === "cheque" && g.chequeDate === today && !g.chequeCleared)
+
+  // ── Add misc expense ──
+  const addMiscExpense = () => {
+    if (!addExpDesc.trim() || !addExpAmt) { tt("⚠️ Enter description & amount"); return }
+    const amt = num(addExpAmt)
+    if (amt <= 0) { tt("⚠️ Amount must be positive"); return }
+    const exp = { id: "exp_" + Date.now(), date: viewDate, description: addExpDesc.trim(), amount: amt, category: addExpCat }
+    setCashBook(prev => ({ ...prev, miscExpenses: [...(prev.miscExpenses || []), exp] }))
+    setAddExpDesc(""); setAddExpAmt("")
+    tt("✓ Expense added")
+  }
+
+  const deleteMisc = (id, desc) => {
+    if (!confirm(`Delete expense "${desc}"?`)) return
+    setCashBook(prev => ({ ...prev, miscExpenses: (prev.miscExpenses || []).filter(e => e.id !== id) }))
+    tt("Expense removed")
+  }
+
+  // ── Save cash count (does NOT overwrite openingCash) ──
+  const saveCashCount = () => {
+    if (countAmt === "" || countAmt == null) { tt("⚠️ Enter actual cash"); return }
+    const amt = num(countAmt)
+    if (amt < 0) { tt("⚠️ Cash cannot be negative"); return }
+    const count = { date: viewDate, actualCash: amt, note: countNote, timestamp: new Date().toISOString() }
+    setCashBook(prev => ({
+      ...prev,
+      dailyCounts: [...(prev.dailyCounts || []).filter(c => c.date !== viewDate), count],
+    }))
+    setCountAmt(""); setCountNote(""); setEditingCount(false)
+    tt("✓ Cash count saved")
+  }
+
+  // ── Close Day: carries today's calculated balance to tomorrow's opening ──
+  const closeDay = () => {
+    if (!dayCount) { tt("⚠️ Save cash count first"); return }
+    if (cashDiff !== 0 && !confirm(`Cash is ${cashDiff > 0 ? "+" : ""}${cashDiff.toLocaleString()} off. Close day anyway?`)) return
+    setCashBook(prev => ({ ...prev, openingCash: num(dayCount.actualCash) }))
+    tt("✓ Day closed. Opening balance updated for tomorrow.")
+  }
+
+  const saveOpening = () => {
+    const amt = num(openingCash)
+    if (amt < 0) { tt("⚠️ Balance cannot be negative"); return }
+    setCashBook(prev => ({ ...prev, openingCash: amt }))
+    setEditingOpening(false)
+    tt("✓ Opening balance updated")
+  }
+
+  const saveBankBal = () => {
+    const amt = num(bankBal)
+    setCashBook(prev => ({ ...prev, bankBalance: amt }))
+    setEditingBank(false)
+    tt("✓ Bank balance updated")
+  }
+
+  // ── Clear a cheque: deduct from bank balance ──
+  const clearCheque = (grn) => {
+    if (!confirm(`Mark cheque ${grn.chequeNo || ""} as cleared? Rs.${num(grn.paymentAmount || grn.totalAmount).toLocaleString()} will be deducted from bank balance.`)) return
+    const amt = num(grn.paymentAmount || grn.totalAmount)
+    setGrns(prev => prev.map(g => g.id === grn.id ? { ...g, chequeCleared: true, chequeClearedDate: new Date().toISOString() } : g))
+    setCashBook(prev => ({ ...prev, bankBalance: num(prev.bankBalance) - amt }))
+    tt("✓ Cheque cleared, bank updated")
+  }
+
+  const bounceCheque = (grn) => {
+    const wasCleared = !!grn.chequeCleared
+    const amt = num(grn.paymentAmount || grn.totalAmount)
+    const msg = wasCleared
+      ? `Cheque ${grn.chequeNo || ""} was cleared. Bouncing will add Rs.${amt.toLocaleString()} back to bank balance and return GRN to unpaid. Continue?`
+      : `Mark cheque ${grn.chequeNo || ""} as bounced? GRN will return to unpaid.`
+    if (!confirm(msg)) return
+    setGrns(prev => prev.map(g => g.id === grn.id ? { ...g, paid: false, paymentMethod: "credit", paymentAmount: 0, chequeNo: null, chequeBank: null, chequeDate: null, chequeCleared: false, chequeClearedDate: null, paymentDate: null } : g))
+    if (wasCleared) {
+      setCashBook(prev => ({ ...prev, bankBalance: num(prev.bankBalance) + amt }))
+      tt("Cheque bounced, bank balance restored")
+    } else {
+      tt("Cheque bounced, GRN returned to unpaid")
+    }
+  }
+
+  // ── Historical days with any activity ──
+  const activeDays = [...new Set([
+    ...(cashBook.miscExpenses || []).map(e => e.date),
+    ...(cashBook.dailyCounts || []).map(c => c.date),
+    ...grns.filter(g => g.paid && g.paymentDate).map(g => toLocalDate(g.paymentDate)),
+  ].filter(Boolean))].sort((a, b) => b.localeCompare(a))
+
+  const shiftDate = (delta) => {
+    const d = new Date(viewDate + "T00:00:00")
+    d.setDate(d.getDate() + delta)
+    setViewDate(localDateStr(d))
+  }
+
+  const dateLabel = new Date(viewDate + "T00:00:00").toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric" })
+
+  return (
+    <div>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
+        <span onClick={onBack} style={{ fontSize: 14, color: C.accent, cursor: "pointer", fontWeight: 600 }}>← Back</span>
+        <span style={{ fontSize: 20, fontWeight: 700 }}>Cash Book</span>
+      </div>
+
+      {/* Date navigation */}
+      <div style={{ ...card, display: "flex", alignItems: "center", gap: 8, padding: "10px 12px", marginBottom: 12 }}>
+        <span onClick={() => shiftDate(-1)} style={{ padding: "6px 10px", borderRadius: 8, background: C.bg, cursor: "pointer", fontSize: 16, fontWeight: 700 }}>‹</span>
+        <div style={{ flex: 1, textAlign: "center" }}>
+          <div style={{ fontSize: 14, fontWeight: 700 }}>{dateLabel}</div>
+          {!isToday && <div style={{ fontSize: 11, color: C.orange, fontWeight: 600 }}>📅 Historical view</div>}
+        </div>
+        <span onClick={() => shiftDate(1)} style={{ padding: "6px 10px", borderRadius: 8, background: C.bg, cursor: isToday ? "not-allowed" : "pointer", fontSize: 16, fontWeight: 700, opacity: isToday ? 0.3 : 1 }}>›</span>
+        {!isToday && <span onClick={() => setViewDate(today)} style={{ fontSize: 12, color: C.accent, fontWeight: 600, cursor: "pointer", marginLeft: 4 }}>Today</span>}
+      </div>
+
+      {/* Tabs */}
+      <div style={{ display: "flex", gap: 0, marginBottom: 16, borderRadius: 12, overflow: "hidden", border: `1.5px solid ${C.border}` }}>
+        {[{ key: "cash", label: "💵 Cash" }, { key: "bank", label: "🏦 Bank" }, { key: "history", label: "📅 History" }].map(t => (
+          <div key={t.key} onClick={() => setTab(t.key)} style={{
+            flex: 1, padding: "12px", textAlign: "center", fontSize: 14, fontWeight: 600, cursor: "pointer",
+            background: tab === t.key ? C.accent : "#fff", color: tab === t.key ? "#fff" : C.sub,
+          }}>{t.label}</div>
+        ))}
+      </div>
+
+      {/* Alert: cheques due today */}
+      {dueTodayCheques.length > 0 && tab !== "history" && (
+        <div style={{ ...card, background: C.red + "10", border: `1.5px solid ${C.red}40`, display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", marginBottom: 10 }}>
+          <span style={{ fontSize: 13, fontWeight: 600, color: C.red }}>⚠️ {dueTodayCheques.length} cheque{dueTodayCheques.length !== 1 ? "s" : ""} due today</span>
+          <span onClick={() => setTab("bank")} style={{ fontSize: 12, color: C.accent, cursor: "pointer", fontWeight: 600 }}>View →</span>
+        </div>
+      )}
+
+      {/* ═══ CASH TAB ═══ */}
+      {tab === "cash" && (
+        <>
+          {/* Opening Balance */}
+          <div style={{ ...card, display: "flex", justifyContent: "space-between", alignItems: "center", background: C.accent + "08" }}>
+            <div>
+              <div style={{ fontSize: 12, color: C.muted }}>Opening Balance {!isToday && "(carried from prev day)"}</div>
+              {editingOpening && isToday ? (
+                <div style={{ display: "flex", gap: 6, alignItems: "center", marginTop: 4 }}>
+                  <input type="number" value={openingCash}
+                    onFocus={e => { e.target._orig = openingCash; e.target.value = ""; setOpeningCash("") }}
+                    onBlur={e => { if (!openingCash) setOpeningCash(e.target._orig || "0") }}
+                    onChange={e => setOpeningCash(e.target.value)}
+                    style={{ ...inp, width: 140, fontSize: 16, fontFamily: MONO, fontWeight: 700, padding: "8px 10px" }} />
+                  <span onClick={saveOpening} style={{ fontSize: 13, color: C.green, fontWeight: 600, cursor: "pointer" }}>Save</span>
+                  <span onClick={() => { setEditingOpening(false); setOpeningCash(String(num(cashBook.openingCash))) }} style={{ fontSize: 13, color: C.muted, cursor: "pointer" }}>Cancel</span>
+                </div>
+              ) : (
+                <div style={{ fontFamily: MONO, fontSize: 20, fontWeight: 700, marginTop: 2 }}>Rs.{prevBalance.toLocaleString()}</div>
+              )}
+            </div>
+            {!editingOpening && isToday && <span onClick={() => setEditingOpening(true)} style={{ fontSize: 12, color: C.accent, fontWeight: 600, cursor: "pointer" }}>✏️ Edit</span>}
+          </div>
+
+          {/* Income */}
+          <div style={card}>
+            <div style={{ fontSize: 14, fontWeight: 600, color: C.green, textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 8 }}>📥 Cash Income</div>
+            {cashIn.length === 0 ? (
+              <div style={{ fontSize: 13, color: C.muted, padding: "8px 0" }}>No cash income</div>
+            ) : cashIn.map((inc, i) => (
+              <div key={inc.id} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: i < cashIn.length - 1 ? `1px solid ${C.border}` : "none" }}>
+                <span style={{ fontSize: 13, color: C.sub }}>{inc.desc}</span>
+                <span style={{ fontFamily: MONO, fontSize: 14, fontWeight: 700, color: C.green }}>+{inc.amount.toLocaleString()}</span>
+              </div>
+            ))}
+            <div style={{ display: "flex", justifyContent: "space-between", paddingTop: 8, borderTop: `1px solid ${C.border}`, marginTop: 4 }}>
+              <span style={{ fontSize: 13, fontWeight: 600 }}>Total</span>
+              <span style={{ fontFamily: MONO, fontSize: 16, fontWeight: 700, color: C.green }}>Rs.{totalCashIn.toLocaleString()}</span>
+            </div>
+          </div>
+
+          {/* Expenses */}
+          <div style={card}>
+            <div style={{ fontSize: 14, fontWeight: 600, color: C.red, textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 8 }}>📤 Expenses (Petty Cash + Purchases)</div>
+            {cashOut.length === 0 && dayMisc.length === 0 ? (
+              <div style={{ fontSize: 13, color: C.muted, padding: "8px 0" }}>No expenses</div>
+            ) : (
+              <>
+                {cashOut.map(exp => (
+                  <div key={exp.id} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: `1px solid ${C.border}` }}>
+                    <span style={{ fontSize: 13, color: C.sub }}>{exp.desc}</span>
+                    <span style={{ fontFamily: MONO, fontSize: 14, fontWeight: 700, color: C.red }}>-{exp.amount.toLocaleString()}</span>
+                  </div>
+                ))}
+                {dayMisc.map(exp => (
+                  <div key={exp.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderBottom: `1px solid ${C.border}` }}>
+                    <div>
+                      <span style={{ fontSize: 13, color: C.sub }}>{exp.description}</span>
+                      <span style={{ fontSize: 11, color: C.muted, marginLeft: 6 }}>{expCategories.find(c => c.key === exp.category)?.label || exp.category}</span>
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <span style={{ fontFamily: MONO, fontSize: 14, fontWeight: 700, color: C.red }}>-{num(exp.amount).toLocaleString()}</span>
+                      <span onClick={() => deleteMisc(exp.id, exp.description)} style={{ fontSize: 14, color: C.muted, cursor: "pointer", padding: 2 }}>×</span>
+                    </div>
+                  </div>
+                ))}
+              </>
+            )}
+            <div style={{ display: "flex", justifyContent: "space-between", paddingTop: 8, borderTop: `1px solid ${C.border}`, marginTop: 4 }}>
+              <span style={{ fontSize: 13, fontWeight: 600 }}>Total</span>
+              <span style={{ fontFamily: MONO, fontSize: 16, fontWeight: 700, color: C.red }}>Rs.{totalExpenses.toLocaleString()}</span>
+            </div>
+          </div>
+
+          {/* Add Petty Cash / Misc Expense */}
+          <div style={{ ...card, border: `2px solid ${C.red}20`, background: C.red + "04" }}>
+            <div style={{ fontSize: 15, fontWeight: 700, color: C.red, marginBottom: 2 }}>➕ Add Petty Cash Expense</div>
+            <div style={{ fontSize: 12, color: C.muted, marginBottom: 10 }}>Food, fuel, utility bills, stationery, tea, etc. {!isToday && <span style={{ color: C.orange, fontWeight: 600 }}>— for {dateLabel}</span>}</div>
+            <input value={addExpDesc} onChange={e => setAddExpDesc(e.target.value)} placeholder="What did you spend on?"
+              onKeyDown={e => { if (e.key === "Enter") addMiscExpense() }}
+              style={{ ...inp, fontSize: 15, padding: "12px 14px", marginBottom: 8 }} />
+            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+              <select value={addExpCat} onChange={e => setAddExpCat(e.target.value)} style={{ ...inp, flex: "0 0 130px", fontSize: 14, padding: "12px 10px" }}>
+                {expCategories.map(c => <option key={c.key} value={c.key}>{c.label}</option>)}
+              </select>
+              <input type="number" value={addExpAmt} onChange={e => setAddExpAmt(e.target.value)} placeholder="Rs. amount" min="0"
+                onKeyDown={e => { if (e.key === "Enter") addMiscExpense() }}
+                style={{ ...inp, flex: 1, fontSize: 18, fontFamily: MONO, fontWeight: 700, padding: "12px 14px" }} />
+              <div onClick={addMiscExpense} style={{ width: 54, height: 54, borderRadius: 12, background: C.red, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24, fontWeight: 700, cursor: "pointer", flexShrink: 0, boxShadow: `0 2px 8px ${C.red}40` }}>+</div>
+            </div>
+          </div>
+
+          {/* Balance */}
+          <div style={{ ...card, background: calculatedBalance >= 0 ? C.green + "08" : C.red + "08" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div>
+                <div style={{ fontSize: 12, color: C.muted }}>Calculated Cash Balance</div>
+                <div style={{ fontFamily: MONO, fontSize: 24, fontWeight: 700, color: calculatedBalance >= 0 ? C.green : C.red, marginTop: 2 }}>Rs.{calculatedBalance.toLocaleString()}</div>
+              </div>
+            </div>
+            <div style={{ fontSize: 11, color: C.muted, marginTop: 6 }}>Opening {prevBalance.toLocaleString()} + Income {totalCashIn.toLocaleString()} - Expenses {totalExpenses.toLocaleString()}</div>
+          </div>
+
+          {/* Cash Count Verification */}
+          <div style={{ ...card, border: `2px solid ${C.orange}30` }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+              <div style={{ fontSize: 14, fontWeight: 600, color: C.orange, textTransform: "uppercase", letterSpacing: 0.8 }}>🔢 Cash Count</div>
+              {dayCount && !editingCount && <span onClick={() => { setEditingCount(true); setCountAmt(String(dayCount.actualCash)); setCountNote(dayCount.note || "") }} style={{ fontSize: 12, color: C.accent, fontWeight: 600, cursor: "pointer" }}>✏️ Edit</span>}
+            </div>
+            {dayCount && !editingCount ? (
+              <div>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                  <span style={{ fontSize: 13, color: C.sub }}>Actual Cash</span>
+                  <span style={{ fontFamily: MONO, fontSize: 18, fontWeight: 700 }}>Rs.{num(dayCount.actualCash).toLocaleString()}</span>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                  <span style={{ fontSize: 13, color: C.sub }}>Calculated</span>
+                  <span style={{ fontFamily: MONO, fontSize: 14, color: C.muted }}>Rs.{calculatedBalance.toLocaleString()}</span>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", paddingTop: 8, borderTop: `1px solid ${C.border}` }}>
+                  <span style={{ fontSize: 13, fontWeight: 600 }}>Difference</span>
+                  <span style={{ fontFamily: MONO, fontSize: 16, fontWeight: 700, color: cashDiff === 0 ? C.green : C.red }}>
+                    {cashDiff === 0 ? "✓ Balanced" : `Rs.${cashDiff.toLocaleString()} ${cashDiff > 0 ? "(excess)" : "(short)"}`}
+                  </span>
+                </div>
+                {dayCount.note && <div style={{ fontSize: 12, color: C.muted, marginTop: 6 }}>Note: {dayCount.note}</div>}
+                {isToday && <button onClick={closeDay} style={{ width: "100%", padding: "12px", borderRadius: 10, border: "none", background: C.green, fontSize: 14, fontWeight: 600, color: "#fff", cursor: "pointer", fontFamily: FONT, marginTop: 10 }}>🔒 Close Day (Set as Tomorrow's Opening)</button>}
+              </div>
+            ) : (
+              <div>
+                <div style={{ fontSize: 13, color: C.muted, marginBottom: 8 }}>Count actual cash and enter below to verify</div>
+                <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+                  <input type="number" value={countAmt} onChange={e => setCountAmt(e.target.value)} placeholder="Actual cash in hand" min="0"
+                    onFocus={e => { if (countAmt === "0") setCountAmt("") }}
+                    style={{ ...inp, flex: 1, fontSize: 16, fontFamily: MONO, fontWeight: 700, padding: "10px 12px" }} />
+                </div>
+                <input value={countNote} onChange={e => setCountNote(e.target.value)} placeholder="Note (optional)" style={{ ...inp, fontSize: 13, padding: "8px 12px", marginBottom: 8 }} />
+                <div style={{ display: "flex", gap: 8 }}>
+                  {editingCount && <button onClick={() => { setEditingCount(false); setCountAmt(""); setCountNote("") }} style={{ flex: 1, padding: "12px", borderRadius: 10, border: `1.5px solid ${C.border}`, background: "#fff", fontSize: 14, fontWeight: 600, color: C.sub, cursor: "pointer", fontFamily: FONT }}>Cancel</button>}
+                  <button onClick={saveCashCount} style={{ flex: 2, padding: "12px", borderRadius: 10, border: "none", background: C.orange, fontSize: 14, fontWeight: 600, color: "#fff", cursor: "pointer", fontFamily: FONT }}>✓ Save Cash Count</button>
+                </div>
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
+      {/* ═══ BANK TAB ═══ */}
+      {tab === "bank" && (
+        <>
+          {/* Bank Balance */}
+          <div style={{ ...card, background: C.accent + "08" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div>
+                <div style={{ fontSize: 12, color: C.muted }}>Bank Balance</div>
+                {editingBank ? (
+                  <div style={{ display: "flex", gap: 6, alignItems: "center", marginTop: 4 }}>
+                    <input type="number" value={bankBal}
+                      onFocus={e => { e.target._orig = bankBal; e.target.value = ""; setBankBal("") }}
+                      onBlur={e => { if (!bankBal) setBankBal(e.target._orig || "0") }}
+                      onChange={e => setBankBal(e.target.value)}
+                      style={{ ...inp, width: 160, fontSize: 16, fontFamily: MONO, fontWeight: 700, padding: "8px 10px" }} />
+                    <span onClick={saveBankBal} style={{ fontSize: 13, color: C.green, fontWeight: 600, cursor: "pointer" }}>Save</span>
+                    <span onClick={() => { setEditingBank(false); setBankBal(String(num(cashBook.bankBalance))) }} style={{ fontSize: 13, color: C.muted, cursor: "pointer" }}>Cancel</span>
+                  </div>
+                ) : (
+                  <div style={{ fontFamily: MONO, fontSize: 24, fontWeight: 700, color: C.accent, marginTop: 2 }}>Rs.{num(cashBook.bankBalance).toLocaleString()}</div>
+                )}
+              </div>
+              {!editingBank && <span onClick={() => setEditingBank(true)} style={{ fontSize: 12, color: C.accent, fontWeight: 600, cursor: "pointer" }}>✏️ Reconcile</span>}
+            </div>
+            <div style={{ fontSize: 11, color: C.muted, marginTop: 6 }}>Auto-updated from bank transfers & cleared cheques</div>
+          </div>
+
+          {/* Bank Transactions */}
+          <div style={card}>
+            <div style={{ fontSize: 14, fontWeight: 600, color: C.sub, textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 8 }}>Bank Transactions</div>
+            {bankIn.length === 0 && bankOut.length === 0 ? (
+              <div style={{ fontSize: 13, color: C.muted, padding: "8px 0" }}>No bank transactions</div>
+            ) : (
+              <>
+                {bankIn.map(t => (
+                  <div key={t.id} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: `1px solid ${C.border}` }}>
+                    <span style={{ fontSize: 13, color: C.sub }}>📥 {t.desc}</span>
+                    <span style={{ fontFamily: MONO, fontSize: 14, fontWeight: 700, color: C.green }}>+{t.amount.toLocaleString()}</span>
+                  </div>
+                ))}
+                {bankOut.map(t => (
+                  <div key={t.id} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: `1px solid ${C.border}` }}>
+                    <span style={{ fontSize: 13, color: C.sub }}>📤 {t.desc}</span>
+                    <span style={{ fontFamily: MONO, fontSize: 14, fontWeight: 700, color: C.red }}>-{t.amount.toLocaleString()}</span>
+                  </div>
+                ))}
+              </>
+            )}
+          </div>
+
+          {/* Pending Cheques */}
+          <div style={card}>
+            <div style={{ fontSize: 14, fontWeight: 600, color: C.orange, textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 8 }}>📝 Pending Cheques</div>
+            {pendingCheques.length === 0 && dueTodayCheques.length === 0 ? (
+              <div style={{ fontSize: 13, color: C.muted, padding: "8px 0" }}>No pending cheques</div>
+            ) : (
+              <>
+                {/* Due today first */}
+                {dueTodayCheques.map(g => (
+                  <div key={g.id} style={{ padding: "10px 0", borderBottom: `1px solid ${C.border}` }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 }}>
+                      <div>
+                        <div style={{ fontSize: 14, fontWeight: 600 }}>{g.supplier}</div>
+                        <div style={{ fontSize: 12, color: C.muted }}>
+                          {g.grnNumber} · Chq: {g.chequeNo || "—"} · {g.chequeBank || "—"}
+                        </div>
+                      </div>
+                      <div style={{ textAlign: "right" }}>
+                        <div style={{ fontFamily: MONO, fontSize: 15, fontWeight: 700, color: C.red }}>Rs.{num(g.paymentAmount || g.totalAmount).toLocaleString()}</div>
+                        <div style={{ fontSize: 11, color: C.red, fontWeight: 700 }}>⚠️ Due today</div>
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", gap: 6 }}>
+                      <button onClick={() => clearCheque(g)} style={{ flex: 1, padding: "8px", borderRadius: 8, border: "none", background: C.green, color: "#fff", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: FONT }}>✓ Mark Cleared</button>
+                      <button onClick={() => bounceCheque(g)} style={{ flex: 1, padding: "8px", borderRadius: 8, border: `1px solid ${C.red}`, background: "#fff", color: C.red, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: FONT }}>✕ Bounced</button>
+                    </div>
+                  </div>
+                ))}
+                {pendingCheques.filter(c => c.chequeDate !== today).map(g => (
+                  <div key={g.id} style={{ padding: "10px 0", borderBottom: `1px solid ${C.border}` }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 }}>
+                      <div>
+                        <div style={{ fontSize: 14, fontWeight: 600 }}>{g.supplier}</div>
+                        <div style={{ fontSize: 12, color: C.muted }}>
+                          {g.grnNumber} · Chq: {g.chequeNo || "—"} · {g.chequeBank || "—"}
+                        </div>
+                      </div>
+                      <div style={{ textAlign: "right" }}>
+                        <div style={{ fontFamily: MONO, fontSize: 15, fontWeight: 700, color: C.orange }}>Rs.{num(g.paymentAmount || g.totalAmount).toLocaleString()}</div>
+                        <div style={{ fontSize: 11, color: C.muted }}>{new Date(g.chequeDate).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</div>
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", gap: 6 }}>
+                      <button onClick={() => clearCheque(g)} style={{ flex: 1, padding: "6px", borderRadius: 8, border: `1px solid ${C.green}`, background: "#fff", color: C.green, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: FONT }}>✓ Cleared Early</button>
+                      <button onClick={() => bounceCheque(g)} style={{ flex: 1, padding: "6px", borderRadius: 8, border: `1px solid ${C.red}`, background: "#fff", color: C.red, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: FONT }}>✕ Bounced</button>
+                    </div>
+                  </div>
+                ))}
+              </>
+            )}
+            {(pendingCheques.length + dueTodayCheques.length) > 0 && (
+              <div style={{ display: "flex", justifyContent: "space-between", paddingTop: 8, marginTop: 4 }}>
+                <span style={{ fontSize: 13, fontWeight: 600 }}>Total Pending</span>
+                <span style={{ fontFamily: MONO, fontSize: 16, fontWeight: 700, color: C.orange }}>Rs.{[...pendingCheques, ...dueTodayCheques].reduce((s, g) => s + num(g.paymentAmount || g.totalAmount), 0).toLocaleString()}</span>
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
+      {/* ═══ HISTORY TAB ═══ */}
+      {tab === "history" && (
+        <div style={card}>
+          <div style={{ fontSize: 14, fontWeight: 600, color: C.sub, textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 10 }}>Past Days</div>
+          {activeDays.length === 0 ? (
+            <div style={{ fontSize: 13, color: C.muted, padding: "8px 0" }}>No historical data yet</div>
+          ) : activeDays.map(d => {
+            const inc = computeIncome(d).filter(i => i.method === "cash").reduce((s, i) => s + i.amount, 0)
+            const exp = computeExpenses(d).filter(e => e.method === "cash").reduce((s, e) => s + e.amount, 0)
+            const misc = (cashBook.miscExpenses || []).filter(e => e.date === d).reduce((s, e) => s + num(e.amount), 0)
+            const count = (cashBook.dailyCounts || []).find(c => c.date === d)
+            return (
+              <div key={d} onClick={() => { setViewDate(d); setTab("cash") }} style={{ padding: "10px 0", borderBottom: `1px solid ${C.border}`, cursor: "pointer" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <div>
+                    <div style={{ fontSize: 14, fontWeight: 600 }}>{new Date(d + "T00:00:00").toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })}</div>
+                    <div style={{ fontSize: 11, color: C.muted }}>
+                      In: Rs.{inc.toLocaleString()} · Out: Rs.{(exp + misc).toLocaleString()}
+                    </div>
+                  </div>
+                  {count && <span style={{ fontSize: 11, color: C.green, fontWeight: 600 }}>✓ Counted</span>}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function PayableScreen({ unpaidPOs, setPurchaseOrders, setGrns, cashBook, setCashBook, tt, onBack }) {
+  const [payingId, setPayingId] = useState(null)
+  const [payAmount, setPayAmount] = useState("")
+  const [payMethod, setPayMethod] = useState("cash")
+  const [chequeNo, setChequeNo] = useState("")
+  const [chequeBank, setChequeBank] = useState("")
+  const [chequeDate, setChequeDate] = useState("")
+  const [discount, setDiscount] = useState("")
+  const [bankSlip, setBankSlip] = useState(null)
+  const [bankSlipPreview, setBankSlipPreview] = useState(null)
+  const [uploading, setUploading] = useState(false)
+  const slipInputRef = useRef(null)
+
+  const totalPayable = unpaidPOs.reduce((s, p) => s + (p.totalAmount || 0), 0)
+
+  const startPay = (item) => {
+    setPayingId(item.id)
+    setPayAmount(String(item.totalAmount || 0))
+    setPayMethod("cash")
+    setChequeNo(""); setChequeBank(""); setChequeDate("")
+    setDiscount("")
+    setBankSlip(null); setBankSlipPreview(null)
+  }
+
+  const confirmPay = async (item) => {
+    const paymentData = {
+      paid: true,
+      paymentMethod: payMethod,
+      paymentAmount: Number(payAmount) || 0,
+      paymentDiscount: Number(discount) || 0,
+      paymentDate: new Date().toISOString(),
+    }
+    if (payMethod === "cheque") {
+      paymentData.chequeNo = chequeNo
+      paymentData.chequeBank = chequeBank
+      paymentData.chequeDate = chequeDate
+    }
+    if (payMethod === "bank" && bankSlip) {
+      try {
+        setUploading(true)
+        const path = `store/payment-slips/${Date.now()}_${bankSlip.name}`
+        const url = await uploadPhoto(bankSlip, path)
+        paymentData.bankSlipUrl = url
+      } catch (err) {
+        console.error("Slip upload failed:", err)
+        // Save locally as data URL fallback
+        if (bankSlipPreview) paymentData.bankSlipUrl = bankSlipPreview
+      } finally {
+        setUploading(false)
+      }
+    }
+    setGrns(prev => prev.map(g => g.id === item.id ? { ...g, ...paymentData } : g))
+    // Auto-deduct bank balance for bank transfer payments
+    if (payMethod === "bank" && setCashBook) {
+      const deduction = Number(payAmount) || 0
+      setCashBook(prev => ({ ...prev, bankBalance: (Number(prev.bankBalance) || 0) - deduction }))
+    }
+    tt("✓ Payment recorded")
+    setPayingId(null)
+  }
+
+  const handleSlipSelect = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setBankSlip(file)
+    const preview = await compressForPreview(file)
+    setBankSlipPreview(preview)
+  }
+
+  return (
+    <div>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
+        <span onClick={onBack} style={{ fontSize: 14, color: C.accent, cursor: "pointer", fontWeight: 600 }}>← Back</span>
+        <span style={{ fontSize: 20, fontWeight: 700 }}>Payable</span>
+      </div>
+      {totalPayable > 0 && (
+        <div style={{ ...card, background: C.red + "08", display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 16px", marginBottom: 8 }}>
+          <span style={{ fontSize: 14, fontWeight: 600, color: C.sub }}>Total Payable</span>
+          <span style={{ fontFamily: MONO, fontSize: 20, fontWeight: 700, color: C.red }}>Rs.{totalPayable.toLocaleString()}</span>
+        </div>
+      )}
+      {unpaidPOs.length === 0 ? (
+        <div style={{ textAlign: "center", padding: 40, color: C.muted }}>
+          <div style={{ fontSize: 40, marginBottom: 12 }}>✅</div>
+          <div style={{ fontSize: 16, fontWeight: 600 }}>All purchases paid</div>
+        </div>
+      ) : unpaidPOs.map(item => {
+        const isPO = !!item.poNumber
+        const isPayingThis = payingId === item.id
+        return (
+          <div key={item.id} style={{ ...card, padding: "12px 16px", marginBottom: 8 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div>
+                <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 4 }}>
+                  <span style={{ fontFamily: MONO, fontSize: 16, fontWeight: 700 }}>{item.grnNumber}</span>
+                  {item.poId && <span style={{ fontSize: 11, fontWeight: 600, color: C.accent, background: C.accent + "12", padding: "2px 8px", borderRadius: 6 }}>{item.poNumber || "PO"}</span>}
+                </div>
+                <div style={{ fontSize: 14, color: C.sub }}>{item.supplier}</div>
+                <div style={{ fontSize: 12, color: C.muted }}>{item.items?.length || 0} items · {new Date(item.created_at || item.receivedDate).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</div>
+              </div>
+              <div style={{ textAlign: "right" }}>
+                <div style={{ fontFamily: MONO, fontSize: 18, fontWeight: 700, color: C.red }}>Rs.{(item.totalAmount || 0).toLocaleString()}</div>
+              </div>
+            </div>
+            {!isPayingThis && (
+              <div onClick={() => startPay(item)} style={{ marginTop: 10, padding: "10px 16px", borderRadius: 10, background: C.green, color: "#fff", fontSize: 14, fontWeight: 600, textAlign: "center", cursor: "pointer" }}>💰 Pay Now</div>
+            )}
+
+            {/* Payment form */}
+            {isPayingThis && (
+              <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${C.border}` }}>
+                {/* Payment method */}
+                <div style={{ fontSize: 12, color: C.muted, fontWeight: 600, marginBottom: 6, textTransform: "uppercase" }}>Payment Method</div>
+                <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
+                  {[
+                    { key: "cash", label: "💵 Cash", color: C.green },
+                    { key: "bank", label: "🏦 Bank", color: C.accent },
+                    { key: "cheque", label: "📝 Cheque", color: C.orange },
+                  ].map(m => (
+                    <div key={m.key} onClick={() => setPayMethod(m.key)} style={{
+                      flex: 1, padding: "10px 6px", borderRadius: 10, textAlign: "center", cursor: "pointer", fontSize: 13, fontWeight: 600,
+                      background: payMethod === m.key ? m.color : "#fff",
+                      color: payMethod === m.key ? "#fff" : C.sub,
+                      border: `2px solid ${payMethod === m.key ? m.color : C.border}`,
+                    }}>{m.label}</div>
+                  ))}
+                </div>
+
+                {/* Cheque details */}
+                {payMethod === "cheque" && (
+                  <div style={{ marginBottom: 12 }}>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
+                      <div>
+                        <div style={{ fontSize: 11, color: C.muted, marginBottom: 3 }}>Cheque No</div>
+                        <input value={chequeNo} onChange={e => setChequeNo(e.target.value)} placeholder="Cheque number" style={{ ...inp, fontSize: 14, padding: "10px 12px" }} />
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 11, color: C.muted, marginBottom: 3 }}>Bank</div>
+                        <input value={chequeBank} onChange={e => setChequeBank(e.target.value)} placeholder="Bank name" style={{ ...inp, fontSize: 14, padding: "10px 12px" }} />
+                      </div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 11, color: C.muted, marginBottom: 3 }}>Cheque Date</div>
+                      <input type="date" value={chequeDate} onChange={e => setChequeDate(e.target.value)} style={{ ...inp, fontSize: 14, padding: "10px 12px" }} />
+                    </div>
+                  </div>
+                )}
+
+                {/* Bank slip upload */}
+                {payMethod === "bank" && (
+                  <div style={{ marginBottom: 12 }}>
+                    <div style={{ fontSize: 11, color: C.muted, marginBottom: 6, fontWeight: 600, textTransform: "uppercase" }}>Payment Slip</div>
+                    <input type="file" accept="image/*" ref={slipInputRef} onChange={handleSlipSelect} style={{ display: "none" }} />
+                    {bankSlipPreview ? (
+                      <div style={{ position: "relative" }}>
+                        <img src={bankSlipPreview} alt="Payment slip" style={{ width: "100%", borderRadius: 10, border: `1px solid ${C.border}` }} />
+                        <div onClick={() => { setBankSlip(null); setBankSlipPreview(null); if (slipInputRef.current) slipInputRef.current.value = "" }}
+                          style={{ position: "absolute", top: 8, right: 8, width: 28, height: 28, borderRadius: 14, background: C.red, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, cursor: "pointer" }}>×</div>
+                      </div>
+                    ) : (
+                      <div onClick={() => slipInputRef.current?.click()}
+                        style={{ padding: "20px", textAlign: "center", borderRadius: 10, border: `2px dashed ${C.border}`, cursor: "pointer", color: C.muted, background: C.bg }}>
+                        📷 Tap to add payment slip
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Amount & Discount */}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 12 }}>
+                  <div>
+                    <div style={{ fontSize: 11, color: C.muted, marginBottom: 3 }}>Payment Amount</div>
+                    <input type="number" value={payAmount}
+                      onFocus={e => { e.target._orig = payAmount; e.target.value = ""; setPayAmount("") }}
+                      onBlur={e => { if (!payAmount) setPayAmount(e.target._orig || String(item.totalAmount || 0)) }}
+                      onChange={e => setPayAmount(e.target.value)}
+                      style={{ ...inp, fontSize: 16, fontFamily: MONO, fontWeight: 700, padding: "10px 12px" }} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 11, color: C.muted, marginBottom: 3 }}>Discount</div>
+                    <input type="number" value={discount}
+                      onFocus={e => { if (discount === "0") setDiscount("") }}
+                      onChange={e => setDiscount(e.target.value)}
+                      placeholder="0" style={{ ...inp, fontSize: 16, fontFamily: MONO, fontWeight: 700, padding: "10px 12px" }} />
+                  </div>
+                </div>
+
+                {Number(discount) > 0 && (
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, fontSize: 13 }}>
+                    <span style={{ color: C.green, fontWeight: 600 }}>Discount: Rs.{Number(discount).toLocaleString()}</span>
+                    <span style={{ fontFamily: MONO, fontWeight: 700 }}>Net: Rs.{((Number(payAmount) || 0) - (Number(discount) || 0)).toLocaleString()}</span>
+                  </div>
+                )}
+
+                {/* Confirm / Cancel */}
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button onClick={() => setPayingId(null)} style={{ flex: 1, padding: "12px", borderRadius: 10, border: `1.5px solid ${C.border}`, background: "#fff", fontSize: 14, fontWeight: 600, color: C.sub, cursor: "pointer", fontFamily: FONT }}>Cancel</button>
+                  <button onClick={() => confirmPay(item)} disabled={uploading} style={{ flex: 1, padding: "12px", borderRadius: 10, border: "none", background: uploading ? C.muted : C.green, fontSize: 14, fontWeight: 600, color: "#fff", cursor: uploading ? "wait" : "pointer", fontFamily: FONT }}>{uploading ? "Uploading..." : "✓ Confirm Payment"}</button>
+                </div>
+              </div>
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
 
 function AppInner() {
   const {
@@ -65,14 +818,36 @@ function AppInner() {
     closedCount,
     purchaseOrders, setPurchaseOrders,
     grns, setGrns,
+    cashBook, setCashBook,
     customerRegistry,
+    loadClosedJobs,
+    startWarrantyJob,
   } = useWorkshop()
   const { signOut, isSuperAdmin, role } = useAuth()
   const [showUserMgmt, setShowUserMgmt] = useState(false)
   const [selectedClosedJob, setSelectedClosedJob] = useState(null)
   const [rightTab, setRightTab] = useState(null) // null | "store" | "registry" | "payments"
+  const [storeInitial, setStoreInitial] = useState({ tab: "pos", screen: "list", key: 0 })
   const [regSearch, setRegSearch] = useState("")
   const [regSelectedVehicle, setRegSelectedVehicle] = useState(null) // vehicle reg key for expanded view
+  const [mobileView, setMobileView] = useState("jobs") // jobs | hub (mobile only)
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handler = (e) => {
+      // Don't trigger if typing in an input/textarea
+      if (e.target.matches?.("input, textarea, select, [contenteditable]")) return
+      if (e.key === "n" || e.key === "N") { e.preventDefault(); startNewJob() }
+      else if (e.key === "Escape") { setRightTab(null); setSelectedClosedJob(null); setRegSelectedVehicle(null) }
+      else if (e.key === "/") {
+        e.preventDefault()
+        const searchInput = document.querySelector('input[placeholder*="Search"]')
+        if (searchInput) searchInput.focus()
+      }
+    }
+    window.addEventListener("keydown", handler)
+    return () => window.removeEventListener("keydown", handler)
+  }, [startNewJob])
 
   // Job list panel (shared between phone home + tablet sidebar)
   function jobListPanel() {
@@ -92,7 +867,7 @@ function AppInner() {
               <div onClick={() => setSortBy(s => s === "newest" ? "oldest" : s === "oldest" ? "highest_value" : s === "highest_value" ? "stage_order" : "newest")} style={{ fontSize: 12, color: C.accent, cursor: "pointer", padding: "4px 10px", borderRadius: 8, background: C.accent + "08" }}>
                 {sortBy === "newest" ? "↓ New" : sortBy === "oldest" ? "↑ Old" : sortBy === "highest_value" ? "💰 Value" : "📊 Stage"}
               </div>
-              <div style={{ fontFamily: MONO, fontSize: 15, color: C.sub }}>{jobs.filter(j => !j.onHold && j.stage !== "closed").length}</div>
+              <div style={{ fontFamily: MONO, fontSize: 15, color: C.sub }}>{jobs.filter(j => !j.onHold && j.stage !== "closed" && j.stage !== "cancelled").length}</div>
             </div>
           </div>
         </div>
@@ -105,7 +880,7 @@ function AppInner() {
 
         {/* Dashboard summary cards */}
         {homeTab === "active" && (() => {
-          const active = jobs.filter(j => !j.onHold && j.stage !== "closed")
+          const active = jobs.filter(j => !j.onHold && j.stage !== "closed" && j.stage !== "cancelled")
           const pendingEst = active.filter(j => j.stage === "est_pending").length
           const partsWaiting = active.filter(j => (j.estimates || []).flatMap(e => (e.approved_entries || e.entries || []).filter(en => en.category === "replace")).some(p => !j.partsArrived?.[p.id])).length
           const overdue = jobs.filter(j => j.onHold && j.holdUntil && new Date(j.holdUntil) < new Date()).length
@@ -125,7 +900,7 @@ function AppInner() {
 
         {/* Active / On Hold / Closed tabs */}
         <div style={{ display: "flex", gap: 0, marginBottom: 12, background: C.card, borderRadius: 14, padding: 4, boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
-          {[["active", "Active", jobs.filter(j => !j.onHold && j.stage !== "closed").length], ["on_hold", "📌 On Hold", jobs.filter(j => j.onHold).length], ["closed", "🏁 Closed", jobs.filter(j => j.stage === "closed").length || closedCount || 0]].map(([k, l, cnt]) => (
+          {[["active", "Active", jobs.filter(j => !j.onHold && j.stage !== "closed" && j.stage !== "cancelled").length], ["on_hold", "📌 On Hold", jobs.filter(j => j.onHold).length], ["closed", "🏁 Closed", jobs.filter(j => j.stage === "closed").length || closedCount || 0]].map(([k, l, cnt]) => (
             <div key={k} onClick={() => { setHomeTab(k); setFilterStage("all"); setSelectedClosedJob(null) }} style={{ flex: 1, textAlign: "center", padding: "12px 0", borderRadius: 12, minHeight: 44, cursor: "pointer", background: homeTab === k ? (k === "on_hold" ? C.orange + "12" : k === "closed" ? C.sub + "12" : C.accent + "12") : "transparent", color: homeTab === k ? (k === "on_hold" ? C.orange : k === "closed" ? C.sub : C.accent) : C.muted, fontSize: 14, fontWeight: 600, transition: "all 0.2s" }}>{l} ({cnt})</div>
           ))}
         </div>
@@ -134,7 +909,7 @@ function AppInner() {
         {homeTab === "active" && (
           <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 12, marginBottom: 4 }}>
             {filterStage === "parts_waiting" && <div onClick={() => setFilterStage("all")} style={{ padding: "12px 18px", borderRadius: 20, minHeight: 44, fontSize: isTablet ? 13 : 14, fontWeight: 600, cursor: "pointer", flexShrink: 0, whiteSpace: "nowrap", background: C.purple + "15", color: C.purple, border: `1px solid ${C.purple}50` }}>{"\uD83D\uDCE6"} Parts Waiting ×</div>}
-            <div onClick={() => setFilterStage("all")} style={{ padding: "12px 18px", borderRadius: 20, minHeight: 44, fontSize: isTablet ? 13 : 14, fontWeight: 600, cursor: "pointer", flexShrink: 0, background: filterStage === "all" ? C.accent : C.card, color: filterStage === "all" ? "#fff" : C.sub, border: `1px solid ${filterStage === "all" ? C.accent : C.border}` }}>All ({jobs.filter(j => !j.onHold && j.stage !== "closed").length})</div>
+            <div onClick={() => setFilterStage("all")} style={{ padding: "12px 18px", borderRadius: 20, minHeight: 44, fontSize: isTablet ? 13 : 14, fontWeight: 600, cursor: "pointer", flexShrink: 0, background: filterStage === "all" ? C.accent : C.card, color: filterStage === "all" ? "#fff" : C.sub, border: `1px solid ${filterStage === "all" ? C.accent : C.border}` }}>All ({jobs.filter(j => !j.onHold && j.stage !== "closed" && j.stage !== "cancelled").length})</div>
             {Object.entries(ALL_STAGES).filter(([, s]) => s.label !== "Closed").map(([key, s]) => { const cnt = jobs.filter(j => j.stage === key && !j.onHold).length; return cnt > 0 ? <div key={key} onClick={() => setFilterStage(filterStage === key ? "all" : key)} style={{ padding: "12px 18px", borderRadius: 20, minHeight: 44, fontSize: isTablet ? 13 : 14, fontWeight: 600, cursor: "pointer", flexShrink: 0, whiteSpace: "nowrap", background: filterStage === key ? s.color + "15" : C.card, color: filterStage === key ? s.color : C.sub, border: `1px solid ${filterStage === key ? s.color + "50" : C.border}` }}>{s.icon} {s.label} ({cnt})</div> : null })}
           </div>
         )}
@@ -142,7 +917,7 @@ function AppInner() {
         {/* Job cards */}
         {homeTab === "closed" && <ClosedHistory jobs={jobs} searchQuery={searchQuery} openJob={openJob} isTablet={isTablet} activeJobId={activeJobId} onSelectJob={isTablet ? (j) => setSelectedClosedJob(j) : null} selectedJobId={selectedClosedJob?.id} />}
         {homeTab !== "closed" && (() => {
-          let filtered = homeTab === "on_hold" ? jobs.filter(j => j.onHold) : jobs.filter(j => !j.onHold && j.stage !== "closed")
+          let filtered = homeTab === "on_hold" ? jobs.filter(j => j.onHold) : jobs.filter(j => !j.onHold && j.stage !== "closed" && j.stage !== "cancelled")
           if (homeTab === "active" && filterStage !== "all") {
             if (filterStage === "parts_waiting") {
               filtered = filtered.filter(j => (j.estimates || []).flatMap(e => (e.approved_entries || e.entries || []).filter(en => en.category === "replace")).some(p => !j.partsArrived?.[p.id]))
@@ -204,7 +979,7 @@ function AppInner() {
           )
         })()}
 
-        <button onClick={startNewJob} style={{ ...btn(C.accent, "#fff"), marginTop: 8, position: "sticky", bottom: 20 }}>+ New Job</button>
+        <button onClick={startNewJob} style={{ ...btn(C.accent, "#fff"), marginTop: 8, position: "sticky", bottom: "max(20px, calc(20px + env(safe-area-inset-bottom)))", boxShadow: "0 4px 20px rgba(0,122,255,0.3)" }}>+ New Job</button>
       </div>
     )
   }
@@ -217,10 +992,15 @@ function AppInner() {
       const invs = j.invoices || []
       return invs.some(inv => {
         const total = (inv.entries || []).reduce((s, e) => s + ((e.approved || e.amount || 0) * (e.qty || 1)), 0)
-        const paid = [...(inv.insurance_payments || []), ...(inv.customer_payments || [])].reduce((s, p) => s + (p.amount || 0), 0)
+        // Only count RECEIVED insurance payments toward paid total
+        const insPays = (inv.insurance_payments || []).filter(p => p.ins_status === "received")
+        const paid = [...insPays, ...(inv.customer_payments || [])].reduce((s, p) => s + (p.amount || 0), 0)
         return total > 0 && paid < total
       })
     })
+
+    // Unpaid POs/GRNs (ordered, partial, received but not marked paid)
+    const unpaidPOs = grns.filter(g => !g.paid)
 
     // Job type counts
     const insCount = jobs.filter(j => j.jobInfo?.job_type === "insurance" && j.stage !== "closed").length
@@ -232,12 +1012,12 @@ function AppInner() {
 
     // If a right tab is selected, show that content
     if (rightTab === "store") {
-      return <div>
+      return <div className="screen-fade">
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
           <span onClick={() => setRightTab(null)} style={{ fontSize: 14, color: C.accent, cursor: "pointer", fontWeight: 600 }}>← Back</span>
           <span style={{ fontSize: 20, fontWeight: 700 }}>Store</span>
         </div>
-        <StoreScreen purchaseOrders={purchaseOrders} grns={grns} setPurchaseOrders={setPurchaseOrders} setGrns={setGrns} tt={tt} />
+        <StoreScreen purchaseOrders={purchaseOrders} grns={grns} setPurchaseOrders={setPurchaseOrders} setGrns={setGrns} cashBook={cashBook} setCashBook={setCashBook} tt={tt} initialTab={storeInitial.tab} initialScreen={storeInitial.screen} key={storeInitial.key} />
       </div>
     }
 
@@ -253,7 +1033,7 @@ function AppInner() {
             <span style={{ fontSize: 14, color: C.muted }}>{firstJob?.jobInfo.vehicle_make} {firstJob?.jobInfo.vehicle_model}</span>
           </div>
           <div style={{ fontSize: 13, color: C.sub, marginBottom: 16 }}>{firstJob?.jobInfo.customer_name} · {vehicleJobs.length} job{vehicleJobs.length !== 1 ? "s" : ""}</div>
-          {vehicleJobs.map(j => <ClosedJobDetail key={j.id} job={j} openJob={openJob} />)}
+          {vehicleJobs.map(j => <ClosedJobDetail key={j.id} job={j} openJob={openJob} startWarrantyJob={startWarrantyJob} />)}
         </div>
       }
 
@@ -299,16 +1079,28 @@ function AppInner() {
       </div>
     }
 
-    if (rightTab === "payments") {
+    if (rightTab === "receivable") {
+      const totalReceivable = pendingPaymentJobs.reduce((sum, j) => {
+        const inv = (j.invoices || [])[0]; if (!inv) return sum
+        const total = (inv.entries || []).reduce((s, e) => s + ((e.approved || e.amount || 0) * (e.qty || 1)), 0)
+        const paid = [...(inv.insurance_payments || []), ...(inv.customer_payments || [])].reduce((s, p) => s + (p.amount || 0), 0)
+        return sum + (total - paid)
+      }, 0)
       return <div>
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
           <span onClick={() => setRightTab(null)} style={{ fontSize: 14, color: C.accent, cursor: "pointer", fontWeight: 600 }}>← Back</span>
-          <span style={{ fontSize: 20, fontWeight: 700 }}>Pending Payments</span>
+          <span style={{ fontSize: 20, fontWeight: 700 }}>Receivable</span>
         </div>
+        {totalReceivable > 0 && (
+          <div style={{ ...card, background: C.orange + "08", display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 16px", marginBottom: 8 }}>
+            <span style={{ fontSize: 14, fontWeight: 600, color: C.sub }}>Total Outstanding</span>
+            <span style={{ fontFamily: MONO, fontSize: 20, fontWeight: 700, color: C.orange }}>Rs.{totalReceivable.toLocaleString()}</span>
+          </div>
+        )}
         {pendingPaymentJobs.length === 0 ? (
           <div style={{ textAlign: "center", padding: 40, color: C.muted }}>
-            <div style={{ fontSize: 40, marginBottom: 12 }}>💰</div>
-            <div style={{ fontSize: 16, fontWeight: 600 }}>All payments up to date</div>
+            <div style={{ fontSize: 40, marginBottom: 12 }}>✅</div>
+            <div style={{ fontSize: 16, fontWeight: 600 }}>All payments received</div>
           </div>
         ) : pendingPaymentJobs.map(j => {
           const inv = (j.invoices || [])[0]
@@ -328,7 +1120,7 @@ function AppInner() {
                 <div style={{ fontSize: 12, color: C.muted }}>{j.jobInfo.insurance_name || (j.jobInfo.job_type === "quick" ? "Quick" : "Direct")}</div>
               </div>
               <div style={{ textAlign: "right" }}>
-                <div style={{ fontFamily: MONO, fontSize: 18, fontWeight: 700, color: C.red }}>Rs.{balance.toLocaleString()}</div>
+                <div style={{ fontFamily: MONO, fontSize: 18, fontWeight: 700, color: C.orange }}>Rs.{balance.toLocaleString()}</div>
                 <div style={{ fontSize: 11, color: C.muted }}>of Rs.{total.toLocaleString()}</div>
               </div>
             </div>
@@ -337,17 +1129,81 @@ function AppInner() {
       </div>
     }
 
+    if (rightTab === "cashbook") {
+      return <CashBookScreen cashBook={cashBook} setCashBook={setCashBook} grns={grns} setGrns={setGrns} jobs={jobs} loadClosedJobs={loadClosedJobs} tt={tt} onBack={() => setRightTab(null)} />
+    }
+
+    if (rightTab === "payable") {
+      return <PayableScreen unpaidPOs={unpaidPOs} setPurchaseOrders={setPurchaseOrders} setGrns={setGrns} cashBook={cashBook} setCashBook={setCashBook} tt={tt} onBack={() => setRightTab(null)} />
+    }
+
+    // Today's quick stats for hub summary
+    const todayStr = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}` })()
+    const todayIncomeTotal = jobs.reduce((sum, j) => sum + (j.invoices || []).reduce((s2, inv) => s2 + (inv.payments || []).filter(p => p.date?.slice(0,10) === todayStr || (()=>{try{const d=new Date(p.date);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`===todayStr}catch{return false}})()).reduce((s3, p) => s3 + (p.amount || 0), 0), 0), 0)
+    const dueTodayCheques = grns.filter(g => g.paid && g.paymentMethod === "cheque" && g.chequeDate === todayStr && !g.chequeCleared).length
+    const activeCount = jobs.filter(j => !j.onHold && j.stage !== "closed" && j.stage !== "cancelled").length
+    const hour = new Date().getHours()
+    const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening"
+
     // Default: show hub cards
     return (
-      <div>
-        <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 20, color: C.text }}>Workshop Hub</div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-          {/* Store */}
-          <div onClick={() => setRightTab("store")} style={{ ...card, cursor: "pointer", padding: "20px 16px", textAlign: "center", border: `1px solid ${C.purple}20`, transition: "all 0.2s" }}>
-            <div style={{ fontSize: 36, marginBottom: 8 }}>🏪</div>
-            <div style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 4 }}>Store</div>
-            <div style={{ fontSize: 13, color: C.muted }}>PO & GRN</div>
-            <div style={{ fontFamily: MONO, fontSize: 14, fontWeight: 700, color: C.purple, marginTop: 8 }}>{purchaseOrders.length} PO · {grns.length} GRN</div>
+      <div className="screen-fade">
+        <div style={{ marginBottom: 18 }}>
+          <div style={{ fontSize: 14, color: C.muted, fontWeight: 500 }}>{greeting} 👋</div>
+          <div style={{ fontSize: 26, fontWeight: 700, color: C.text, letterSpacing: "-0.5px", marginTop: 2 }}>Workshop Hub</div>
+        </div>
+
+        {/* Quick action bar */}
+        <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+          <button onClick={() => setRightTab("cashbook")} style={{ flex: 1, padding: "12px 8px", borderRadius: 12, border: `1.5px solid ${C.red}30`, background: C.red + "08", color: C.red, fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: FONT, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+            ➕ Petty Cash
+          </button>
+          <button onClick={startNewJob} style={{ flex: 1, padding: "12px 8px", borderRadius: 12, border: "none", background: C.accent, color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: FONT, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+            ➕ New Job
+          </button>
+        </div>
+
+        {/* Today summary strip */}
+        <div data-today-strip style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
+          <div style={{ flex: 1, minWidth: 110, ...card, padding: "10px 12px", background: C.accent + "08", border: `1px solid ${C.accent}20` }}>
+            <div style={{ fontSize: 11, color: C.muted, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5 }}>Active</div>
+            <div style={{ fontSize: 22, fontWeight: 700, fontFamily: MONO, color: C.accent, marginTop: 2 }}>{activeCount}</div>
+          </div>
+          <div style={{ flex: 1, minWidth: 110, ...card, padding: "10px 12px", background: C.green + "08", border: `1px solid ${C.green}20` }}>
+            <div style={{ fontSize: 11, color: C.muted, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5 }}>Today In</div>
+            <div style={{ fontSize: 18, fontWeight: 700, fontFamily: MONO, color: C.green, marginTop: 2 }}>Rs.{todayIncomeTotal.toLocaleString()}</div>
+          </div>
+          <div onClick={() => setRightTab("cashbook")} style={{ flex: 1, minWidth: 110, ...card, padding: "10px 12px", background: C.orange + "08", border: `1px solid ${C.orange}20`, cursor: "pointer" }}>
+            <div style={{ fontSize: 11, color: C.muted, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5 }}>Petty Cash</div>
+            <div style={{ fontSize: 18, fontWeight: 700, fontFamily: MONO, color: C.orange, marginTop: 2 }}>➕ Add</div>
+          </div>
+          {dueTodayCheques > 0 && (
+            <div onClick={() => setRightTab("cashbook")} style={{ flex: 1, minWidth: 110, ...card, padding: "10px 12px", background: C.red + "08", border: `1px solid ${C.red}30`, cursor: "pointer" }}>
+              <div style={{ fontSize: 11, color: C.muted, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5 }}>Cheques Due</div>
+              <div style={{ fontSize: 18, fontWeight: 700, fontFamily: MONO, color: C.red, marginTop: 2 }} className="pulse">⚠️ {dueTodayCheques}</div>
+            </div>
+          )}
+        </div>
+
+        <div data-hub-grid style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          {/* Store — 2x2 grid */}
+          <div style={{ ...card, padding: "14px 12px", border: `1px solid ${C.purple}20` }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: C.muted, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 10 }}>Store</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+              {[
+                { tab: "pos", screen: "list", icon: "📋", label: "POs", color: C.accent, count: purchaseOrders.filter(p => p.status !== "received").length },
+                { tab: "grns", screen: "list", icon: "📥", label: "GRNs", color: C.green, count: grns.length },
+                { tab: "grns", screen: "direct_grn", icon: "🛒", label: "Direct Purchase", color: C.orange },
+                { tab: "suppliers", screen: "list", icon: "📇", label: "Suppliers", color: C.purple, count: [...new Set([...purchaseOrders.map(p=>p.supplier),...grns.map(g=>g.supplier)].filter(Boolean))].length },
+              ].map(s => (
+                <div key={s.label} onClick={() => { setStoreInitial(prev => ({ tab: s.tab, screen: s.screen, key: prev.key + 1 })); setRightTab("store") }}
+                  style={{ textAlign: "center", padding: "10px 4px", borderRadius: 10, cursor: "pointer", background: s.color + "08", border: `1px solid ${s.color}15`, transition: "all 0.2s" }}>
+                  <div style={{ fontSize: 22, marginBottom: 4 }}>{s.icon}</div>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: C.text }}>{s.label}</div>
+                  {s.count != null && <div style={{ fontFamily: MONO, fontSize: 11, fontWeight: 700, color: s.color, marginTop: 2 }}>{s.count}</div>}
+                </div>
+              ))}
+            </div>
           </div>
 
           {/* New Job Buttons */}
@@ -367,22 +1223,49 @@ function AppInner() {
           </div>
 
           {/* Customer Registry */}
-          <div onClick={() => setRightTab("registry")} style={{ ...card, cursor: "pointer", padding: "20px 16px", textAlign: "center", border: `1px solid ${C.green}20`, transition: "all 0.2s" }}>
+          <div data-card-hover onClick={() => setRightTab("registry")} style={{ ...card, cursor: "pointer", padding: "20px 16px", textAlign: "center", border: `1px solid ${C.green}20` }}>
             <div style={{ fontSize: 36, marginBottom: 8 }}>👥</div>
             <div style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 4 }}>Customers</div>
             <div style={{ fontSize: 13, color: C.muted }}>Registry</div>
             <div style={{ fontFamily: MONO, fontSize: 14, fontWeight: 700, color: C.green, marginTop: 8 }}>{regEntries.length} vehicles</div>
           </div>
 
-          {/* Pending Payments */}
-          <div onClick={() => setRightTab("payments")} style={{ ...card, cursor: "pointer", padding: "20px 16px", textAlign: "center", border: `1px solid ${pendingPaymentJobs.length > 0 ? C.red : C.border}20`, transition: "all 0.2s" }}>
-            <div style={{ fontSize: 36, marginBottom: 8 }}>💳</div>
-            <div style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 4 }}>Payments</div>
-            <div style={{ fontSize: 13, color: C.muted }}>Pending</div>
-            <div style={{ fontFamily: MONO, fontSize: 14, fontWeight: 700, color: pendingPaymentJobs.length > 0 ? C.red : C.green, marginTop: 8 }}>
+          {/* Receivable — pending insurance / credit payments */}
+          <div data-card-hover onClick={() => setRightTab("receivable")} style={{ ...card, cursor: "pointer", padding: "20px 16px", textAlign: "center", border: `1px solid ${pendingPaymentJobs.length > 0 ? C.orange : C.border}20` }}>
+            <div style={{ fontSize: 36, marginBottom: 8 }}>💰</div>
+            <div style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 4 }}>Receivable</div>
+            <div style={{ fontSize: 13, color: C.muted }}>Credit & Insurance</div>
+            <div style={{ fontFamily: MONO, fontSize: 14, fontWeight: 700, color: pendingPaymentJobs.length > 0 ? C.orange : C.green, marginTop: 8 }}>
               {pendingPaymentJobs.length > 0 ? `${pendingPaymentJobs.length} pending` : "All clear"}
             </div>
           </div>
+
+          {/* Payable — unpaid purchases */}
+          <div data-card-hover onClick={() => setRightTab("payable")} style={{ ...card, cursor: "pointer", padding: "20px 16px", textAlign: "center", border: `1px solid ${unpaidPOs.length > 0 ? C.red : C.border}20` }}>
+            <div style={{ fontSize: 36, marginBottom: 8 }}>🧾</div>
+            <div style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 4 }}>Payable</div>
+            <div style={{ fontSize: 13, color: C.muted }}>Unpaid Purchases</div>
+            <div style={{ fontFamily: MONO, fontSize: 14, fontWeight: 700, color: unpaidPOs.length > 0 ? C.red : C.green, marginTop: 8 }}>
+              {unpaidPOs.length > 0 ? `${unpaidPOs.length} unpaid` : "All clear"}
+            </div>
+          </div>
+
+          {/* Cash Book */}
+          <div data-card-hover onClick={() => setRightTab("cashbook")} style={{ ...card, cursor: "pointer", padding: "20px 16px", textAlign: "center", border: `1px solid ${C.accent}20` }}>
+            <div style={{ fontSize: 36, marginBottom: 8 }}>💵</div>
+            <div style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 4 }}>Cash Book</div>
+            <div style={{ fontSize: 13, color: C.muted }}>Petty Cash · Expenses · Bank</div>
+            <div style={{ fontFamily: MONO, fontSize: 13, fontWeight: 700, color: C.accent, marginTop: 8 }}>
+              Cash Rs.{(cashBook.openingCash || 0).toLocaleString()}
+            </div>
+          </div>
+        </div>
+
+        {/* Keyboard shortcuts hint (desktop only) */}
+        <div className="desktop-only" style={{ textAlign: "center", marginTop: 24, fontSize: 11, color: C.muted, display: "flex", gap: 14, justifyContent: "center", flexWrap: "wrap" }}>
+          <span><kbd style={{ padding: "2px 6px", background: "#fff", border: `1px solid ${C.border}`, borderRadius: 4, fontFamily: MONO, fontSize: 10 }}>N</kbd> New job</span>
+          <span><kbd style={{ padding: "2px 6px", background: "#fff", border: `1px solid ${C.border}`, borderRadius: 4, fontFamily: MONO, fontSize: 10 }}>/</kbd> Search</span>
+          <span><kbd style={{ padding: "2px 6px", background: "#fff", border: `1px solid ${C.border}`, borderRadius: 4, fontFamily: MONO, fontSize: 10 }}>Esc</kbd> Back</span>
         </div>
       </div>
     )
@@ -398,10 +1281,10 @@ function AppInner() {
               {/* Collapsed: mini thumbnails + reg */}
               <div style={{ textAlign: "center", padding: "10px 0 8px", marginBottom: 4 }}>
                 <div style={{ fontSize: 11, fontWeight: 700, color: C.accent, letterSpacing: 1 }}>JOBS</div>
-                <div style={{ fontSize: 11, color: C.muted }}>{jobs.filter(j => !j.onHold && j.stage !== "closed").length}</div>
+                <div style={{ fontSize: 11, color: C.muted }}>{jobs.filter(j => !j.onHold && j.stage !== "closed" && j.stage !== "cancelled").length}</div>
               </div>
               {(() => {
-                let filtered = homeTab === "on_hold" ? jobs.filter(j => j.onHold) : homeTab === "closed" ? jobs.filter(j => j.stage === "closed") : jobs.filter(j => !j.onHold && j.stage !== "closed")
+                let filtered = homeTab === "on_hold" ? jobs.filter(j => j.onHold) : homeTab === "closed" ? jobs.filter(j => j.stage === "closed") : jobs.filter(j => !j.onHold && j.stage !== "closed" && j.stage !== "cancelled")
                 return filtered.map(j => {
                   const stage = ALL_STAGES[j.stage] || ALL_STAGES.job_received
                   const thumb = (j.jobDocs || [])[0]?.dataUrl
@@ -448,10 +1331,10 @@ function AppInner() {
       })()}
 
       {/* Main content */}
-      <div style={{ flex: isTablet ? 1 : undefined, maxWidth: isTablet ? undefined : 480, margin: isTablet ? undefined : "0 auto", padding: isTablet ? "16px 28px" : "16px 20px", paddingBottom: 100, minHeight: "100vh", overflowY: isTablet ? "auto" : undefined, maxHeight: isTablet ? "100vh" : undefined }}>
+      <div style={{ flex: isTablet ? 1 : undefined, maxWidth: isTablet ? undefined : 480, margin: isTablet ? undefined : "0 auto", padding: isTablet ? "16px 28px" : "14px 16px", paddingTop: isTablet ? 16 : "max(14px, env(safe-area-inset-top))", paddingBottom: !isTablet && screen === "home" ? "max(90px, calc(90px + env(safe-area-inset-bottom)))" : "max(100px, calc(100px + env(safe-area-inset-bottom)))", minHeight: "100vh", overflowY: isTablet ? "auto" : undefined, maxHeight: isTablet ? "100vh" : undefined }}>
 
         {/* Toast */}
-        {toast && <div style={{ position: "fixed", top: 20, left: "50%", transform: "translateX(-50%)", background: C.text, color: "#fff", padding: "14px 28px", borderRadius: 16, fontWeight: 600, fontSize: 17, zIndex: 999, boxShadow: "0 8px 40px rgba(0,0,0,0.25)" }}>{toast}</div>}
+        {toast && <div key={toast} className="toast-appear" style={{ position: "fixed", top: "max(20px, calc(20px + env(safe-area-inset-top)))", left: "50%", transform: "translateX(-50%)", background: /⚠️|❌|❗|error|failed/i.test(toast) ? C.red : /✓|✅|success|saved|added|recorded|done|nice|🎉|👏/i.test(toast) ? C.green : C.text, color: "#fff", padding: "14px 22px", borderRadius: 14, fontWeight: 600, fontSize: 16, zIndex: 999, boxShadow: "0 8px 40px rgba(0,0,0,0.25)", maxWidth: "min(92vw, 500px)", textAlign: "center" }}>{toast}</div>}
 
         {/* Hidden file inputs */}
         <input ref={uploadRef} type="file" accept="image/*" style={{ display: "none" }} id="galleryInput" onChange={async e => { const f = e.target.files[0]; if (f) { const label = showUploadMenu === "approval" && selEst ? (selEst.type === "supplementary" ? selEst.label : "Estimate") : photoTag; const docId = "d" + Date.now(); tt("⏳ Uploading…"); try { const url = await uploadPhoto(f, `${activeJobId}/${docId}.jpg`); setJobDocs(p => [...p, { id: docId, dataUrl: url, estId: selEst?.id || null, label }]); tt(`📸 ${label} photo saved`); setShowUploadMenu(null); setPhotoTag("General") } catch { tt("❌ Upload failed") } } e.target.value = "" }} />
@@ -764,7 +1647,24 @@ function AppInner() {
         {showUserMgmt && <div style={{ position: "fixed", inset: 0, background: C.bg, zIndex: 2000, overflowY: "auto" }}><UserManagement onBack={() => setShowUserMgmt(false)} /></div>}
 
         {/* Screen router */}
-        {screen === "home" && (isTablet ? (homeTab === "closed" && selectedClosedJob ? <ClosedJobDetail job={selectedClosedJob} openJob={openJob} /> : rightPanelHub()) : jobListPanel())}
+        {screen === "home" && (isTablet
+          ? (homeTab === "closed" && selectedClosedJob ? <ClosedJobDetail job={selectedClosedJob} openJob={openJob} startWarrantyJob={startWarrantyJob} /> : rightPanelHub())
+          : (mobileView === "hub" ? rightPanelHub() : jobListPanel())
+        )}
+
+        {/* Mobile bottom tab bar */}
+        {!isTablet && screen === "home" && !rightTab && (
+          <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: C.card, borderTop: `1px solid ${C.border}`, display: "flex", padding: "8px 8px max(8px, env(safe-area-inset-bottom))", zIndex: 100, boxShadow: "0 -2px 12px rgba(0,0,0,0.05)" }}>
+            <div onClick={() => setMobileView("jobs")} style={{ flex: 1, textAlign: "center", padding: "10px 0", borderRadius: 10, cursor: "pointer", color: mobileView === "jobs" ? C.accent : C.muted, fontWeight: 600 }}>
+              <div style={{ fontSize: 22 }}>🔧</div>
+              <div style={{ fontSize: 11, marginTop: 2 }}>Jobs</div>
+            </div>
+            <div onClick={() => setMobileView("hub")} style={{ flex: 1, textAlign: "center", padding: "10px 0", borderRadius: 10, cursor: "pointer", color: mobileView === "hub" ? C.accent : C.muted, fontWeight: 600 }}>
+              <div style={{ fontSize: 22 }}>🏢</div>
+              <div style={{ fontSize: 11, marginTop: 2 }}>Hub</div>
+            </div>
+          </div>
+        )}
         {screen === "new_job" && <NewJobScreen />}
         {screen === "job" && <JobScreen />}
         {screen === "est_parts" && <EstimateParts />}

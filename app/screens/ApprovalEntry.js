@@ -30,7 +30,7 @@ export default function ApprovalEntry() {
         </div> : null })}
       </div>
       {approvalItems.filter(i => i.category === aCat.key).some(i => i.approved_rate === null && i.approval_status !== "use_same") && <button onClick={approveAllCatAsIs} style={{ ...btn(C.green + "12", C.green), marginBottom: 12 }}>✓ Approve all {aCat.label} as-is</button>}
-      {approvalItems.filter(i => i.category === aCat.key).map(item => { const isUS = item.approval_status === "use_same"; const done = item.approved_rate !== null || isUS; const wasCut = done && !isUS && item.approved_rate < item.original_rate;
+      {approvalItems.filter(i => i.category === aCat.key).map(item => { const isUS = item.approval_status === "use_same"; const done = item.approved_rate !== null || isUS; const wasCut = done && !isUS && item.approved_rate < item.original_rate; const wasUpgraded = done && !isUS && item.approved_rate > item.original_rate;
         return <div key={item.id} style={{ ...card, padding: "14px 16px", marginBottom: 6, borderLeft: `4px solid ${isUS ? C.accent : done ? (wasCut ? C.red : C.green) : "transparent"}` }}>
           <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 10 }}>
             <span style={{ fontSize: 18, fontWeight: 500 }}>{item.part_name}</span>
@@ -47,6 +47,7 @@ export default function ApprovalEntry() {
             </div>
             {item.category === "replace" && <button onClick={() => markUseSame(item.id)} style={{ marginTop: 8, padding: "8px 14px", borderRadius: 10, border: `1px solid ${C.accent}30`, background: C.accent + "06", color: C.accent, fontWeight: 600, fontSize: 14, cursor: "pointer", width: "100%" }}>U/S -- Use Same Part</button>}
             {wasCut && <div style={{ fontSize: 15, color: C.red, marginTop: 6, fontWeight: 500 }}>Cut Rs.{(item.original_rate - item.approved_rate).toLocaleString()} ({Math.round(((item.original_rate - item.approved_rate) / item.original_rate) * 100)}%)</div>}
+            {wasUpgraded && <div style={{ fontSize: 15, color: C.orange, marginTop: 6, fontWeight: 600 }}>⚠️ Upgraded: +Rs.{(item.approved_rate - item.original_rate).toLocaleString()} (insurance approved more than quoted)</div>}
           </>}
         </div>
       })}

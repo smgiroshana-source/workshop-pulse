@@ -21,11 +21,72 @@ function getBaseUrl() {
   return process.env.NEXT_PUBLIC_SUPABASE_URL + "/storage/v1/object/public/" + BUCKET + "/"
 }
 
+// Compress image to target size (80-120kb) using canvas
+async function compressImage(file, targetKB = 100) {
+  // Skip non-image files
+  if (!file.type?.startsWith("image/")) return file
+  // Skip if already small enough
+  if (file.size <= targetKB * 1024) return file
+
+  return new Promise((resolve) => {
+    const img = new Image()
+    const url = URL.createObjectURL(file)
+    img.onload = () => {
+      URL.revokeObjectURL(url)
+      const canvas = document.createElement("canvas")
+      let { width, height } = img
+
+      // Scale down large images (max 1200px on longest side)
+      const MAX = 1200
+      if (width > MAX || height > MAX) {
+        const ratio = Math.min(MAX / width, MAX / height)
+        width = Math.round(width * ratio)
+        height = Math.round(height * ratio)
+      }
+
+      canvas.width = width
+      canvas.height = height
+      const ctx = canvas.getContext("2d")
+      ctx.drawImage(img, 0, 0, width, height)
+
+      // Binary search for quality that gives ~80-120kb
+      let lo = 0.1, hi = 0.9, bestBlob = null
+      const tryQuality = (q) => {
+        canvas.toBlob((blob) => {
+          if (!blob) { resolve(file); return }
+          const sizeKB = blob.size / 1024
+          if (sizeKB >= 70 && sizeKB <= 130) {
+            resolve(blob)
+          } else if (hi - lo < 0.05 || !bestBlob) {
+            // Close enough or first attempt
+            bestBlob = blob
+            if (sizeKB > 130) {
+              hi = q
+              tryQuality((lo + hi) / 2)
+            } else if (sizeKB < 70) {
+              lo = q
+              tryQuality((lo + hi) / 2)
+            } else {
+              resolve(blob)
+            }
+          } else {
+            resolve(bestBlob)
+          }
+        }, "image/jpeg", q)
+      }
+      tryQuality(0.5)
+    }
+    img.onerror = () => { URL.revokeObjectURL(url); resolve(file) }
+    img.src = url
+  })
+}
+
 // Upload a File or Blob to storage, return public URL
 export async function uploadPhoto(file, path) {
-  const { error } = await supabase.storage.from(BUCKET).upload(path, file, {
+  const compressed = await compressImage(file)
+  const { error } = await supabase.storage.from(BUCKET).upload(path, compressed, {
     upsert: true,
-    contentType: file.type || "image/jpeg",
+    contentType: "image/jpeg",
   })
   if (error) throw error
   return getBaseUrl() + path
@@ -36,6 +97,16 @@ export async function uploadBase64Photo(dataUrl, path) {
   const res = await fetch(dataUrl)
   const blob = await res.blob()
   return uploadPhoto(blob, path)
+}
+
+// Compress and return data URL for local preview
+export async function compressForPreview(file) {
+  const compressed = await compressImage(file)
+  return new Promise((resolve) => {
+    const reader = new FileReader()
+    reader.onload = (e) => resolve(e.target.result)
+    reader.readAsDataURL(compressed)
+  })
 }
 
 // Delete a photo by its public URL (no-op if it's not a storage URL)

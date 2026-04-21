@@ -18,11 +18,11 @@ export const fmt = n => Number(n || 0).toLocaleString("en-LK", { minimumFraction
 
 export const card = { background: C.card, borderRadius: 16, padding: SP.lg, marginBottom: SP.md, boxShadow: "0 0.5px 1px rgba(0,0,0,0.05)" }
 export const pill = (color) => ({ fontSize: 13, fontWeight: 600, color, background: color + "15", padding: "5px 12px", borderRadius: 20 })
-export const btn = (bg, color) => ({ border: "none", borderRadius: 12, padding: "16px 24px", fontSize: 17, fontWeight: 600, cursor: "pointer", color: color || "#fff", background: bg || C.accent, fontFamily: FONT, width: "100%", textAlign: "center", letterSpacing: "-0.3px", minHeight: 52, transition: "opacity 0.15s" })
+export const btn = (bg, color) => ({ border: "none", borderRadius: 12, padding: "16px 24px", fontSize: 17, fontWeight: 600, cursor: "pointer", color: color || "#fff", background: bg || C.accent, fontFamily: FONT, width: "100%", textAlign: "center", letterSpacing: "-0.3px", minHeight: 52, transition: "all 0.15s ease", boxShadow: "0 1px 2px rgba(0,0,0,0.04)" })
 export const btnSm = (bg, color) => ({ ...btn(bg, color), padding: "12px 18px", fontSize: 15, borderRadius: 10, minHeight: 44 })
-export const btnOutline = (color) => ({ border: `1.5px solid ${color || C.accent}`, borderRadius: 12, padding: "14px 20px", fontSize: 15, fontWeight: 600, cursor: "pointer", color: color || C.accent, background: "transparent", fontFamily: FONT, width: "100%", textAlign: "center", minHeight: 48, transition: "background 0.15s" })
+export const btnOutline = (color) => ({ border: `1.5px solid ${color || C.accent}`, borderRadius: 12, padding: "14px 20px", fontSize: 15, fontWeight: 600, cursor: "pointer", color: color || C.accent, background: "transparent", fontFamily: FONT, width: "100%", textAlign: "center", minHeight: 48, transition: "all 0.15s ease" })
 export const btnText = (color) => ({ border: "none", borderRadius: 8, padding: "10px 16px", fontSize: 15, fontWeight: 600, cursor: "pointer", color: color || C.accent, background: "transparent", fontFamily: FONT, textAlign: "center", minHeight: 44 })
-export const inp = { width: "100%", boxSizing: "border-box", padding: "14px 16px", background: C.bg, border: "2px solid transparent", borderRadius: 12, color: C.text, fontSize: 17, fontFamily: FONT, outline: "none", letterSpacing: "-0.2px", transition: "border-color 0.2s, box-shadow 0.2s" }
+export const inp = { width: "100%", boxSizing: "border-box", padding: "14px 16px", background: "#fff", border: `1.5px solid ${C.border}`, borderRadius: 12, color: C.text, fontSize: 17, fontFamily: FONT, outline: "none", letterSpacing: "-0.2px", transition: "border-color 0.15s, box-shadow 0.15s" }
 
 export const CATS_PAINT = [
   { key: "remove_refix", label: "Remove-Refix", short: "R/R", icon: "🔩", color: C.accent },
@@ -64,6 +64,7 @@ export const ALL_STAGES = {
   delivered:        {label:"Delivered",        icon:"📦",color:C.sub,      auto:false},
   follow_up:        {label:"Follow Up",        icon:"📞",color:C.orange,   auto:false},
   closed:           {label:"Closed",           icon:"🏁",color:C.sub,      auto:false},
+  cancelled:        {label:"Cancelled",        icon:"✕", color:C.red,      auto:false},
 }
 
 // ═══ Components OUTSIDE App (prevents remount) ═══
@@ -71,7 +72,7 @@ export const NavBar = ({title,subtitle,onBack,right}) => (
   <div style={{marginBottom:20,paddingTop:8}}>
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
       <div style={{flex:1}}>
-        {onBack&&<div onClick={onBack} style={{fontSize:17,color:C.accent,cursor:"pointer",fontWeight:400,marginBottom:4,display:"inline-flex",alignItems:"center",gap:4}}>
+        {onBack&&<div onClick={onBack} style={{fontSize:17,color:C.accent,cursor:"pointer",fontWeight:500,marginBottom:4,display:"inline-flex",alignItems:"center",gap:4,padding:"8px 12px 8px 0",minHeight:44,marginLeft:-8,paddingLeft:8,borderRadius:10}}>
           <span style={{fontSize:22}}>‹</span> Back
         </div>}
         <div style={{fontSize:34,fontWeight:700,color:C.text,letterSpacing:"-0.7px",lineHeight:1.1}}>{title}</div>
@@ -84,7 +85,7 @@ export const NavBar = ({title,subtitle,onBack,right}) => (
 
 export const Sheet = ({children, onClose}) => (
   <div style={{position:"fixed",inset:0,background:C.sheetBg,zIndex:1000,display:"flex",alignItems:"flex-end",justifyContent:"center"}} onClick={onClose}>
-    <div onClick={e=>e.stopPropagation()} style={{background:C.card,borderRadius:"24px 24px 0 0",width:"100%",maxWidth:600,padding:"8px 24px 36px"}}>
+    <div onClick={e=>e.stopPropagation()} style={{background:C.card,borderRadius:"24px 24px 0 0",width:"100%",maxWidth:600,padding:"8px 24px max(36px, calc(36px + env(safe-area-inset-bottom)))",maxHeight:"92vh",overflowY:"auto"}}>
       <div style={{width:40,height:5,background:C.muted,borderRadius:3,margin:"8px auto 20px"}} />
       {children}
     </div>
@@ -114,6 +115,9 @@ export function buildPipeline(isInsurance, estimates, workType, jobType) {
 export const normalizeReg = (raw) => {
   if (!raw) return "";
   const s = raw.toUpperCase().replace(/-/g, " ").replace(/\s+/g, " ").trim();
+  // Temp/dealer plate: LLL-NNNN/X or LLL-NNNN/XXX (e.g., "CAA 1234 / H")
+  const tempMatch = s.match(/^([A-Z]{2,3})\s*(\d{4})\s*\/\s*([A-Z]{1,3})$/);
+  if (tempMatch) return `${tempMatch[1]} ${tempMatch[2]}/${tempMatch[3]}`;
   const m = s.match(/^([A-Z]{2}\s)?([A-Z]{2,3})\s*(\d{4})$/);
   if (m) return (m[1] || "") + m[2] + " " + m[3];
   return s;
@@ -121,7 +125,12 @@ export const normalizeReg = (raw) => {
 export const regSearchKey = (raw) => normalizeReg(raw).replace(/\s/g, "").toLowerCase();
 export const normalizePhone = (raw) => {
   if (!raw) return { valid: false, normalized: "", error: "Phone required" };
-  const d = raw.replace(/[\s\-()]/g, "");
+  // Strip spaces, dashes, parens, dots
+  let d = raw.replace(/[\s\-().]/g, "");
+  // Handle international prefix: +94..., 0094..., 94...
+  if (d.startsWith("+94")) d = d.slice(3);
+  else if (d.startsWith("0094")) d = d.slice(4);
+  else if (d.length === 11 && d.startsWith("94")) d = d.slice(2);
   if (!/^\d+$/.test(d)) return { valid: false, normalized: d, error: "Numbers only" };
   if (d.length === 10 && d[0] === "0") return { valid: true, normalized: d.slice(1), error: "" };
   if (d.length === 9 && d[0] !== "0") return { valid: true, normalized: d, error: "" };
@@ -213,17 +222,53 @@ export function WorkshopProvider({ children }) {
   const [homeTab, setHomeTab] = useState("active") // active | on_hold | closed | store
 
   // ═══ STORE / PROCUREMENT ═══
+  const DEMO_POS = [
+    { id: "po_demo1", poNumber: "PO-001", status: "ordered", supplier: "Nippon Paint Lanka", supplierPhone: "0112345678", supplierWhatsapp: "0771234567", supplierEmail: "orders@nipponpaint.lk", supplierAddress: "Colombo 10", items: [
+      { id: "pi_d1", name: "2K Clear Coat", qty: 5, unit: "litre", unitPrice: 4500, received: 0 },
+      { id: "pi_d2", name: "Primer Surfacer (Grey)", qty: 10, unit: "litre", unitPrice: 2800, received: 0 },
+      { id: "pi_d3", name: "Hardener", qty: 3, unit: "litre", unitPrice: 3200, received: 0 },
+    ], notes: "Delivery expected by end of week", totalAmount: 60100, created_at: "2026-03-15T08:00:00Z" },
+    { id: "po_demo2", poNumber: "PO-002", status: "received", supplier: "Lanka Auto Parts", supplierPhone: "0112987654", supplierWhatsapp: "0779876543", supplierEmail: "sales@lankaautoparts.lk", supplierAddress: "Nugegoda", items: [
+      { id: "pi_d4", name: "Sandpaper P800", qty: 50, unit: "sheet", unitPrice: 120, received: 50 },
+      { id: "pi_d5", name: "Sandpaper P1200", qty: 30, unit: "sheet", unitPrice: 150, received: 30 },
+      { id: "pi_d6", name: "Masking Tape 1\"", qty: 20, unit: "roll", unitPrice: 350, received: 20 },
+    ], notes: "", totalAmount: 17500, created_at: "2026-03-10T09:30:00Z" },
+    { id: "po_demo3", poNumber: "PO-003", status: "draft", supplier: "Akzo Nobel Lanka", supplierPhone: "0114567890", supplierWhatsapp: "0764567890", supplierEmail: "info@akzonobel.lk", supplierAddress: "Peliyagoda", items: [
+      { id: "pi_d7", name: "Base Coat - Pearl White (NH788P)", qty: 2, unit: "litre", unitPrice: 12000, received: 0 },
+      { id: "pi_d8", name: "Base Coat - Midnight Blue (B607P)", qty: 1, unit: "litre", unitPrice: 14500, received: 0 },
+      { id: "pi_d9", name: "Thinner (Slow)", qty: 5, unit: "litre", unitPrice: 1800, received: 0 },
+    ], notes: "Check colour code before ordering", totalAmount: 47500, created_at: "2026-03-19T14:00:00Z" },
+  ]
+  const DEMO_GRNS = [
+    { id: "grn_demo1", grnNumber: "GRN-001", poId: "po_demo2", supplier: "Lanka Auto Parts", items: [
+      { id: "gi_d1", name: "Sandpaper P800", qty: 50, unit: "sheet", unitPrice: 120, poItemId: "pi_d4" },
+      { id: "gi_d2", name: "Sandpaper P1200", qty: 30, unit: "sheet", unitPrice: 150, poItemId: "pi_d5" },
+      { id: "gi_d3", name: "Masking Tape 1\"", qty: 20, unit: "roll", unitPrice: 350, poItemId: "pi_d6" },
+    ], receivedBy: "Kamal", invoiceRef: "INV-LA-4521", invoicePhoto: null, notes: "All items in good condition", totalAmount: 17500, receivedDate: "2026-03-12T11:00:00Z", created_at: "2026-03-12T11:00:00Z" },
+    { id: "grn_demo2", grnNumber: "GRN-002", poId: null, supplier: "Perera Paint Supplies", items: [
+      { id: "gi_d4", name: "Polishing Compound", qty: 2, unit: "kg", unitPrice: 3500, poItemId: null },
+      { id: "gi_d5", name: "Microfiber Cloth", qty: 10, unit: "pcs", unitPrice: 250, poItemId: null },
+      { id: "gi_d6", name: "Spray Gun Cleaner", qty: 3, unit: "litre", unitPrice: 1200, poItemId: null },
+    ], receivedBy: "Nuwan", invoiceRef: "PPS-887", invoicePhoto: null, notes: "Direct purchase - urgent need", totalAmount: 13100, receivedDate: "2026-03-18T15:30:00Z", created_at: "2026-03-18T15:30:00Z" },
+  ]
   const [purchaseOrders, setPurchaseOrders] = useState([])
   const [grns, setGrns] = useState([])
+  // CashBook: { miscExpenses: [{id, date, description, amount, category}], dailyCounts: [{date, actualCash, note}], bankBalance: number, openingCash: number }
+  const [cashBook, setCashBook] = useState({ miscExpenses: [], dailyCounts: [], bankBalance: 0, openingCash: 0 })
   const storeSyncRef = useRef(false)
   // Load from Supabase
   useEffect(() => {
     supabase.from("store_data").select("*").eq("id", "main").single()
       .then(({ data }) => {
-        if (data?.data) {
+        if (data?.data && (data.data.purchaseOrders?.length > 0 || data.data.grns?.length > 0)) {
           setPurchaseOrders(data.data.purchaseOrders || [])
           setGrns(data.data.grns || [])
+        } else {
+          // Load demo data if empty
+          setPurchaseOrders(DEMO_POS)
+          setGrns(DEMO_GRNS)
         }
+        if (data?.data?.cashBook) setCashBook(data.data.cashBook)
         storeSyncRef.current = true
       })
   }, [])
@@ -236,12 +281,12 @@ export function WorkshopProvider({ children }) {
     if (storeTimerRef.current) clearTimeout(storeTimerRef.current)
     storeTimerRef.current = setTimeout(() => {
       if (!storeDirtyRef.current) return
-      supabase.from("store_data").upsert({ id: "main", data: { purchaseOrders, grns }, updated_at: new Date().toISOString() })
+      supabase.from("store_data").upsert({ id: "main", data: { purchaseOrders, grns, cashBook }, updated_at: new Date().toISOString() })
         .then(({ error }) => { if (error) console.error("Store sync error:", error) })
       storeDirtyRef.current = false
     }, 1000)
     return () => { if (storeTimerRef.current) clearTimeout(storeTimerRef.current) }
-  }, [purchaseOrders, grns])
+  }, [purchaseOrders, grns, cashBook])
   // Parts Quotation (insurance) / PO (direct)
   const [partsQuotation, setPartsQuotation] = useState([]) // [{id, partName, estLabel, supplier, quotedPrice, approvedPrice, remarks}]
   const [pqStatus, setPqStatus] = useState("draft") // draft | submitted | approved
@@ -309,9 +354,9 @@ export function WorkshopProvider({ children }) {
 
   useEffect(() => { loadJobs() }, [loadJobs])
 
-  // Lazy-load closed jobs the first time the Closed tab is opened
-  useEffect(() => {
-    if (homeTab !== "closed" || closedLoaded || !initializedRef.current) return
+  // Explicit trigger to load closed jobs (for Closed tab AND Cash Book)
+  const loadClosedJobs = useCallback(() => {
+    if (closedLoaded || !initializedRef.current) return
     supabase.from("jobs").select("*")
       .eq("stage", "closed")
       .order("created_at", { ascending: false })
@@ -328,7 +373,12 @@ export function WorkshopProvider({ children }) {
         })
         setClosedLoaded(true)
       })
-  }, [homeTab, closedLoaded])
+  }, [closedLoaded])
+
+  // Auto-load closed jobs when Closed tab is opened
+  useEffect(() => {
+    if (homeTab === "closed") loadClosedJobs()
+  }, [homeTab, loadClosedJobs])
 
   // Build upsert row from a job object
   const buildRow = (job) => ({
@@ -521,7 +571,7 @@ export function WorkshopProvider({ children }) {
 
   // ═══ PDF GENERATION ═══
   const SHOP = { name: "MacForce Auto Engineering", addr: "No.555, Pannipitiya Road, Thalawathugoda", phone: "+94 772 291 219" }
-  const APP_VERSION = "2.1.0"
+  const APP_VERSION = "2.2.0"
   const pdfStyles = `@page{size:A4;margin:15mm}*{margin:0;padding:0;box-sizing:border-box;font-family:-apple-system,Arial,sans-serif}body{padding:20px;color:#1a1a1a;font-size:13px}.header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;padding-bottom:15px;border-bottom:3px solid #007AFF}.shop-name{font-size:22px;font-weight:700;color:#007AFF}.shop-detail{font-size:12px;color:#666;margin-top:3px}.doc-title{font-size:28px;font-weight:700;text-align:right;color:#1a1a1a}.doc-sub{font-size:13px;color:#666;text-align:right;margin-top:2px}.info-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:18px;background:#f8f8f8;padding:14px;border-radius:8px}.info-label{font-size:11px;color:#888;text-transform:uppercase;letter-spacing:0.5px}.info-value{font-size:15px;font-weight:600;margin-top:2px}table{width:100%;border-collapse:collapse;margin-bottom:18px}th{background:#f0f0f0;padding:10px 12px;text-align:left;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:#555;border-bottom:2px solid #ddd}td{padding:10px 12px;border-bottom:1px solid #eee;font-size:13px}.text-right{text-align:right}.text-center{text-align:center}.mono{font-family:'SF Mono','Courier New',monospace}.bold{font-weight:700}.cut{text-decoration:line-through;color:#999}.tag{display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600}.tag-sh{background:#fff3e0;color:#e65100}.tag-mr{background:#e8f5e9;color:#2e7d32}.tag-us{background:#e3f2fd;color:#1565c0}.total-row td{font-weight:700;font-size:15px;border-top:2px solid #333;background:#fafafa}.summary-box{background:#f8f8f8;padding:16px;border-radius:8px;margin-bottom:18px}.footer{margin-top:30px;padding-top:15px;border-top:1px solid #ddd;font-size:11px;color:#888;display:flex;justify-content:space-between}.stamp{margin-top:40px;display:flex;justify-content:space-between}.stamp-box{text-align:center;width:200px}.stamp-line{border-top:1px solid #333;margin-top:50px;padding-top:5px;font-size:12px}@media print{body{padding:0}.no-print{display:none}}.print-btn{position:fixed;top:15px;right:15px;background:#007AFF;color:#fff;border:none;padding:12px 24px;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer;z-index:100}`;
   const openPDF = (title, bodyHtml) => {
     try {
@@ -658,6 +708,29 @@ export function WorkshopProvider({ children }) {
     setNewJobErrors({}); setNewJobInsDD(false); setNewJobMakeSugg([]); setInsSearch(""); setNewJobPhoto(null); setCustomerMatch(null)
     setScreen("new_job")
   }
+
+  // Start a warranty job from a closed job — pre-fills customer/vehicle + links to original
+  const startWarrantyJob = (parentJob) => {
+    if (!parentJob?.jobInfo) return
+    const pi = parentJob.jobInfo
+    setNewJobInfo({
+      customer_name: pi.customer_name || "",
+      customer_phone: pi.customer_phone || "",
+      vehicle_reg: pi.vehicle_reg || "",
+      vehicle_make: pi.vehicle_make || "",
+      vehicle_model: pi.vehicle_model || "",
+      insurance_name: null,
+      work_type: pi.work_type || "paint",
+      job_type: "direct", // warranty is never insurance (workshop bears cost)
+      is_warranty: true,
+      parent_job_id: parentJob.id,
+      parent_job_number: parentJob.jobNumber,
+      parent_job_date: parentJob.created_at,
+    })
+    setNewJobErrors({}); setNewJobInsDD(false); setNewJobMakeSugg([]); setInsSearch(""); setNewJobPhoto(null); setCustomerMatch(null)
+    setScreen("new_job")
+    tt(`🔧 Warranty job from ${parentJob.jobNumber}`)
+  }
   const [newJobPhoto, setNewJobPhoto] = useState(null)
   const newJobPhotoRef = useRef(null)
   const validateAndCreateJob = () => {
@@ -665,7 +738,7 @@ export function WorkshopProvider({ children }) {
     const isQuick = newJobInfo.job_type === "quick"
     // Normalize vehicle reg
     const normReg = normalizeReg(newJobInfo.vehicle_reg)
-    if (!normReg.trim() || !/^[A-Z]{2,3} \d{4}$/.test(normReg.trim())) { errs.vehicle_reg = true; errs.reg_msg = "Vehicle reg must be 2-3 letters + 4 digits" }
+    if (!normReg.trim() || !/^[A-Z]{2,3} \d{4}(\/[A-Z]{1,3})?$/.test(normReg.trim())) { errs.vehicle_reg = true; errs.reg_msg = "Vehicle reg must be 2-3 letters + 4 digits (temp plates: /H or /ABC allowed)" }
     if (!newJobInfo.customer_name.trim()) errs.customer_name = true
     if (!newJobInfo.vehicle_make.trim()) errs.vehicle_make = true
     if (!newJobInfo.vehicle_model.trim()) errs.vehicle_model = true
@@ -682,7 +755,7 @@ export function WorkshopProvider({ children }) {
     const jobDocs = []
     if (newJobPhoto) jobDocs.push({ id: "d" + Date.now(), dataUrl: newJobPhoto, estId: null, label: "Vehicle" })
     const finalInfo = { ...newJobInfo, vehicle_reg: normReg, customer_phone: ph.normalized, insurance_name: newJobInfo.job_type === "insurance" ? newJobInfo.insurance_name : "" }
-    const newJob = { id, jobNumber: `JOB-${jobNum}`, jobInfo: finalInfo, stage: "job_received", paused: false, onHold: false, partsOrdered: false, partsArrived: {}, partsQuotation: [], pqStatus: "draft", pqApprovalPhoto: null, pqLumpSum: null, pqLumpMode: false, customerConfirmed: false, estimates: [], invoices: [], jobDocs, qcChecks: {}, supplierInvoices: [], followUpNote: "", followUpAttempts: 0, followUpLog: [], jobCosts: [], created_at: new Date().toISOString() }
+    const newJob = { id, jobNumber: `JOB-${jobNum}`, jobInfo: finalInfo, stage: "job_received", paused: false, onHold: false, partsOrdered: false, partsArrived: {}, partsQuotation: [], pqStatus: "draft", pqApprovalPhoto: null, pqLumpSum: null, pqLumpMode: false, customerConfirmed: false, estimates: [], invoices: [], jobDocs, qcChecks: {}, supplierInvoices: [], followUpNote: "", followUpAttempts: 0, followUpLog: [], jobCosts: [], created_at: new Date().toISOString(), ...(newJobInfo.is_warranty ? { is_warranty: true, parent_job_id: newJobInfo.parent_job_id, parent_job_number: newJobInfo.parent_job_number, parent_job_date: newJobInfo.parent_job_date } : {}) }
     setJobs(prev => [newJob, ...prev])
     openJob(newJob)
     tt(`${newJob.jobNumber} created`)
@@ -788,15 +861,34 @@ export function WorkshopProvider({ children }) {
   const handleRateEnter = (pid) => { const ci = estParts.filter(p => hasEntry(p.id, cat.key)); const idx = ci.findIndex(p => p.id === pid); for (let i = idx + 1; i < ci.length; i++) { rateRefs.current[ci[i].id]?.focus(); return } tt("✓ Done") }
 
   const saveEstimate = () => {
-    const validSundries = sundryItems.filter(s => s.rate > 0 || s.remarks === "M/R")
-    const tot = estEntries.reduce((s, e) => s + e.qty * e.rate, 0) + validSundries.reduce((s, i) => s + (i.remarks === "M/R" ? 0 : (i.rate * (i.qty || 1))), 0)
+    const validSundries = sundryItems.filter(s => (Number(s.rate) || 0) > 0 || s.remarks === "M/R")
+    const tot = estEntries.reduce((s, e) => s + (Number(e.qty) || 0) * (Number(e.rate) || 0), 0) + validSundries.reduce((s, i) => s + (i.remarks === "M/R" ? 0 : ((Number(i.rate) || 0) * (Number(i.qty) || 1))), 0)
+    // Warn if editing estimate that already has linked invoices
+    if (selEst && invoices.length > 0) {
+      const linkedInv = invoices.find(inv => (inv.source_estimates || []).includes(selEst.number))
+      if (linkedInv && !confirm(`⚠️ Invoice ${linkedInv.invoice_number} already uses this estimate. Editing may cause inconsistency between estimate and invoice. Continue?`)) return
+    }
     const isNewSupplementary = !selEst && estimates.length > 0
     const newEstId = selEst ? selEst.id : "est_" + Date.now() // pre-assign so PQ uses same ID
 
     if (selEst) {
       const autoApprove = isDirectJob
-      setEstimates(p => p.map(e => e.id === selEst.id ? { ...e, parts: [...estParts], entries: [...estEntries], sundries: validSundries, total: tot, ...(autoApprove ? { status: "approved", approved_entries: estEntries.map(en => ({ ...en })), approved_total: tot } : {}) } : e))
-      tt(`${selEst.number} updated`); setSelEst(null)
+      const wasApproved = selEst.status === "approved"
+      // For INSURANCE jobs: editing an approved estimate resets to draft and requires re-approval
+      const insuranceResetApproval = !isDirectJob && wasApproved
+      setEstimates(p => p.map(e => e.id === selEst.id ? {
+        ...e, parts: [...estParts], entries: [...estEntries], sundries: validSundries, total: tot,
+        ...(autoApprove ? { status: "approved", approved_entries: estEntries.map(en => ({ ...en })), approved_total: tot } : {}),
+        ...(insuranceResetApproval ? { status: "draft", approved_entries: null, approved_total: null, previous_approval: { approved_entries: selEst.approved_entries, approved_total: selEst.approved_total, reset_at: new Date().toISOString() } } : {})
+      } : e))
+      if (insuranceResetApproval) {
+        // Also reset job stage if in approved_dismantle (re-approval needed)
+        setJobs(prev => prev.map(j => j.id === activeJobId && j.stage === "approved_dismantle" ? { ...j, stage: "est_ready" } : j))
+        tt(`⚠️ ${selEst.number} edited — re-approval required`)
+      } else {
+        tt(`${selEst.number} updated`)
+      }
+      setSelEst(null)
     } else {
       const num = estimates.length + 1
       const type = isDirectJob ? (num === 1 ? "quotation" : "supplementary") : (num === 1 ? "insurance_claim" : "supplementary")
@@ -853,9 +945,13 @@ export function WorkshopProvider({ children }) {
 
   // ═══ APPROVAL ═══
   const startApproval = (est) => { setSelEst(est); setApprovalItems(est.entries.map(e => { const part = est.parts.find(p => p.id === e.part_id); return { ...e, part_name: part?.name || "Unknown", original_rate: e.rate, approved_rate: null, approval_status: "pending" } })); setApprovalCat(0); setScreen("approve") }
-  const setApproved = (eid, rate) => { setApprovalItems(prev => prev.map(i => { if (i.id !== eid) return i; const r = rate === "" ? null : Number(rate); let s = "pending"; if (r !== null) { s = r === i.original_rate ? "approved" : r < i.original_rate ? "cut" : "approved" } return { ...i, approved_rate: r, approval_status: s } })) }
+  const setApproved = (eid, rate) => { setApprovalItems(prev => prev.map(i => { if (i.id !== eid) return i; const r = rate === "" ? null : Number(rate); let s = "pending"; if (r !== null && isFinite(r)) { s = r === i.original_rate ? "approved" : r < i.original_rate ? "cut" : "upgraded" } return { ...i, approved_rate: r, approval_status: s } })) }
   const approveAsIs = (eid) => { const i = approvalItems.find(x => x.id === eid); if (i) setApproved(eid, i.original_rate) }
-  const markUseSame = (eid) => { setApprovalItems(prev => prev.map(i => i.id === eid ? { ...i, approved_rate: 0, approval_status: "use_same", remarks: "U/S" } : i)) }
+  const markUseSame = (eid) => {
+    const item = approvalItems.find(i => i.id === eid)
+    if (item && item.category !== "replace") { tt("⚠️ U/S only applies to replace parts"); return }
+    setApprovalItems(prev => prev.map(i => i.id === eid ? { ...i, approved_rate: 0, approval_status: "use_same", remarks: "U/S" } : i))
+  }
   const approveAllCatAsIs = () => { setApprovalItems(prev => prev.map(i => i.category !== aCat.key || i.approved_rate !== null ? i : { ...i, approved_rate: i.original_rate, approval_status: "approved" })); tt(`All ${aCat.label} approved`) }
   const handleApprovalEnter = (eid) => { const ci = approvalItems.filter(i => i.category === aCat.key); const idx = ci.findIndex(i => i.id === eid); for (let n = idx + 1; n < ci.length; n++) { if (ci[n].approved_rate === null) { approvalRefs.current[ci[n].id]?.focus(); return } } tt("✓ Done") }
   const finalizeApproval = () => {
@@ -915,21 +1011,34 @@ export function WorkshopProvider({ children }) {
   const invNet = inv => invTotal(inv) - (inv?.discount || 0)
   const invInsPayments = inv => (inv?.payments || []).filter(p => p.type === "insurance")
   const invCustPayments = inv => (inv?.payments || []).filter(p => p.type === "customer")
+  // invInsTotal: ALL insurance payments (for display of "expected / recorded amount")
   const invInsTotal = inv => invInsPayments(inv).reduce((s, p) => s + p.amount, 0)
+  // invInsReceivedTotal: only RECEIVED payments (for actual paid calculations)
+  const invInsReceivedTotal = inv => invInsPayments(inv).filter(p => p.ins_status === "received").reduce((s, p) => s + p.amount, 0)
   const invCustPaidTotal = inv => invCustPayments(inv).reduce((s, p) => s + p.amount, 0)
   const invCustDiscount = inv => inv?.customer_discount || 0
+  // Customer portion = what insurance is EXPECTED to cover deducted from net
   const invCustPortion = inv => invNet(inv) - invInsTotal(inv)
   const invCustOwes = inv => Math.max(0, invCustPortion(inv) - invCustDiscount(inv))
   const invCustBalance = inv => Math.max(0, invCustOwes(inv) - invCustPaidTotal(inv))
+  // Outstanding from insurance (recorded but not yet received)
+  const invInsOutstanding = inv => invInsTotal(inv) - invInsReceivedTotal(inv)
   const invTotalDiscount = inv => (inv?.discount || 0) + (inv?.customer_discount || 0)
   const invFullyPaid = inv => {
     if (invCustBalance(inv) > 0) return false
     const ip = invInsPayments(inv)
     if (ip.length === 0) return invCustPaidTotal(inv) >= invNet(inv) || invNet(inv) <= 0
+    // All insurance payments must be actually received (not just recorded)
     return ip.every(p => p.ins_status === "received")
   }
   const updateInvItem = (iid, patch) => { const upd = inv => ({ ...inv, items: inv.items.map(i => i.id === iid ? { ...i, ...patch, is_modified: true } : i) }); setInvoices(p => p.map(inv => inv.id === selInv.id ? upd(inv) : inv)); setSelInv(prev => upd(prev)) }
-  const removeInvItem = (iid) => { setInvoices(p => p.map(inv => inv.id === selInv.id ? { ...inv, items: inv.items.filter(i => i.id !== iid) } : inv)); setSelInv(prev => ({ ...prev, items: prev.items.filter(i => i.id !== iid) })) }
+  const removeInvItem = (iid) => {
+    // Block removal if payments exist (recalc of balance gets messy)
+    if ((selInv.payments || []).length > 0) { tt("⚠️ Delete all payments first"); return }
+    if ((selInv.items || []).length <= 1) { tt("⚠️ Invoice must have at least one item"); return }
+    setInvoices(p => p.map(inv => inv.id === selInv.id ? { ...inv, items: inv.items.filter(i => i.id !== iid) } : inv))
+    setSelInv(prev => ({ ...prev, items: prev.items.filter(i => i.id !== iid) }))
+  }
   const setInvStatus = (s) => { const patch = { status: s }; if (s === "finalized") patch.finalized_at = new Date().toISOString(); setInvoices(p => p.map(inv => inv.id === selInv.id ? { ...inv, ...patch } : inv)); setSelInv(prev => ({ ...prev, ...patch })); tt(`→ ${s}`) }
   const calcStatus = (inv) => {
     const ip = invInsPayments(inv); const cb = invCustBalance(inv)
@@ -939,7 +1048,8 @@ export function WorkshopProvider({ children }) {
     return inv.finalized_at ? "finalized" : "draft"
   }
   const addPayment = () => {
-    const amt = Number(payAmount); if (!amt) return
+    const amt = Number(payAmount)
+    if (!isFinite(amt) || amt <= 0) { tt("⚠️ Enter a valid payment amount"); return }
     if (payType === "insurance" && !insPayPhoto) { tt("⚠️ Attach release letter/cheque photo"); return }
     const pay = { id: "pay_" + Date.now(), amount: amt, type: payType, date: new Date().toISOString(), ...(payType === "insurance" ? { ins_status: "recorded", photo: insPayPhoto, reference: payRef } : { method: payMethod, reference: payRef }) }
     const np = [...(selInv.payments || []), pay]
@@ -947,16 +1057,25 @@ export function WorkshopProvider({ children }) {
     const ns = calcStatus(updated)
     setInvoices(p => p.map(inv => inv.id === selInv.id ? { ...inv, payments: np, status: ns } : inv))
     setSelInv(prev => ({ ...prev, payments: np, status: ns }))
+    // Auto-add bank balance for bank/online customer payments
+    if (payType !== "insurance" && (payMethod === "bank_transfer" || payMethod === "bank" || payMethod === "online")) {
+      setCashBook(prev => ({ ...prev, bankBalance: (Number(prev.bankBalance) || 0) + amt }))
+    }
     setShowPayForm(false); setPayAmount(""); setPayRef(""); setInsPayPhoto(null)
-    tt(payType === "insurance" ? `Insurance Rs.${fmt(amt)} recorded` : `Rs.${fmt(amt)} received`)
+    tt(payType === "insurance" ? `🛡️ Insurance Rs.${fmt(amt)} recorded` : `💰 Rs.${fmt(amt)} received — nice!`)
   }
   const deletePayment = (pid) => {
     if (confirmDel !== pid) { setConfirmDel(pid); setTimeout(() => setConfirmDel(c => c === pid ? null : c), 3000); return }
+    const removed = (selInv.payments || []).find(p => p.id === pid)
     const np = (selInv.payments || []).filter(p => p.id !== pid)
     const updated = { ...selInv, payments: np }
     const ns = np.length === 0 ? (selInv.finalized_at ? "finalized" : "draft") : calcStatus(updated)
     setInvoices(p => p.map(inv => inv.id === selInv.id ? { ...inv, payments: np, status: ns } : inv))
     setSelInv(prev => ({ ...prev, payments: np, status: ns }))
+    // Reverse bank balance for deleted bank/online payments
+    if (removed && removed.type !== "insurance" && (removed.method === "bank_transfer" || removed.method === "bank" || removed.method === "online")) {
+      setCashBook(prev => ({ ...prev, bankBalance: (Number(prev.bankBalance) || 0) - (Number(removed.amount) || 0) }))
+    }
     setConfirmDel(null); tt("Payment deleted")
   }
   const updateInsStatus = (pid, newStatus) => {
@@ -968,9 +1087,13 @@ export function WorkshopProvider({ children }) {
     tt(`→ ${newStatus}`)
   }
   const applyCustomerDiscount = (d) => {
-    setInvoices(p => p.map(inv => inv.id === selInv.id ? { ...inv, customer_discount: d } : inv))
-    setSelInv(prev => ({ ...prev, customer_discount: d }))
-    setShowCustDiscInput(false); tt(d > 0 ? `Customer discount Rs.${fmt(d)}` : "Customer discount removed")
+    const amt = Math.max(0, Number(d) || 0)
+    // Validate discount doesn't exceed customer portion
+    const portion = invCustPortion(selInv)
+    if (amt > portion) { tt(`⚠️ Discount Rs.${fmt(amt)} exceeds customer portion Rs.${fmt(portion)}`); return }
+    setInvoices(p => p.map(inv => inv.id === selInv.id ? { ...inv, customer_discount: amt } : inv))
+    setSelInv(prev => ({ ...prev, customer_discount: amt }))
+    setShowCustDiscInput(false); tt(amt > 0 ? `Customer discount Rs.${fmt(amt)}` : "Customer discount removed")
   }
 
   // ═══ RENDER support ═══
@@ -1041,6 +1164,7 @@ export function WorkshopProvider({ children }) {
     homeTab, setHomeTab,
     purchaseOrders, setPurchaseOrders,
     grns, setGrns,
+    cashBook, setCashBook,
     partsQuotation, setPartsQuotation,
     pqStatus, setPqStatus,
     pqApprovalPhoto, setPqApprovalPhoto,
@@ -1056,7 +1180,7 @@ export function WorkshopProvider({ children }) {
     collapsedSections, setCollapsedSections, toggleSection,
     sortBy, setSortBy,
     isUploading, setIsUploading,
-    closedLoaded, setClosedLoaded, closedCount,
+    closedLoaded, setClosedLoaded, closedCount, loadClosedJobs,
     loadError, loadJobs,
     newJobInfo, setNewJobInfo,
     newJobMakeSugg, setNewJobMakeSugg,
@@ -1088,14 +1212,14 @@ export function WorkshopProvider({ children }) {
     generatePOText, generatePQText, sharePQ,
     generateEstimatePDF, generateInvoicePDF, generatePQPDF, openPDF,
     saveCurrentJob, openJob, goHome,
-    startNewJob, validateAndCreateJob,
+    startNewJob, startWarrantyJob, validateAndCreateJob,
     toggleHold, deleteJob, deleteEstimate,
     advanceStage, goBackStage, getNextActionLabel, canAdvance,
     addPart, removePart, handlePartInput, toggleCheck, setRate, toggleRemarks, handleRateEnter,
     saveEstimate,
     startApproval, setApproved, approveAsIs, markUseSame, approveAllCatAsIs, handleApprovalEnter, finalizeApproval,
     generateInvoice, generateMinorInvoice,
-    invTotal, invNet, invInsPayments, invCustPayments, invInsTotal, invCustPaidTotal,
+    invTotal, invNet, invInsPayments, invCustPayments, invInsTotal, invInsReceivedTotal, invInsOutstanding, invCustPaidTotal,
     invCustDiscount, invCustPortion, invCustOwes, invCustBalance, invTotalDiscount, invFullyPaid,
     updateInvItem, removeInvItem, setInvStatus, calcStatus,
     addPayment, deletePayment, updateInsStatus, applyCustomerDiscount,

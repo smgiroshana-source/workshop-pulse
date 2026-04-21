@@ -35,13 +35,18 @@ function QuickJobCosts({ jobCosts, setJobCosts, invoices, generateMinorInvoice, 
   const showStockNo = showSource && costTab === "ex_stock"
 
   const addItem = () => {
-    if (!addName.trim()) { tt("⚠️ Enter item name"); return }
-    if (showCost && !addCost) { tt("⚠️ Enter cost"); return }
+    const cleanName = addName.trim()
+    if (!cleanName) { tt("⚠️ Enter item name"); return }
+    const costNum = Number(addCost)
+    if (showCost && (!addCost || !isFinite(costNum) || costNum < 0)) { tt("⚠️ Enter a valid cost (0 or more)"); return }
     if (showStockNo && !addStockNo.trim()) { tt("⚠️ Enter stock number"); return }
+    // Warn on duplicate name in same category
+    const dup = jobCosts.find(c => c.type === addType && c.name.toLowerCase() === cleanName.toLowerCase())
+    if (dup && !confirm(`"${cleanName}" already exists in ${activeCat.label}. Add another?`)) return
     const newItem = {
-      id: "jc" + Date.now(), name: addName.trim(), type: addType,
+      id: "jc" + Date.now(), name: cleanName, type: addType,
       source: isLabourCat || isSundry ? null : costTab === "ex_stock" ? "ex_stock" : costTab === "later" ? "later" : "purchased",
-      cost: isSundry || isLabourCat || costTab === "ex_stock" || costTab === "later" ? 0 : (Number(addCost) || 0),
+      cost: isSundry || isLabourCat || costTab === "ex_stock" || costTab === "later" ? 0 : costNum,
       confirmed: isLabourCat ? false : costTab === "later" ? false : true,
       stockNo: showStockNo ? addStockNo.trim() : null,
     }
@@ -51,7 +56,9 @@ function QuickJobCosts({ jobCosts, setJobCosts, invoices, generateMinorInvoice, 
   }
 
   const saveEditCost = (id) => {
-    setJobCosts(prev => prev.map(c => c.id === id ? { ...c, cost: Number(editCost) || 0, confirmed: true } : c))
+    const n = Number(editCost)
+    if (!isFinite(n) || n < 0) { tt("⚠️ Enter a valid cost"); return }
+    setJobCosts(prev => prev.map(c => c.id === id ? { ...c, cost: n, confirmed: true } : c))
     setEditingId(null); setEditCost("")
     tt("✓ Cost updated")
   }
@@ -104,7 +111,7 @@ function QuickJobCosts({ jobCosts, setJobCosts, invoices, generateMinorInvoice, 
           placeholder={isLabourCat ? "Labour item..." : isSundry ? "Sundry item..." : "Item name..."}
           style={{ ...inp, flex: 1, fontSize: 15, fontWeight: 600, background: C.card, padding: "12px 14px" }} />
         {showCost && (
-          <input type="number" value={addCost} onChange={e => setAddCost(e.target.value)}
+          <input type="number" min="0" value={addCost} onChange={e => { const v = Number(e.target.value); if (v < 0) return; setAddCost(e.target.value) }}
             placeholder="Cost" onKeyDown={e => { if (e.key === "Enter") addItem() }}
             style={{ ...inp, width: 110, flex: "0 0 110px", fontSize: 16, fontFamily: MONO, fontWeight: 700, background: C.card, padding: "12px 14px", textAlign: "right" }} />
         )}
@@ -192,7 +199,7 @@ function QuickJobCosts({ jobCosts, setJobCosts, invoices, generateMinorInvoice, 
         {invoices.length > 0 && invoices[0].payments?.length > 0 && <button onClick={() => {
           saveCurrentJob()
           setJobs(prev => prev.map(j => j.id === activeJobId ? { ...j, stage: "closed", onHold: false, jobCosts: [...jobCosts] } : j))
-          tt("🏁 Quick job closed"); setActiveJobId(null); setScreen("home"); setHomeTab("closed")
+          tt("🎉 Job done! 🚗✨"); setActiveJobId(null); setScreen("home"); setHomeTab("closed")
         }} style={{ ...btn(C.green, "#fff"), marginTop: SP.sm }}>🏁 Close Job</button>}
       </>}
     </div>
@@ -487,7 +494,7 @@ export default function JobScreen() {
               saveCurrentJob() // save all local state (invoices, estimates, etc.) before navigating away
               setJobs(prev => prev.map(j => j.id === activeJobId ? { ...j, stage: "closed", onHold: false, holdUntil: null, followUpNote, followUpAttempts, followUpLog: newLog } : j))
               setJobStage("closed")
-              tt("🏁 Job closed")
+              tt("🎉 Job closed! Well done 👏")
               setActiveJobId(null); setScreen("home"); setHomeTab("closed")
             }} style={{ ...btn(C.green, "#fff"), flex: 1, fontSize: 15 }}>🏁 Close & Complete</button>
           </div>
@@ -590,7 +597,10 @@ export default function JobScreen() {
           : <div style={{ fontSize: 13, color: C.green, fontWeight: 600, marginBottom: 10 }}>✓ Parts ordered</div>}
         {replaceParts.map(p => {
           const arrived = !!partsArrived[p.id]
-          return <div key={p.id} onClick={() => setPartsArrived(prev => ({ ...prev, [p.id]: !prev[p.id] }))} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 0", borderBottom: `1px solid ${C.border}`, cursor: "pointer" }}>
+          return <div key={p.id} onClick={() => {
+            if (!partsOrdered) { tt("⚠️ Mark parts as ordered first"); return }
+            setPartsArrived(prev => ({ ...prev, [p.id]: !prev[p.id] }))
+          }} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 0", borderBottom: `1px solid ${C.border}`, cursor: partsOrdered ? "pointer" : "not-allowed", opacity: partsOrdered ? 1 : 0.5 }}>
             <div style={{ width: 44, height: 44, borderRadius: 10, border: `2px solid ${arrived ? C.green : C.border}`, background: arrived ? C.green + "12" : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
               {arrived && <span style={{ color: C.green, fontSize: 20, fontWeight: 700 }}>✓</span>}
             </div>
@@ -698,11 +708,41 @@ export default function JobScreen() {
       {/* Invoices -- visible for all job types */}
       {invoices.map(inv => { const st = INV_STATUS[inv.status]; return <div key={inv.id} onClick={() => { setSelInv(inv); setScreen("inv_detail") }} style={{ ...card, cursor: "pointer" }}><div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}><div style={{ display: "flex", alignItems: "center", gap: 10 }}><span style={{ fontSize: 18, fontWeight: 700, fontFamily: MONO }}>{inv.invoice_number}</span><span style={pill(st.c)}>{st.l}</span></div><span style={{ fontFamily: MONO, fontSize: 20, fontWeight: 700 }}>Rs.{fmt(invTotal(inv))}</span></div>{isDirectJob ? <div style={{ fontSize: 14, color: C.sub, marginTop: 6 }}>Balance: Rs.{fmt(invCustBalance(inv))}</div> : invInsTotal(inv) > 0 && <div style={{ fontSize: 14, color: C.sub, marginTop: 6 }}>Ins: Rs.{fmt(invInsTotal(inv))} {invInsPayments(inv).some(p => p.ins_status !== "received") ? "⏳" : "✓"} · Cust bal: Rs.{fmt(invCustBalance(inv))}</div>}</div> })}
 
-      {/* On Hold / Reactivate / Delete */}
+      {/* On Hold / Reactivate / Delete / Cancel / Convert */}
       <div style={{ marginTop: 20, borderTop: `1px solid ${C.border}`, paddingTop: 16 }}>
         {activeJob?.onHold
           ? <button onClick={toggleHold} style={{ ...btn(C.green + "12", C.green) }}>▶ Reactivate Job</button>
           : <button onClick={toggleHold} style={{ ...btn(C.bg, C.orange), border: `1px solid ${C.orange}30` }}>📌 Put On Hold</button>}
+
+        {/* Convert Insurance → Direct (when insurance rejected) */}
+        {jobInfo.job_type === "insurance" && activeJob?.stage !== "closed" && activeJob?.stage !== "cancelled" && (
+          <button onClick={() => {
+            if (!confirm("Convert to Direct (Non-Insurance) job?\n\nThis will:\n• Remove insurance company link\n• Clear pending approval data\n• Preserve estimates & invoices\n\nCustomer will be billed directly.")) return
+            setJobs(prev => prev.map(j => j.id === activeJobId ? {
+              ...j,
+              jobInfo: { ...j.jobInfo, job_type: "direct", insurance_name: null },
+              approvalItems: [],
+              pqApprovalPhoto: null,
+              pqStatus: "draft",
+              partsQuotation: (j.partsQuotation || []).map(pq => ({ ...pq, approvedPrice: pq.quotedPrice })),
+              // If currently in insurance-specific stage, move to est_ready
+              stage: ["approved_dismantle"].includes(j.stage) ? "est_ready" : j.stage
+            } : j))
+            setJobInfo(prev => ({ ...prev, job_type: "direct", insurance_name: null }))
+            tt("✓ Converted to Direct job")
+          }} style={{ ...btn(C.bg, C.accent), border: `1px solid ${C.accent}30`, marginTop: 8, fontSize: 15 }}>🔄 Convert to Direct (Insurance Rejected)</button>
+        )}
+
+        {/* Cancel Job — for jobs with invoices that can't be deleted */}
+        {activeJob?.stage !== "closed" && activeJob?.stage !== "cancelled" && estimates.length > 0 && (
+          <button onClick={() => {
+            if (!confirm("Cancel this job?\n\nUse this when customer changes mind or job won't proceed. Job will be marked Cancelled and removed from active lists (but not deleted for audit history).")) return
+            setJobs(prev => prev.map(j => j.id === activeJobId ? { ...j, stage: "cancelled", onHold: false, cancelledAt: new Date().toISOString() } : j))
+            tt("Job cancelled")
+            setScreen("home")
+          }} style={{ ...btn("transparent", C.orange), border: `1px solid ${C.orange}30`, marginTop: 8, fontSize: 15, padding: "12px 20px" }}>✕ Cancel Job</button>
+        )}
+
         {estimates.length === 0 && <button onClick={deleteJob} style={{ ...btn(confirmDelJob ? C.red : "transparent", confirmDelJob ? "#fff" : C.red), marginTop: 8, fontSize: 15, padding: "12px 20px", border: confirmDelJob ? "none" : `1px solid ${C.red}30` }}>{confirmDelJob ? "Tap again to confirm delete" : "🗑 Delete Job"}</button>}
       </div>
     </>

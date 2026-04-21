@@ -1,5 +1,6 @@
 "use client"
 import { useWorkshop } from "../WorkshopContext"
+import { useEffect } from "react"
 import { C, FONT, MONO, inp, btn, btnSm, card, NavBar, VEHICLE_MAKES, INSURANCE_COMPANIES, normalizeReg, normalizePhone, regSearchKey, phoneSearchKey } from "../WorkshopContext"
 import { uploadPhoto } from "../supabase"
 
@@ -22,6 +23,18 @@ export default function NewJobScreen() {
   const er = newJobErrors
   const set = (k, v) => { setNewJobInfo(p => ({ ...p, [k]: v })); setNewJobErrors(p => { const n = { ...p }; delete n[k]; return n }) }
   const errBorder = k => er[k] ? `2px solid ${C.red}` : "none"
+
+  // Cmd/Ctrl + Enter submits
+  useEffect(() => {
+    const handler = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+        e.preventDefault()
+        validateAndCreateJob()
+      }
+    }
+    window.addEventListener("keydown", handler)
+    return () => window.removeEventListener("keydown", handler)
+  }, [validateAndCreateJob])
 
   return (
     <>
@@ -88,19 +101,28 @@ export default function NewJobScreen() {
         <div>
           <div style={{ fontSize: 14, color: er.customer_phone ? C.red : C.sub, marginBottom: 5, fontWeight: 500 }}>Phone <span style={{ color: C.red }}>*</span></div>
           <input value={nj.customer_phone} onChange={e => {
-            const val = e.target.value.replace(/[^0-9\s\-]/g, "")
-            set("customer_phone", val)
+            // Strip non-digits (allow leading + for intl)
+            let raw = e.target.value.replace(/[^0-9+]/g, "")
+            // Strip + if not leading
+            if (raw.indexOf("+") > 0) raw = raw.replace(/\+/g, "")
+            // Format: 077 123 4567 (Sri Lankan mobile)
+            let formatted = raw
+            if (raw.startsWith("0") && raw.length >= 4) {
+              formatted = raw.slice(0, 3) + " " + raw.slice(3, 6) + (raw.length > 6 ? " " + raw.slice(6, 10) : "")
+            } else if (raw.startsWith("+94") && raw.length >= 6) {
+              formatted = raw.slice(0, 3) + " " + raw.slice(3, 5) + " " + raw.slice(5, 8) + (raw.length > 8 ? " " + raw.slice(8, 12) : "")
+            }
+            set("customer_phone", formatted.trim())
             // Lookup by phone
-            const key = phoneSearchKey(val)
+            const key = phoneSearchKey(raw)
             if (key.length >= 9) {
               const match = customerRegistry.byPhone[key]
               if (match && !customerMatch) { setCustomerMatch(match) }
             }
           }} onBlur={() => {
-            // Show normalized preview
             const ph = normalizePhone(nj.customer_phone)
             if (ph.valid && ph.normalized !== nj.customer_phone) set("customer_phone", ph.normalized)
-          }} placeholder="07X XXXX XXX" autoComplete="off" style={{ ...inp, fontFamily: MONO, border: errBorder("customer_phone") }} />
+          }} placeholder="077 123 4567" autoComplete="off" style={{ ...inp, fontFamily: MONO, border: errBorder("customer_phone") }} />
           {er.phone_msg && <div style={{ fontSize: 12, color: C.red, marginTop: 4, fontWeight: 600 }}>⚠️ {er.phone_msg}</div>}
           {nj.customer_phone && !er.customer_phone && (() => { const ph = normalizePhone(nj.customer_phone); return ph.valid && ph.normalized !== nj.customer_phone ? <div style={{ fontSize: 12, color: C.accent, marginTop: 4 }}>→ {ph.normalized}</div> : null })()}
         </div>
@@ -161,7 +183,7 @@ export default function NewJobScreen() {
         </div>}
       </div>}
 
-      <button onClick={validateAndCreateJob} style={{ ...btn(C.accent, "#fff"), marginTop: 8 }}>Create Job</button>
+      <button onClick={validateAndCreateJob} style={{ ...btn(C.accent, "#fff"), marginTop: 8, position: "sticky", bottom: "max(16px, calc(16px + env(safe-area-inset-bottom)))", boxShadow: "0 4px 20px rgba(0,122,255,0.3)", zIndex: 10 }}>✓ Create Job <span className="desktop-only" style={{ opacity: 0.6, fontSize: 13, marginLeft: 8, fontFamily: MONO }}>⌘↵</span></button>
     </>
   )
 }

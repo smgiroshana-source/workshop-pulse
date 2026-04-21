@@ -88,8 +88,8 @@ export default function InvoiceDetail() {
           {selInv.discount > 0 && !showDiscountInput ? <div style={{ display: "flex", justifyContent: "space-between", fontSize: 15, marginBottom: 6, alignItems: "center" }}><span style={{ color: C.orange, fontWeight: 500, cursor: "pointer" }} onClick={() => { setDiscount(selInv.discount); setShowDiscountInput(true) }}>Discount ✏️</span><span style={{ fontFamily: MONO, color: C.orange, fontWeight: 600 }}>-Rs.{fmt(selInv.discount)}</span></div>
             : showDiscountInput ? <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
               <span style={{ fontSize: 14, color: C.orange, flexShrink: 0 }}>Discount:</span>
-              <input type="number" value={discount || ""} onChange={e => setDiscount(Number(e.target.value) || 0)} placeholder="0" style={{ flex: 1, padding: "8px 10px", background: C.bg, border: `2px solid ${C.orange}`, borderRadius: 8, color: C.text, fontSize: 18, fontFamily: MONO, fontWeight: 700, textAlign: "right", outline: "none" }} onKeyDown={e => { if (e.key === "Enter") { const d = Number(discount) || 0; setInvoices(p => p.map(inv => inv.id === selInv.id ? { ...inv, discount: d } : inv)); setSelInv(prev => ({ ...prev, discount: d })); setShowDiscountInput(false); tt(d > 0 ? `Discount Rs.${fmt(d)}` : "Removed") } }} />
-              <button onClick={() => { const d = Number(discount) || 0; setInvoices(p => p.map(inv => inv.id === selInv.id ? { ...inv, discount: d } : inv)); setSelInv(prev => ({ ...prev, discount: d })); setShowDiscountInput(false); tt(d > 0 ? `Discount Rs.${fmt(d)}` : "Removed") }} style={{ padding: "8px 14px", borderRadius: 8, border: "none", background: C.orange, color: "#fff", fontWeight: 700, fontSize: 14, cursor: "pointer" }}>✓</button>
+              <input type="number" min="0" value={discount || ""} onChange={e => { const v = Number(e.target.value); if (v < 0) return; setDiscount(v || 0) }} placeholder="0" style={{ flex: 1, padding: "8px 10px", background: C.bg, border: `2px solid ${C.orange}`, borderRadius: 8, color: C.text, fontSize: 18, fontFamily: MONO, fontWeight: 700, textAlign: "right", outline: "none" }} onKeyDown={e => { if (e.key === "Enter") { const d = Math.max(0, Number(discount) || 0); const sub = invTotal(selInv); if (d > sub) { tt(`⚠️ Discount cannot exceed subtotal Rs.${fmt(sub)}`); return }; setInvoices(p => p.map(inv => inv.id === selInv.id ? { ...inv, discount: d } : inv)); setSelInv(prev => ({ ...prev, discount: d })); setShowDiscountInput(false); tt(d > 0 ? `Discount Rs.${fmt(d)}` : "Removed") } }} />
+              <button onClick={() => { const d = Math.max(0, Number(discount) || 0); const sub = invTotal(selInv); if (d > sub) { tt(`⚠️ Discount cannot exceed subtotal Rs.${fmt(sub)}`); return }; setInvoices(p => p.map(inv => inv.id === selInv.id ? { ...inv, discount: d } : inv)); setSelInv(prev => ({ ...prev, discount: d })); setShowDiscountInput(false); tt(d > 0 ? `Discount Rs.${fmt(d)}` : "Removed") }} style={{ padding: "8px 14px", borderRadius: 8, border: "none", background: C.orange, color: "#fff", fontWeight: 700, fontSize: 14, cursor: "pointer" }}>✓</button>
             </div>
             : (selInv.status === "draft" || selInv.status === "finalized") ? <div onClick={() => { setDiscount(0); setShowDiscountInput(true) }} style={{ fontSize: 14, color: C.orange, marginBottom: 6, cursor: "pointer", opacity: 0.7 }}>+ Add discount</div> : null}
           <div style={{ display: "flex", justifyContent: "space-between", fontSize: 17, paddingTop: 6, borderTop: `1px solid ${C.border}` }}><span style={{ fontWeight: 700 }}>Net Total</span><span style={{ fontFamily: MONO, fontWeight: 700 }}>Rs.{fmt(invNet(selInv))}</span></div>
@@ -122,7 +122,7 @@ export default function InvoiceDetail() {
             </div>
           </div> })}
         {invInsPayments(selInv).length === 0 && <div style={{ ...card, textAlign: "center", color: C.sub, fontSize: 14, padding: 16 }}>No insurance payment recorded</div>}
-        <button onClick={() => { setPayType("insurance"); setPayAmount(""); setPayRef(""); setInsPayPhoto(null); setShowPayForm(true) }} style={{ ...btn(C.accent + "15", C.accent), marginTop: 4, fontSize: 14, border: `1px solid ${C.accent}30` }}>+ Record Insurance Payment</button>
+        <button onClick={() => { setPayType("insurance"); const expected = Math.max(0, invNet(selInv) - invCustBalance(selInv) - invInsTotal(selInv)); setPayAmount(expected > 0 ? expected.toString() : ""); setPayRef(""); setInsPayPhoto(null); setShowPayForm(true) }} style={{ ...btn(C.accent + "15", C.accent), marginTop: 4, fontSize: 14, border: `1px solid ${C.accent}30` }}>+ Record Insurance Payment</button>
       </div>}
 
       {/* Customer Settlement */}
@@ -161,7 +161,8 @@ export default function InvoiceDetail() {
       <div style={{ marginTop: 12 }}>
         {selInv.status === "draft" && <><div style={{ fontSize: 15, color: C.sub, marginBottom: 8 }}>Tap any line item to edit</div><button onClick={() => setInvStatus("finalized")} style={{ ...btn(C.accent, "#fff"), marginBottom: 10 }}>Finalize Invoice</button></>}
         {selInv.status === "finalized" && <button onClick={() => setInvStatus("sent")} style={{ ...btn(C.orange, "#fff"), marginBottom: 10 }}>Mark as Sent</button>}
-        {selInv.status !== "draft" && <button onClick={() => setInvStatus("draft")} style={{ ...btn(C.bg, C.accent) }}>Edit Invoice</button>}
+        {selInv.status !== "draft" && (selInv.payments || []).length === 0 && <button onClick={() => { if (!confirm("Revert invoice to draft? This will clear the 'sent' status.")) return; setInvStatus("draft") }} style={{ ...btn(C.bg, C.accent) }}>Edit Invoice</button>}
+        {selInv.status !== "draft" && (selInv.payments || []).length > 0 && <div style={{ ...card, background: C.muted + "08", fontSize: 13, color: C.muted, textAlign: "center", padding: "10px 14px" }}>🔒 Invoice locked — payments recorded. Delete all payments to edit.</div>}
       </div>
 
       {/* Close Job (for quick jobs that are fully paid) */}
@@ -178,7 +179,7 @@ export default function InvoiceDetail() {
       )}
 
       {/* Payment Form */}
-      <input ref={insPhotoRef} type="file" accept="image/*" style={{ display: "none" }} onChange={async e => { const f = e.target.files[0]; if (f) { tt("⏳ Uploading…"); try { const url = await uploadPhoto(f, `${activeJobId}/ins-pay-${Date.now()}.jpg`); setInsPayPhoto(url); tt("📷 Photo attached") } catch { tt("❌ Upload failed") } } e.target.value = "" }} />
+      <input ref={insPhotoRef} type="file" accept="image/*" style={{ display: "none" }} onChange={async e => { const f = e.target.files[0]; if (f) { tt("⏳ Uploading…"); try { const url = await uploadPhoto(f, `${activeJobId}/ins-pay-${Date.now()}.jpg`); if (!url) throw new Error("No URL returned"); setInsPayPhoto(url); tt("📷 Photo attached") } catch (err) { setInsPayPhoto(null); tt("❌ Upload failed — please retry") } } e.target.value = "" }} />
       {showPayForm && <Sheet onClose={() => { setShowPayForm(false); setInsPayPhoto(null) }}>
         {payType === "insurance" ? <>
           <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 6 }}>🛡️ Insurance Payment</div>

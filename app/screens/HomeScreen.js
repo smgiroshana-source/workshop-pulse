@@ -35,14 +35,14 @@ function JobCard({ j, isTablet, isSelected, openJob, setHoverJobId, setHoverY })
         if (j.stage === "follow_up") return <div style={{ fontSize: 12, color: C.orange, fontWeight: 600, marginTop: 3 }}>📵 No answer ({j.followUpAttempts}/3) · retry in {hours}h</div>
         return <div style={{ fontSize: 12, color: C.orange, fontWeight: 600, marginTop: 3 }}>⏰ Follow-up in {days} day{days !== 1 ? "s" : ""}</div>
       })()}
-      {j.stage === "closed" && j.followUpNote && <div style={{ fontSize: 12, color: C.sub, marginTop: 3, fontStyle: "italic", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>💬 {j.followUpNote}</div>}
+      {(j.stage === "closed" || j.stage === "cancelled") && j.followUpNote && <div style={{ fontSize: 12, color: C.sub, marginTop: 3, fontStyle: "italic", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>💬 {j.followUpNote}</div>}
     </div>
   </div>
 }
 
 // Dashboard summary metrics
 function DashboardCards({ jobs, setFilterStage, setHomeTab, clearSearch }) {
-  const active = jobs.filter(j => !j.onHold && j.stage !== "closed")
+  const active = jobs.filter(j => !j.onHold && j.stage !== "closed" && j.stage !== "cancelled")
   const pendingEst = active.filter(j => j.stage === "est_pending").length
   const partsWaiting = active.filter(j => (j.estimates || []).flatMap(e => (e.approved_entries || e.entries || []).filter(en => en.category === "replace")).some(p => !j.partsArrived?.[p.id])).length
   const overdue = jobs.filter(j => j.onHold && j.holdUntil && new Date(j.holdUntil) < new Date()).length
@@ -71,7 +71,7 @@ function sortJobs(filtered, sortBy) {
 
 // ═══ CLOSED TAB: Vehicle Repair History ═══
 // ClosedJobDetail — renders repair detail for a job (used in right panel on tablet)
-export function ClosedJobDetail({ job: j, openJob }) {
+export function ClosedJobDetail({ job: j, openJob, startWarrantyJob }) {
   if (!j) return null
   const jobTotal = (j.invoices || []).reduce((s, inv) => s + (inv.total || 0), 0)
     || (j.estimates || []).reduce((s, e) => s + (e.approved_total || e.total || 0), 0)
@@ -106,14 +106,27 @@ export function ClosedJobDetail({ job: j, openJob }) {
             <span style={{ fontFamily: MONO, fontWeight: 700, fontSize: 24, color: C.text }}>{j.jobInfo.vehicle_reg}</span>
             <span style={{ fontSize: 16, color: C.sub, marginLeft: SP.md }}>{j.jobInfo.vehicle_make} {j.jobInfo.vehicle_model}</span>
           </div>
-          <span style={{ fontSize: 12, fontWeight: 600, padding: "4px 12px", borderRadius: 8, background: isIns ? C.accent + "15" : isQuick ? C.green + "15" : C.orange + "15", color: isIns ? C.accent : isQuick ? C.green : C.orange }}>
-            {isIns ? "Insurance" : isQuick ? "Quick" : "Direct"}
-          </span>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
+            {j.is_warranty && <span style={{ fontSize: 12, fontWeight: 600, padding: "4px 12px", borderRadius: 8, background: C.red + "15", color: C.red }}>🔧 Warranty</span>}
+            {j.stage === "cancelled" && <span style={{ fontSize: 12, fontWeight: 600, padding: "4px 12px", borderRadius: 8, background: C.red + "15", color: C.red }}>✕ Cancelled</span>}
+            <span style={{ fontSize: 12, fontWeight: 600, padding: "4px 12px", borderRadius: 8, background: isIns ? C.accent + "15" : isQuick ? C.green + "15" : C.orange + "15", color: isIns ? C.accent : isQuick ? C.green : C.orange }}>
+              {isIns ? "Insurance" : isQuick ? "Quick" : "Direct"}
+            </span>
+          </div>
         </div>
         <div style={{ fontSize: 15, color: C.sub }}>{j.jobInfo.customer_name} · {j.jobNumber}</div>
         <div style={{ fontSize: 13, color: C.muted, marginTop: SP.xs }}>
           {fmtDate(j.created_at)}{isIns && j.jobInfo.insurance_name ? ` · ${j.jobInfo.insurance_name}` : ""}{j.jobInfo.work_type ? ` · ${j.jobInfo.work_type === "paint" ? "Paint & Body" : j.jobInfo.work_type === "mechanical" ? "Mechanical" : "Paint + Mech"}` : ""}
         </div>
+        {j.is_warranty && j.parent_job_number && (
+          <div style={{ fontSize: 12, color: C.red, marginTop: 4, fontWeight: 600 }}>
+            ↳ Warranty for {j.parent_job_number} ({fmtDate(j.parent_job_date)})
+          </div>
+        )}
+        {/* Start Warranty button on closed jobs (not already warranty) */}
+        {j.stage === "closed" && !j.is_warranty && startWarrantyJob && (
+          <button onClick={() => startWarrantyJob(j)} style={{ marginTop: 12, padding: "8px 14px", borderRadius: 8, border: `1px solid ${C.red}40`, background: C.red + "08", color: C.red, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: FONT }}>🔧 Start Warranty Job</button>
+        )}
       </div>
 
       {/* Photos */}
@@ -206,7 +219,7 @@ export function ClosedHistory({ jobs, searchQuery, openJob, isTablet, activeJobI
   const [expandedJob, setExpandedJob] = useState(null)
 
   // Group closed jobs by vehicle registration
-  const closedJobs = jobs.filter(j => j.stage === "closed")
+  const closedJobs = jobs.filter(j => (j.stage === "closed" || j.stage === "cancelled"))
   const vehicleGroups = {}
   closedJobs.forEach(j => {
     const key = regSearchKey(j.jobInfo.vehicle_reg)
@@ -494,7 +507,7 @@ export default function HomeScreen() {
               <div onClick={() => setSortBy(s => s === "newest" ? "oldest" : s === "oldest" ? "highest_value" : s === "highest_value" ? "stage_order" : "newest")} style={{ fontSize: 12, color: C.accent, cursor: "pointer", padding: "4px 10px", borderRadius: 8, background: C.accent + "08" }}>
                 {sortBy === "newest" ? "↓ New" : sortBy === "oldest" ? "↑ Old" : sortBy === "highest_value" ? "💰 Value" : "📊 Stage"}
               </div>
-              <div style={{ fontFamily: MONO, fontSize: 15, color: C.sub }}>{jobs.filter(j => !j.onHold && j.stage !== "closed").length}</div>
+              <div style={{ fontFamily: MONO, fontSize: 15, color: C.sub }}>{jobs.filter(j => !j.onHold && j.stage !== "closed" && j.stage !== "cancelled").length}</div>
             </div>
           </div>
         </div>
@@ -508,19 +521,19 @@ export default function HomeScreen() {
         {homeTab === "active" && <DashboardCards jobs={jobs} setFilterStage={setFilterStage} setHomeTab={setHomeTab} clearSearch={() => setSearchQuery("")} />}
 
         <div style={{ display: "flex", gap: 0, marginBottom: 12, background: C.card, borderRadius: 14, padding: 4, boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
-          {[["active", "Active", jobs.filter(j => !j.onHold && j.stage !== "closed").length], ["on_hold", "📌 On Hold", jobs.filter(j => j.onHold).length], ["closed", "🏁 Closed", jobs.filter(j => j.stage === "closed").length || closedCount || 0]].map(([k, l, cnt]) => <div key={k} onClick={() => { setHomeTab(k); setFilterStage("all") }} style={{ flex: 1, textAlign: "center", padding: "12px 0", borderRadius: 12, minHeight: 44, cursor: "pointer", background: homeTab === k ? (k === "on_hold" ? C.orange + "12" : k === "closed" ? C.sub + "12" : C.accent + "12") : "transparent", color: homeTab === k ? (k === "on_hold" ? C.orange : k === "closed" ? C.sub : C.accent) : C.muted, fontSize: 14, fontWeight: 600, transition: "all 0.2s" }}>{l} ({cnt})</div>)}
+          {[["active", "Active", jobs.filter(j => !j.onHold && j.stage !== "closed" && j.stage !== "cancelled").length], ["on_hold", "📌 On Hold", jobs.filter(j => j.onHold).length], ["closed", "🏁 Closed", jobs.filter(j => (j.stage === "closed" || j.stage === "cancelled")).length || closedCount || 0]].map(([k, l, cnt]) => <div key={k} onClick={() => { setHomeTab(k); setFilterStage("all") }} style={{ flex: 1, textAlign: "center", padding: "12px 0", borderRadius: 12, minHeight: 44, cursor: "pointer", background: homeTab === k ? (k === "on_hold" ? C.orange + "12" : k === "closed" ? C.sub + "12" : C.accent + "12") : "transparent", color: homeTab === k ? (k === "on_hold" ? C.orange : k === "closed" ? C.sub : C.accent) : C.muted, fontSize: 14, fontWeight: 600, transition: "all 0.2s" }}>{l} ({cnt})</div>)}
         </div>
 
         {homeTab === "active" && <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 12, marginBottom: 4 }}>
           {filterStage === "parts_waiting" && <div onClick={() => setFilterStage("all")} style={{ padding: "12px 18px", borderRadius: 20, minHeight: 44, fontSize: isTablet ? 13 : 14, fontWeight: 600, cursor: "pointer", flexShrink: 0, whiteSpace: "nowrap", background: C.purple + "15", color: C.purple, border: `1px solid ${C.purple}50` }}>{"\uD83D\uDCE6"} Parts Waiting ×</div>}
-          <div onClick={() => setFilterStage("all")} style={{ padding: "12px 18px", borderRadius: 20, minHeight: 44, fontSize: isTablet ? 13 : 14, fontWeight: 600, cursor: "pointer", flexShrink: 0, background: filterStage === "all" ? C.accent : C.card, color: filterStage === "all" ? "#fff" : C.sub, border: `1px solid ${filterStage === "all" ? C.accent : C.border}` }}>All ({jobs.filter(j => !j.onHold && j.stage !== "closed").length})</div>
+          <div onClick={() => setFilterStage("all")} style={{ padding: "12px 18px", borderRadius: 20, minHeight: 44, fontSize: isTablet ? 13 : 14, fontWeight: 600, cursor: "pointer", flexShrink: 0, background: filterStage === "all" ? C.accent : C.card, color: filterStage === "all" ? "#fff" : C.sub, border: `1px solid ${filterStage === "all" ? C.accent : C.border}` }}>All ({jobs.filter(j => !j.onHold && j.stage !== "closed" && j.stage !== "cancelled").length})</div>
           {Object.entries(ALL_STAGES).filter(([, s]) => s.label !== "Closed").map(([key, s]) => { const cnt = jobs.filter(j => j.stage === key && !j.onHold).length; return cnt > 0 ? <div key={key} onClick={() => setFilterStage(filterStage === key ? "all" : key)} style={{ padding: "12px 18px", borderRadius: 20, minHeight: 44, fontSize: isTablet ? 13 : 14, fontWeight: 600, cursor: "pointer", flexShrink: 0, whiteSpace: "nowrap", background: filterStage === key ? s.color + "15" : C.card, color: filterStage === key ? s.color : C.sub, border: `1px solid ${filterStage === key ? s.color + "50" : C.border}` }}>{s.icon} {s.label} ({cnt})</div> : null })}
         </div>}
 
         {homeTab === "closed"
           ? <ClosedHistory jobs={jobs} searchQuery={searchQuery} openJob={openJob} isTablet={isTablet} activeJobId={activeJobId} />
           : (() => {
-          let filtered = homeTab === "on_hold" ? jobs.filter(j => j.onHold) : jobs.filter(j => !j.onHold && j.stage !== "closed")
+          let filtered = homeTab === "on_hold" ? jobs.filter(j => j.onHold) : jobs.filter(j => !j.onHold && j.stage !== "closed" && j.stage !== "cancelled")
           if (homeTab === "active" && filterStage !== "all") {
             if (filterStage === "parts_waiting") {
               filtered = filtered.filter(j => (j.estimates || []).flatMap(e => (e.approved_entries || e.entries || []).filter(en => en.category === "replace")).some(p => !j.partsArrived?.[p.id]))
@@ -531,7 +544,12 @@ export default function HomeScreen() {
           if (searchQuery.trim()) { const q = searchQuery.toLowerCase().replace(/[\s\-]/g, ""); filtered = filtered.filter(j => { const reg = regSearchKey(j.jobInfo.vehicle_reg); const phone = phoneSearchKey(j.jobInfo.customer_phone); const name = (j.jobInfo.customer_name || "").toLowerCase(); const make = (j.jobInfo.vehicle_make || "").toLowerCase(); const num = (j.jobNumber || "").toLowerCase(); return reg.includes(q) || phone.includes(q) || name.includes(q) || make.includes(q) || num.includes(q) }) }
           filtered = sortJobs(filtered, sortBy)
           return filtered.length ? filtered.map(j => <JobCard key={j.id} j={j} isTablet={isTablet} isSelected={isTablet && activeJobId === j.id} openJob={openJob} setHoverJobId={setHoverJobId} setHoverY={setHoverY} />)
-            : <div style={{ textAlign: "center", padding: 40, color: C.muted }}><div style={{ fontSize: 40, marginBottom: 12 }}>{homeTab === "on_hold" ? "📌" : "🔧"}</div><div style={{ fontSize: 18, fontWeight: 600 }}>{homeTab === "on_hold" ? "No jobs on hold" : `No jobs${filterStage !== "all" ? " in this stage" : ""}`}</div><div style={{ fontSize: 16, marginTop: 6 }}>{homeTab === "on_hold" ? "Delivered jobs wait here for 2-week follow-up" : "Tap + to create a new job"}</div></div>
+            : <div className="screen-fade" style={{ textAlign: "center", padding: "48px 20px", color: C.muted }}>
+              <div style={{ fontSize: 56, marginBottom: 16 }}>{homeTab === "on_hold" ? "📌" : homeTab === "closed" ? "🏁" : "🔧"}</div>
+              <div style={{ fontSize: 19, fontWeight: 700, color: C.text, marginBottom: 6 }}>{homeTab === "on_hold" ? "Nothing on hold" : homeTab === "closed" ? "No closed jobs yet" : filterStage !== "all" ? "Nothing in this stage" : "Ready for your first job!"}</div>
+              <div style={{ fontSize: 15, marginBottom: 20 }}>{homeTab === "on_hold" ? "Delivered jobs wait here for 2-week follow-up" : homeTab === "closed" ? "Completed jobs will appear here" : "Tap + New Job below to get started"}</div>
+              {homeTab === "active" && filterStage === "all" && <div className="desktop-only" style={{ fontSize: 12, color: C.muted, display: "inline-flex", alignItems: "center", gap: 6, padding: "6px 12px", background: C.bg, borderRadius: 20 }}>💡 Press <kbd style={{ padding: "2px 6px", background: "#fff", border: `1px solid ${C.border}`, borderRadius: 4, fontFamily: MONO, fontSize: 11 }}>N</kbd> anywhere to create a new job</div>}
+            </div>
         })()}
 
         <button onClick={startNewJob} style={{ ...btn(C.accent, "#fff"), marginTop: 8, position: "sticky", bottom: 20 }}>+ New Job</button>
