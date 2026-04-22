@@ -1,7 +1,7 @@
 "use client"
 import React, { useState } from "react"
 import { useWorkshop } from "../WorkshopContext"
-import { C, FONT, MONO, inp, btn, btnSm, btnOutline, btnText, card, pill, Sheet, NavBar, ALL_STAGES, VEHICLE_MAKES, INSURANCE_COMPANIES, INV_STATUS, fmt, SP } from "../WorkshopContext"
+import { C, FONT, MONO, inp, btn, btnSm, btnOutline, btnText, card, pill, Sheet, NavBar, ALL_STAGES, VEHICLE_MAKES, INSURANCE_COMPANIES, INV_STATUS, fmt, SP, genId } from "../WorkshopContext"
 import { uploadPhoto } from "../supabase"
 
 // ═══ QUICK JOB COSTS — One-Line Entry with Category Dropdown ═══
@@ -44,7 +44,7 @@ function QuickJobCosts({ jobCosts, setJobCosts, invoices, generateMinorInvoice, 
     const dup = jobCosts.find(c => c.type === addType && c.name.toLowerCase() === cleanName.toLowerCase())
     if (dup && !confirm(`"${cleanName}" already exists in ${activeCat.label}. Add another?`)) return
     const newItem = {
-      id: "jc" + Date.now(), name: cleanName, type: addType,
+      id: genId("jc"), name: cleanName, type: addType,
       source: isLabourCat || isSundry ? null : costTab === "ex_stock" ? "ex_stock" : costTab === "later" ? "later" : "purchased",
       cost: isSundry || isLabourCat || costTab === "ex_stock" || costTab === "later" ? 0 : costNum,
       confirmed: isLabourCat ? false : costTab === "later" ? false : true,
@@ -682,6 +682,7 @@ export default function JobScreen() {
               <div style={{ display: "flex", gap: 12, marginTop: 8, alignItems: "center" }}>
                 <span onClick={() => { setSelEst(est); setEstParts([...est.parts]); setEstEntries([...est.entries]); setSundryItems([...(est.sundries || [])]); setActiveCat(0); setScreen("est_review") }} style={{ fontSize: 16, fontWeight: 500, color: C.accent, cursor: "pointer" }}>View →</span>
                 {est.status === "draft" && isInsurance && <span onClick={() => startApproval(est)} style={{ fontSize: 16, fontWeight: 500, color: C.green, cursor: "pointer" }}>Approve →</span>}
+                {est.status === "approved" && isInsurance && <span onClick={() => startApproval(est)} style={{ fontSize: 14, fontWeight: 500, color: C.orange, cursor: "pointer" }}>↻ Amend Approval</span>}
                 <span onClick={() => generateEstimatePDF(est)} style={{ fontSize: 15, fontWeight: 500, color: C.purple, cursor: "pointer" }}>📄 PDF</span>
               </div>
             </div>

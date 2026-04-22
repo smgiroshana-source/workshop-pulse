@@ -1,6 +1,6 @@
 "use client"
 import { useState } from "react"
-import { C, FONT, MONO, SP, inp, btn, btnSm, btnOutline, card, pill, NavBar, fmt } from "../WorkshopContext"
+import { C, FONT, MONO, SP, inp, btn, btnSm, btnOutline, card, pill, NavBar, fmt, genId } from "../WorkshopContext"
 
 const UNITS = ["pcs", "litre", "kg", "can", "set", "roll", "sheet", "pair", "box"]
 
@@ -33,7 +33,7 @@ function PODetail({ po, onBack, onUpdate, onCreateGRN, onDelete, grns, tt }) {
 
   const addItem = () => {
     if (!addName.trim()) return
-    setItems(prev => [...prev, { id: "pi" + Date.now(), name: addName.trim(), qty: Number(addQty) || 1, unit: addUnit, unitPrice: Number(addPrice) || 0, received: 0 }])
+    setItems(prev => [...prev, { id: genId("pi"), name: addName.trim(), qty: Number(addQty) || 1, unit: addUnit, unitPrice: Number(addPrice) || 0, received: 0 }])
     setAddName(""); setAddQty("1"); setAddPrice("")
   }
 
@@ -460,7 +460,7 @@ function NewPOForm({ onSave, onCancel, suppliers, supplierRegistry, tt, nextPONu
 
   const addItem = () => {
     if (!addName.trim()) { tt("⚠️ Enter item name"); return }
-    setItems(prev => [...prev, { id: "pi" + Date.now(), name: addName.trim(), qty: Number(addQty) || 1, unit: addUnit, unitPrice: Number(addPrice) || 0, received: 0 }])
+    setItems(prev => [...prev, { id: genId("pi"), name: addName.trim(), qty: Number(addQty) || 1, unit: addUnit, unitPrice: Number(addPrice) || 0, received: 0 }])
     setAddName(""); setAddQty("1"); setAddPrice("")
   }
 
@@ -697,7 +697,7 @@ function ReceiveGoodsForm({ po, onSave, onCancel, suppliers, tt }) {
   const [supplier, setSupplier] = useState(po?.supplier || "")
   const [items, setItems] = useState(
     isPOMode ? po.items.filter(i => i.received < i.qty).map(i => ({
-      ...i, id: "gi" + Date.now() + Math.random().toString(36).slice(2, 6), poItemId: i.id,
+      ...i, id: genId("gi") + Math.random().toString(36).slice(2, 6), poItemId: i.id,
       qty: i.qty - i.received, // remaining qty
     })) : []
   )
@@ -718,7 +718,7 @@ function ReceiveGoodsForm({ po, onSave, onCancel, suppliers, tt }) {
   const addItem = () => {
     if (!addName.trim()) { tt("⚠️ Enter item name"); return }
     setItems(prev => [...prev, {
-      id: "gi" + Date.now(), name: addName.trim(), qty: Number(addQty) || 1,
+      id: genId("gi"), name: addName.trim(), qty: Number(addQty) || 1,
       unit: addUnit, unitPrice: Number(addPrice) || 0, poItemId: null,
     }])
     setAddName(""); setAddQty("1"); setAddPrice("")
@@ -1032,7 +1032,7 @@ export default function StoreScreen({ purchaseOrders, grns, setPurchaseOrders, s
   }
 
   const createPO = (data) => {
-    const po = { id: "po_" + Date.now(), poNumber: nextPONum(), status: "draft", ...data, created_at: new Date().toISOString() }
+    const po = { id: genId("po"), poNumber: nextPONum(), status: "draft", ...data, created_at: new Date().toISOString() }
     setPurchaseOrders(prev => [po, ...prev])
     setStoreScreen("list")
     tt(`✓ ${po.poNumber} created`)
@@ -1045,7 +1045,7 @@ export default function StoreScreen({ purchaseOrders, grns, setPurchaseOrders, s
   }
 
   const createGRN = (data) => {
-    const grn = { id: "grn_" + Date.now(), grnNumber: nextGRNNum(), ...data, created_at: new Date().toISOString() }
+    const grn = { id: genId("grn"), grnNumber: nextGRNNum(), ...data, created_at: new Date().toISOString() }
     setGrns(prev => [grn, ...prev])
 
     // Update PO received quantities if linked
@@ -1086,7 +1086,7 @@ export default function StoreScreen({ purchaseOrders, grns, setPurchaseOrders, s
       // Save as draft without navigating away
       const existing = purchaseOrders.find(p => p.poNumber === nextPONum())
       if (!existing) {
-        const po = { id: "po_" + Date.now(), poNumber: nextPONum(), status: "draft", ...data, created_at: new Date().toISOString() }
+        const po = { id: genId("po"), poNumber: nextPONum(), status: "draft", ...data, created_at: new Date().toISOString() }
         setPurchaseOrders(prev => [po, ...prev])
       }
     }} onCancel={() => setStoreScreen("list")} suppliers={suppliers} supplierRegistry={supplierRegistry} tt={tt} nextPONum={nextPONum()} />

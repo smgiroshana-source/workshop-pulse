@@ -1,6 +1,6 @@
 "use client"
 import { useWorkshop } from "../WorkshopContext"
-import { C, FONT, MONO, inp, btn, btnSm, card, NavBar, fmt } from "../WorkshopContext"
+import { C, FONT, MONO, inp, btn, btnSm, card, NavBar, fmt, genId } from "../WorkshopContext"
 
 export default function EstimateReview() {
   const {
@@ -50,8 +50,8 @@ export default function EstimateReview() {
       <div style={{ ...card, padding: "14px 16px" }}>
         <div style={{ fontSize: 14, fontWeight: 600, color: C.sub, marginBottom: 10 }}>🧴 OTHER ITEMS / SUNDRIES</div>
         <div style={{ display: "flex", gap: 8, marginBottom: sundryItems.length ? 10 : 0 }}>
-          <input value={sundryInput} onChange={e => setSundryInput(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && sundryInput.trim()) { setSundryItems(p => [...p, { id: "sun_" + Date.now(), name: sundryInput.trim(), rate: 0, qty: 1, remarks: "" }]); setSundryInput("") } }} placeholder="Type item name..." style={{ ...inp, flex: 1, padding: "12px 14px" }} />
-          {sundryInput.trim() && <button onClick={() => { setSundryItems(p => [...p, { id: "sun_" + Date.now(), name: sundryInput.trim(), rate: 0, qty: 1, remarks: "" }]); setSundryInput("") }} style={{ ...btnSm(C.accent, "#fff"), width: "auto", padding: "10px 16px" }}>Add</button>}
+          <input value={sundryInput} onChange={e => setSundryInput(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && sundryInput.trim()) { setSundryItems(p => [...p, { id: genId("sun"), name: sundryInput.trim(), rate: 0, qty: 1, remarks: "" }]); setSundryInput("") } }} placeholder="Type item name..." style={{ ...inp, flex: 1, padding: "12px 14px" }} />
+          {sundryInput.trim() && <button onClick={() => { setSundryItems(p => [...p, { id: genId("sun"), name: sundryInput.trim(), rate: 0, qty: 1, remarks: "" }]); setSundryInput("") }} style={{ ...btnSm(C.accent, "#fff"), width: "auto", padding: "10px 16px" }}>Add</button>}
         </div>
         {sundryItems.map(si => <div key={si.id} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6, padding: "8px 0", borderBottom: `1px solid ${C.border}` }}>
           <input value={si.name} onChange={e => setSundryItems(p => p.map(x => x.id === si.id ? { ...x, name: e.target.value } : x))} style={{ flex: 1, padding: "8px 10px", background: C.bg, border: "none", borderRadius: 8, color: C.text, fontSize: 16, fontFamily: FONT, outline: "none" }} />

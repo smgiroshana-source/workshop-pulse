@@ -48,6 +48,10 @@ function CashBookScreen({ cashBook, setCashBook, grns, setGrns, jobs, loadClosed
   const [openingCash, setOpeningCash] = useState(String(num(cashBook.openingCash)))
   const [editingOpening, setEditingOpening] = useState(false)
   const [editingCount, setEditingCount] = useState(false)
+  const [showTransfer, setShowTransfer] = useState(false)
+  const [transferDir, setTransferDir] = useState("c2b") // c2b: cash to bank, b2c: bank to cash
+  const [transferAmt, setTransferAmt] = useState("")
+  const [transferNote, setTransferNote] = useState("")
 
   // Refresh "today" every minute to catch midnight rollover
   const [today, setTodayState] = useState(localDateStr())
@@ -67,6 +71,8 @@ function CashBookScreen({ cashBook, setCashBook, grns, setGrns, jobs, loadClosed
     { key: "utility", label: "💡 Utility" },
     { key: "transport", label: "🚗 Transport" },
     { key: "salary", label: "👷 Salary" },
+    { key: "drawings", label: "💼 Owner Drawings" },
+    { key: "advance", label: "🤝 Staff Advance" },
     { key: "other", label: "📦 Other" },
   ]
 
@@ -148,7 +154,11 @@ function CashBookScreen({ cashBook, setCashBook, grns, setGrns, jobs, loadClosed
     if (!addExpDesc.trim() || !addExpAmt) { tt("⚠️ Enter description & amount"); return }
     const amt = num(addExpAmt)
     if (amt <= 0) { tt("⚠️ Amount must be positive"); return }
-    const exp = { id: "exp_" + Date.now(), date: viewDate, description: addExpDesc.trim(), amount: amt, category: addExpCat }
+    // Warn if expense pushes cash balance negative (only for today, drawings allowed)
+    if (isToday && addExpCat !== "drawings" && (calculatedBalance - amt) < 0) {
+      if (!confirm(`⚠️ This expense (Rs.${amt.toLocaleString()}) exceeds available cash (Rs.${calculatedBalance.toLocaleString()}).\n\nNew balance will be Rs.${(calculatedBalance - amt).toLocaleString()}.\n\nProceed anyway?`)) return
+    }
+    const exp = { id: "exp_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 6), date: viewDate, description: addExpDesc.trim(), amount: amt, category: addExpCat }
     setCashBook(prev => ({ ...prev, miscExpenses: [...(prev.miscExpenses || []), exp] }))
     setAddExpDesc(""); setAddExpAmt("")
     tt("✓ Expense added")
@@ -206,6 +216,31 @@ function CashBookScreen({ cashBook, setCashBook, grns, setGrns, jobs, loadClosed
     tt("✓ Cheque cleared, bank updated")
   }
 
+  // Cash ↔ Bank transfer (e.g., owner deposits cash to bank)
+  const doTransfer = () => {
+    const amt = num(transferAmt)
+    if (amt <= 0) { tt("⚠️ Enter valid amount"); return }
+    const isC2B = transferDir === "c2b"
+    const cashNow = num(cashBook.openingCash)
+    const bankNow = num(cashBook.bankBalance)
+    if (isC2B && amt > cashNow && !confirm(`Cash balance is only Rs.${cashNow.toLocaleString()}. Continue?`)) return
+    if (!isC2B && amt > bankNow && !confirm(`Bank balance is only Rs.${bankNow.toLocaleString()}. Continue?`)) return
+    // Record as a misc expense entry for audit, with special category "transfer"
+    const exp = {
+      id: "exp_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 6),
+      date: viewDate, description: `${isC2B ? "Cash → Bank" : "Bank → Cash"} transfer${transferNote ? ": " + transferNote : ""}`,
+      amount: amt, category: "transfer", direction: transferDir
+    }
+    setCashBook(prev => ({
+      ...prev,
+      openingCash: isC2B ? num(prev.openingCash) - amt : num(prev.openingCash) + amt,
+      bankBalance: isC2B ? num(prev.bankBalance) + amt : num(prev.bankBalance) - amt,
+      miscExpenses: [...(prev.miscExpenses || []), exp],
+    }))
+    setShowTransfer(false); setTransferAmt(""); setTransferNote("")
+    tt(`✓ ${isC2B ? "Cash → Bank" : "Bank → Cash"} Rs.${amt.toLocaleString()} transferred`)
+  }
+
   const bounceCheque = (grn) => {
     const wasCleared = !!grn.chequeCleared
     const amt = num(grn.paymentAmount || grn.totalAmount)
@@ -242,7 +277,30 @@ function CashBookScreen({ cashBook, setCashBook, grns, setGrns, jobs, loadClosed
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
         <span onClick={onBack} style={{ fontSize: 14, color: C.accent, cursor: "pointer", fontWeight: 600 }}>← Back</span>
         <span style={{ fontSize: 20, fontWeight: 700 }}>Cash Book</span>
+        <span onClick={() => setShowTransfer(true)} style={{ marginLeft: "auto", fontSize: 13, color: C.accent, cursor: "pointer", fontWeight: 600, padding: "6px 12px", background: C.accent + "10", borderRadius: 8 }}>⇄ Transfer</span>
       </div>
+
+      {/* Transfer Modal */}
+      {showTransfer && (
+        <div onClick={() => setShowTransfer(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: "#fff", borderRadius: 16, padding: 20, maxWidth: 400, width: "100%" }}>
+            <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>⇄ Transfer Money</div>
+            <div style={{ fontSize: 12, color: C.muted, marginBottom: 14 }}>Move money between cash and bank</div>
+            <div style={{ display: "flex", gap: 6, marginBottom: 14 }}>
+              <div onClick={() => setTransferDir("c2b")} style={{ flex: 1, padding: "10px", borderRadius: 10, textAlign: "center", cursor: "pointer", background: transferDir === "c2b" ? C.accent + "15" : C.bg, color: transferDir === "c2b" ? C.accent : C.sub, fontWeight: 600, fontSize: 13, border: `1.5px solid ${transferDir === "c2b" ? C.accent : C.border}` }}>💵 → 🏦<div style={{ fontSize: 11, marginTop: 2 }}>Deposit</div></div>
+              <div onClick={() => setTransferDir("b2c")} style={{ flex: 1, padding: "10px", borderRadius: 10, textAlign: "center", cursor: "pointer", background: transferDir === "b2c" ? C.accent + "15" : C.bg, color: transferDir === "b2c" ? C.accent : C.sub, fontWeight: 600, fontSize: 13, border: `1.5px solid ${transferDir === "b2c" ? C.accent : C.border}` }}>🏦 → 💵<div style={{ fontSize: 11, marginTop: 2 }}>Withdraw</div></div>
+            </div>
+            <div style={{ fontSize: 12, color: C.muted, marginBottom: 4 }}>Amount</div>
+            <input type="number" value={transferAmt} onChange={e => setTransferAmt(e.target.value)} placeholder="Rs." min="0" style={{ ...inp, fontSize: 18, fontFamily: MONO, fontWeight: 700, marginBottom: 10 }} />
+            <div style={{ fontSize: 12, color: C.muted, marginBottom: 4 }}>Note (optional)</div>
+            <input value={transferNote} onChange={e => setTransferNote(e.target.value)} placeholder="e.g. Daily deposit" style={{ ...inp, fontSize: 14, marginBottom: 14 }} />
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={() => setShowTransfer(false)} style={{ flex: 1, padding: "12px", borderRadius: 10, border: `1.5px solid ${C.border}`, background: "#fff", color: C.sub, fontWeight: 600, fontSize: 14, cursor: "pointer", fontFamily: FONT }}>Cancel</button>
+              <button onClick={doTransfer} style={{ flex: 2, padding: "12px", borderRadius: 10, border: "none", background: C.accent, color: "#fff", fontWeight: 600, fontSize: 14, cursor: "pointer", fontFamily: FONT }}>✓ Transfer</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Date navigation */}
       <div style={{ ...card, display: "flex", alignItems: "center", gap: 8, padding: "10px 12px", marginBottom: 12 }}>
@@ -612,12 +670,16 @@ function PayableScreen({ unpaidPOs, setPurchaseOrders, setGrns, cashBook, setCas
         setUploading(false)
       }
     }
-    setGrns(prev => prev.map(g => g.id === item.id ? { ...g, ...paymentData } : g))
     // Auto-deduct bank balance for bank transfer payments
     if (payMethod === "bank" && setCashBook) {
       const deduction = Number(payAmount) || 0
+      const currentBank = Number(cashBook?.bankBalance) || 0
+      if (deduction > currentBank && !confirm(`⚠️ This payment (Rs.${deduction.toLocaleString()}) exceeds bank balance (Rs.${currentBank.toLocaleString()}).\n\nResulting balance will be Rs.${(currentBank - deduction).toLocaleString()}.\n\nProceed?`)) {
+        return
+      }
       setCashBook(prev => ({ ...prev, bankBalance: (Number(prev.bankBalance) || 0) - deduction }))
     }
+    setGrns(prev => prev.map(g => g.id === item.id ? { ...g, ...paymentData } : g))
     tt("✓ Payment recorded")
     setPayingId(null)
   }
@@ -985,16 +1047,30 @@ function AppInner() {
   }
 
   // Right panel hub — shows when no job is selected on tablet
+  // Helper: invoice total from items (correct field) with fallback to entries (legacy)
+  const calcInvoiceTotal = (inv) => {
+    if (inv.items?.length) return inv.items.reduce((s, i) => s + ((Number(i.qty) || 1) * (Number(i.unit_price) || 0)), 0)
+    return (inv.entries || []).reduce((s, e) => s + ((e.approved || e.amount || 0) * (e.qty || 1)), 0)
+  }
+  // Helper: paid total — only RECEIVED insurance payments + all customer payments
+  const calcInvoicePaid = (inv) => {
+    // Use unified payments[] if present
+    const pays = inv.payments?.length ? inv.payments : [...(inv.insurance_payments || []), ...(inv.customer_payments || [])]
+    return pays.reduce((s, p) => {
+      // Insurance payments only count if received
+      if (p.type === "insurance" && p.ins_status !== "received") return s
+      return s + (Number(p.amount) || 0)
+    }, 0)
+  }
+
   function rightPanelHub() {
     // Pending payments: jobs with invoices that aren't fully paid
     const pendingPaymentJobs = jobs.filter(j => {
-      if (j.stage === "closed") return false
+      if (j.stage === "closed" || j.stage === "cancelled") return false
       const invs = j.invoices || []
       return invs.some(inv => {
-        const total = (inv.entries || []).reduce((s, e) => s + ((e.approved || e.amount || 0) * (e.qty || 1)), 0)
-        // Only count RECEIVED insurance payments toward paid total
-        const insPays = (inv.insurance_payments || []).filter(p => p.ins_status === "received")
-        const paid = [...insPays, ...(inv.customer_payments || [])].reduce((s, p) => s + (p.amount || 0), 0)
+        const total = calcInvoiceTotal(inv) - (Number(inv.discount) || 0) - (Number(inv.customer_discount) || 0)
+        const paid = calcInvoicePaid(inv)
         return total > 0 && paid < total
       })
     })
@@ -1081,10 +1157,11 @@ function AppInner() {
 
     if (rightTab === "receivable") {
       const totalReceivable = pendingPaymentJobs.reduce((sum, j) => {
-        const inv = (j.invoices || [])[0]; if (!inv) return sum
-        const total = (inv.entries || []).reduce((s, e) => s + ((e.approved || e.amount || 0) * (e.qty || 1)), 0)
-        const paid = [...(inv.insurance_payments || []), ...(inv.customer_payments || [])].reduce((s, p) => s + (p.amount || 0), 0)
-        return sum + (total - paid)
+        return sum + (j.invoices || []).reduce((s, inv) => {
+          const total = calcInvoiceTotal(inv) - (Number(inv.discount) || 0) - (Number(inv.customer_discount) || 0)
+          const paid = calcInvoicePaid(inv)
+          return s + Math.max(0, total - paid)
+        }, 0)
       }, 0)
       return <div>
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
@@ -1103,11 +1180,12 @@ function AppInner() {
             <div style={{ fontSize: 16, fontWeight: 600 }}>All payments received</div>
           </div>
         ) : pendingPaymentJobs.map(j => {
-          const inv = (j.invoices || [])[0]
-          if (!inv) return null
-          const total = (inv.entries || []).reduce((s, e) => s + ((e.approved || e.amount || 0) * (e.qty || 1)), 0)
-          const paid = [...(inv.insurance_payments || []), ...(inv.customer_payments || [])].reduce((s, p) => s + (p.amount || 0), 0)
-          const balance = total - paid
+          const jobBalance = (j.invoices || []).reduce((s, inv) => {
+            const t = calcInvoiceTotal(inv) - (Number(inv.discount) || 0) - (Number(inv.customer_discount) || 0)
+            return s + Math.max(0, t - calcInvoicePaid(inv))
+          }, 0)
+          if (jobBalance <= 0) return null
+          const balance = jobBalance
           const stage = ALL_STAGES[j.stage] || ALL_STAGES.job_received
           return (
             <div key={j.id} onClick={() => openJob(j)} style={{ ...card, padding: "12px 16px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -1337,8 +1415,8 @@ function AppInner() {
         {toast && <div key={toast} className="toast-appear" style={{ position: "fixed", top: "max(20px, calc(20px + env(safe-area-inset-top)))", left: "50%", transform: "translateX(-50%)", background: /⚠️|❌|❗|error|failed/i.test(toast) ? C.red : /✓|✅|success|saved|added|recorded|done|nice|🎉|👏/i.test(toast) ? C.green : C.text, color: "#fff", padding: "14px 22px", borderRadius: 14, fontWeight: 600, fontSize: 16, zIndex: 999, boxShadow: "0 8px 40px rgba(0,0,0,0.25)", maxWidth: "min(92vw, 500px)", textAlign: "center" }}>{toast}</div>}
 
         {/* Hidden file inputs */}
-        <input ref={uploadRef} type="file" accept="image/*" style={{ display: "none" }} id="galleryInput" onChange={async e => { const f = e.target.files[0]; if (f) { const label = showUploadMenu === "approval" && selEst ? (selEst.type === "supplementary" ? selEst.label : "Estimate") : photoTag; const docId = "d" + Date.now(); tt("⏳ Uploading…"); try { const url = await uploadPhoto(f, `${activeJobId}/${docId}.jpg`); setJobDocs(p => [...p, { id: docId, dataUrl: url, estId: selEst?.id || null, label }]); tt(`📸 ${label} photo saved`); setShowUploadMenu(null); setPhotoTag("General") } catch { tt("❌ Upload failed") } } e.target.value = "" }} />
-        <input id="camInput" type="file" accept="image/*" capture="environment" style={{ display: "none" }} onChange={async e => { const f = e.target.files[0]; if (f) { const label = showUploadMenu === "approval" && selEst ? (selEst.type === "supplementary" ? selEst.label : "Estimate") : photoTag; const docId = "d" + Date.now(); tt("⏳ Uploading…"); try { const url = await uploadPhoto(f, `${activeJobId}/${docId}.jpg`); setJobDocs(p => [...p, { id: docId, dataUrl: url, estId: selEst?.id || null, label }]); tt(`📸 ${label} photo saved`); setShowUploadMenu(null); setPhotoTag("General") } catch { tt("❌ Upload failed") } } e.target.value = "" }} />
+        <input ref={uploadRef} type="file" accept="image/*" style={{ display: "none" }} id="galleryInput" onChange={async e => { const f = e.target.files[0]; if (f) { const label = showUploadMenu === "approval" && selEst ? (selEst.type === "supplementary" ? selEst.label : "Estimate") : photoTag; const docId = "d_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 6); tt("⏳ Uploading…"); try { const url = await uploadPhoto(f, `${activeJobId}/${docId}.jpg`); setJobDocs(p => [...p, { id: docId, dataUrl: url, estId: selEst?.id || null, label }]); tt(`📸 ${label} photo saved`); setShowUploadMenu(null); setPhotoTag("General") } catch { tt("❌ Upload failed") } } e.target.value = "" }} />
+        <input id="camInput" type="file" accept="image/*" capture="environment" style={{ display: "none" }} onChange={async e => { const f = e.target.files[0]; if (f) { const label = showUploadMenu === "approval" && selEst ? (selEst.type === "supplementary" ? selEst.label : "Estimate") : photoTag; const docId = "d_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 6); tt("⏳ Uploading…"); try { const url = await uploadPhoto(f, `${activeJobId}/${docId}.jpg`); setJobDocs(p => [...p, { id: docId, dataUrl: url, estId: selEst?.id || null, label }]); tt(`📸 ${label} photo saved`); setShowUploadMenu(null); setPhotoTag("General") } catch { tt("❌ Upload failed") } } e.target.value = "" }} />
 
         {/* Image full screen viewer */}
         {showImage && (() => {

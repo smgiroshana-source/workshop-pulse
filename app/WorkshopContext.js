@@ -2,6 +2,9 @@
 import { useState, useRef, useEffect, useMemo, useCallback, createContext, useContext } from "react";
 import { supabase, uploadPhoto, deletePhoto } from "./supabase"
 
+// Collision-resistant ID generator: prefix + timestamp + random
+export const genId = (prefix = "id") => `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
+
 // ═══ CONSTANTS ═══
 export const C = {
   bg: "#F2F2F7", card: "#FFFFFF", text: "#000000", sub: "#6C6C70", muted: "#AEAEB2",
@@ -401,9 +404,14 @@ export function WorkshopProvider({ children }) {
 
     const current = prevJobsRef.current // already updated by the effect
     const toUpsert = []
+    const nowISO = new Date().toISOString()
     for (const id of dirty) {
       const job = current.find(j => j.id === id)
-      if (job) toUpsert.push(buildRow(job))
+      if (job) {
+        // Stamp updated_at so concurrent edits can be detected later
+        job.updated_at = nowISO
+        toUpsert.push(buildRow(job))
+      }
     }
     if (toUpsert.length > 0) {
       supabase.from("jobs").upsert(toUpsert)
@@ -571,7 +579,7 @@ export function WorkshopProvider({ children }) {
 
   // ═══ PDF GENERATION ═══
   const SHOP = { name: "MacForce Auto Engineering", addr: "No.555, Pannipitiya Road, Thalawathugoda", phone: "+94 772 291 219" }
-  const APP_VERSION = "2.2.0"
+  const APP_VERSION = "2.3.0"
   const pdfStyles = `@page{size:A4;margin:15mm}*{margin:0;padding:0;box-sizing:border-box;font-family:-apple-system,Arial,sans-serif}body{padding:20px;color:#1a1a1a;font-size:13px}.header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;padding-bottom:15px;border-bottom:3px solid #007AFF}.shop-name{font-size:22px;font-weight:700;color:#007AFF}.shop-detail{font-size:12px;color:#666;margin-top:3px}.doc-title{font-size:28px;font-weight:700;text-align:right;color:#1a1a1a}.doc-sub{font-size:13px;color:#666;text-align:right;margin-top:2px}.info-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:18px;background:#f8f8f8;padding:14px;border-radius:8px}.info-label{font-size:11px;color:#888;text-transform:uppercase;letter-spacing:0.5px}.info-value{font-size:15px;font-weight:600;margin-top:2px}table{width:100%;border-collapse:collapse;margin-bottom:18px}th{background:#f0f0f0;padding:10px 12px;text-align:left;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:#555;border-bottom:2px solid #ddd}td{padding:10px 12px;border-bottom:1px solid #eee;font-size:13px}.text-right{text-align:right}.text-center{text-align:center}.mono{font-family:'SF Mono','Courier New',monospace}.bold{font-weight:700}.cut{text-decoration:line-through;color:#999}.tag{display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600}.tag-sh{background:#fff3e0;color:#e65100}.tag-mr{background:#e8f5e9;color:#2e7d32}.tag-us{background:#e3f2fd;color:#1565c0}.total-row td{font-weight:700;font-size:15px;border-top:2px solid #333;background:#fafafa}.summary-box{background:#f8f8f8;padding:16px;border-radius:8px;margin-bottom:18px}.footer{margin-top:30px;padding-top:15px;border-top:1px solid #ddd;font-size:11px;color:#888;display:flex;justify-content:space-between}.stamp{margin-top:40px;display:flex;justify-content:space-between}.stamp-box{text-align:center;width:200px}.stamp-line{border-top:1px solid #333;margin-top:50px;padding-top:5px;font-size:12px}@media print{body{padding:0}.no-print{display:none}}.print-btn{position:fixed;top:15px;right:15px;background:#007AFF;color:#fff;border:none;padding:12px 24px;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer;z-index:100}`;
   const openPDF = (title, bodyHtml) => {
     try {
@@ -691,17 +699,23 @@ export function WorkshopProvider({ children }) {
 
   // ═══ CUSTOMER REGISTRY (built from all jobs) ═══
   const customerRegistry = useMemo(() => {
-    const reg = {} // key: normalized vehicle_reg -> {name, phone, make, model, insurance_name, work_type}
-    const byPhone = {} // key: normalized phone -> same
+    const reg = {} // key: normalized vehicle_reg -> entry
+    const byPhone = {} // key: normalized phone -> entry (legacy: latest vehicle)
+    const byPhoneAll = {} // key: normalized phone -> ARRAY of all vehicles for this customer
     jobs.forEach(j => {
       const ji = j.jobInfo
       const nReg = normalizeReg(ji.vehicle_reg)
       const nPhone = phoneSearchKey(ji.customer_phone)
       const entry = { customer_name: ji.customer_name, customer_phone: ji.customer_phone, vehicle_reg: nReg, vehicle_make: ji.vehicle_make, vehicle_model: ji.vehicle_model }
       if (nReg) reg[regSearchKey(ji.vehicle_reg)] = entry
-      if (nPhone && nPhone.length >= 9) byPhone[nPhone] = entry
+      if (nPhone && nPhone.length >= 9) {
+        byPhone[nPhone] = entry
+        if (!byPhoneAll[nPhone]) byPhoneAll[nPhone] = []
+        // Dedupe by vehicle_reg
+        if (!byPhoneAll[nPhone].some(e => e.vehicle_reg === nReg)) byPhoneAll[nPhone].push(entry)
+      }
     })
-    return { byReg: reg, byPhone }
+    return { byReg: reg, byPhone, byPhoneAll }
   }, [jobs])
   const startNewJob = () => {
     setNewJobInfo({ customer_name:"", customer_phone:"", vehicle_reg:"", vehicle_make:"", vehicle_model:"", insurance_name:null, work_type:"paint", job_type:null })
@@ -750,10 +764,10 @@ export function WorkshopProvider({ children }) {
     if (!isQuick && !newJobPhoto) errs.photo = true
     setNewJobErrors(errs)
     if (Object.keys(errs).length > 0) { tt(errs.reg_msg || errs.phone_msg || (!newJobInfo.job_type ? "⚠️ Select job type" : errs.photo && Object.keys(errs).length === 1 ? "⚠️ Take a vehicle photo" : "⚠️ Fill all required fields")); return }
-    const id = "job_" + Date.now()
+    const id = genId("job")
     const jobNum = String(jobs.length + 1).padStart(3, "0")
     const jobDocs = []
-    if (newJobPhoto) jobDocs.push({ id: "d" + Date.now(), dataUrl: newJobPhoto, estId: null, label: "Vehicle" })
+    if (newJobPhoto) jobDocs.push({ id: genId("d"), dataUrl: newJobPhoto, estId: null, label: "Vehicle" })
     const finalInfo = { ...newJobInfo, vehicle_reg: normReg, customer_phone: ph.normalized, insurance_name: newJobInfo.job_type === "insurance" ? newJobInfo.insurance_name : "" }
     const newJob = { id, jobNumber: `JOB-${jobNum}`, jobInfo: finalInfo, stage: "job_received", paused: false, onHold: false, partsOrdered: false, partsArrived: {}, partsQuotation: [], pqStatus: "draft", pqApprovalPhoto: null, pqLumpSum: null, pqLumpMode: false, customerConfirmed: false, estimates: [], invoices: [], jobDocs, qcChecks: {}, supplierInvoices: [], followUpNote: "", followUpAttempts: 0, followUpLog: [], jobCosts: [], created_at: new Date().toISOString(), ...(newJobInfo.is_warranty ? { is_warranty: true, parent_job_id: newJobInfo.parent_job_id, parent_job_number: newJobInfo.parent_job_number, parent_job_date: newJobInfo.parent_job_date } : {}) }
     setJobs(prev => [newJob, ...prev])
@@ -869,7 +883,7 @@ export function WorkshopProvider({ children }) {
       if (linkedInv && !confirm(`⚠️ Invoice ${linkedInv.invoice_number} already uses this estimate. Editing may cause inconsistency between estimate and invoice. Continue?`)) return
     }
     const isNewSupplementary = !selEst && estimates.length > 0
-    const newEstId = selEst ? selEst.id : "est_" + Date.now() // pre-assign so PQ uses same ID
+    const newEstId = selEst ? selEst.id : genId("est") // pre-assign so PQ uses same ID
 
     if (selEst) {
       const autoApprove = isDirectJob
@@ -944,7 +958,27 @@ export function WorkshopProvider({ children }) {
   // finalizeApproval advances from est_ready -> approved_dismantle
 
   // ═══ APPROVAL ═══
-  const startApproval = (est) => { setSelEst(est); setApprovalItems(est.entries.map(e => { const part = est.parts.find(p => p.id === e.part_id); return { ...e, part_name: part?.name || "Unknown", original_rate: e.rate, approved_rate: null, approval_status: "pending" } })); setApprovalCat(0); setScreen("approve") }
+  const startApproval = (est) => {
+    // Block re-approval if work has already started
+    const job = jobs.find(j => j.id === activeJobId)
+    if (est.status === "approved" && job) {
+      const workStarted = ["in_progress", "paint_stage", "qc", "ready", "delivered", "follow_up", "closed"].includes(job.stage)
+      if (workStarted && !confirm(`⚠️ This estimate was already approved and work has started (stage: ${job.stage}).\n\nRe-doing approval may cause invoice mismatches. Continue?`)) return
+    }
+    setSelEst(est)
+    // Preserve previous approval as `previous_approval` for audit trail
+    const prevSnapshot = est.status === "approved" ? { approved_entries: est.approved_entries, approved_total: est.approved_total, reset_at: new Date().toISOString() } : null
+    if (prevSnapshot) {
+      setEstimates(prev => prev.map(e => e.id === est.id ? { ...e, previous_approval: prevSnapshot } : e))
+    }
+    setApprovalItems(est.entries.map(e => {
+      const part = est.parts.find(p => p.id === e.part_id)
+      // If re-approving, pre-fill with previous approved rate
+      const prevApproved = est.approved_entries?.find(ae => ae.id === e.id)
+      return { ...e, part_name: part?.name || "Unknown", original_rate: e.rate, approved_rate: prevApproved?.approved_rate ?? null, approval_status: prevApproved?.approval_status || "pending", remarks: prevApproved?.remarks || e.remarks }
+    }))
+    setApprovalCat(0); setScreen("approve")
+  }
   const setApproved = (eid, rate) => { setApprovalItems(prev => prev.map(i => { if (i.id !== eid) return i; const r = rate === "" ? null : Number(rate); let s = "pending"; if (r !== null && isFinite(r)) { s = r === i.original_rate ? "approved" : r < i.original_rate ? "cut" : "upgraded" } return { ...i, approved_rate: r, approval_status: s } })) }
   const approveAsIs = (eid) => { const i = approvalItems.find(x => x.id === eid); if (i) setApproved(eid, i.original_rate) }
   const markUseSame = (eid) => {
@@ -984,8 +1018,15 @@ export function WorkshopProvider({ children }) {
       (est.approved_entries || est.entries).forEach((e, idx) => { const part = est.parts.find(p => p.id === e.part_id); items.push({ id: "ii_" + Date.now() + "_" + idx + "_" + Math.random().toString(36).slice(2, 4), description: part?.name || e.part_name || "Item", category: e.category, qty: e.qty, unit_price: e.rate || e.approved_rate || 0, remarks: e.remarks || "", is_modified: false, source_est: est.number }) })
       ;(est.sundries || []).forEach((s, idx) => { if (s.remarks !== "M/R" && s.rate > 0) items.push({ id: "ii_sun_" + Date.now() + "_" + idx + "_" + Math.random().toString(36).slice(2, 4), description: s.name, category: "sundry", qty: s.qty || 1, unit_price: s.rate, remarks: s.remarks || "", is_modified: false, source_est: est.number }) })
     })
-    const inv = { id: "inv_" + Date.now(), invoice_number: `INV-${new Date().getFullYear()}-${String(invoices.length + 1).padStart(4, "0")}`, source_estimates: ae.map(e => e.number), status: "draft", items, payments: [], created_at: new Date().toISOString() }
+    const inv = { id: "inv_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6), invoice_number: nextInvoiceNumber(), source_estimates: ae.map(e => e.number), status: "draft", items, payments: [], created_at: new Date().toISOString() }
     setInvoices(p => [...p, inv]); setSelInv(inv); setScreen("inv_detail"); tt("Invoice created")
+  }
+  // Year-aware invoice number — counts only THIS year's invoices
+  const nextInvoiceNumber = () => {
+    const yr = new Date().getFullYear()
+    const prefix = `INV-${yr}-`
+    const thisYearCount = jobs.reduce((c, j) => c + (j.invoices || []).filter(i => (i.invoice_number || "").startsWith(prefix)).length, 0) + invoices.filter(i => (i.invoice_number || "").startsWith(prefix)).length
+    return `${prefix}${String(thisYearCount + 1).padStart(4, "0")}`
   }
   // Minor job invoice: from jobCosts
   const generateMinorInvoice = () => {
@@ -1004,7 +1045,7 @@ export function WorkshopProvider({ children }) {
       is_modified: false,
       source_est: "Quick Job"
     }))
-    const inv = { id: "inv_" + Date.now(), invoice_number: `INV-${new Date().getFullYear()}-${String(invoices.length + 1).padStart(4, "0")}`, source_estimates: ["Quick Job"], status: "draft", items, payments: [], created_at: new Date().toISOString() }
+    const inv = { id: "inv_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6), invoice_number: nextInvoiceNumber(), source_estimates: ["Quick Job"], status: "draft", items, payments: [], created_at: new Date().toISOString() }
     setInvoices(p => [...p, inv]); setSelInv(inv); setScreen("inv_detail"); tt("Invoice created -- set labour charges")
   }
   const invTotal = inv => (inv?.items || []).reduce((s, i) => s + i.qty * i.unit_price, 0)
@@ -1051,7 +1092,7 @@ export function WorkshopProvider({ children }) {
     const amt = Number(payAmount)
     if (!isFinite(amt) || amt <= 0) { tt("⚠️ Enter a valid payment amount"); return }
     if (payType === "insurance" && !insPayPhoto) { tt("⚠️ Attach release letter/cheque photo"); return }
-    const pay = { id: "pay_" + Date.now(), amount: amt, type: payType, date: new Date().toISOString(), ...(payType === "insurance" ? { ins_status: "recorded", photo: insPayPhoto, reference: payRef } : { method: payMethod, reference: payRef }) }
+    const pay = { id: genId("pay"), amount: amt, type: payType, date: new Date().toISOString(), ...(payType === "insurance" ? { ins_status: "recorded", photo: insPayPhoto, reference: payRef } : { method: payMethod, reference: payRef }) }
     const np = [...(selInv.payments || []), pay]
     const updated = { ...selInv, payments: np }
     const ns = calcStatus(updated)
