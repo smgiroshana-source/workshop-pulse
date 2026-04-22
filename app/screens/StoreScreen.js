@@ -1022,20 +1022,26 @@ export default function StoreScreen({ purchaseOrders, grns, setPurchaseOrders, s
   // Unique supplier list from POs & GRNs
   const suppliers = [...new Set([...purchaseOrders.map(p => p.supplier), ...grns.map(g => g.supplier)].filter(Boolean))]
 
-  const nextPONum = () => {
-    const max = purchaseOrders.reduce((m, p) => { const n = parseInt(p.poNumber?.replace("PO-", ""), 10); return n > m ? n : m }, 0)
+  // Race-resistant numbering: re-check inside setter against latest state
+  const allocatePONum = (existing) => {
+    const max = existing.reduce((m, p) => { const n = parseInt(p.poNumber?.replace("PO-", ""), 10); return n > m ? n : m }, 0)
     return `PO-${String(max + 1).padStart(3, "0")}`
   }
-  const nextGRNNum = () => {
-    const max = grns.reduce((m, g) => { const n = parseInt(g.grnNumber?.replace("GRN-", ""), 10); return n > m ? n : m }, 0)
+  const allocateGRNNum = (existing) => {
+    const max = existing.reduce((m, g) => { const n = parseInt(g.grnNumber?.replace("GRN-", ""), 10); return n > m ? n : m }, 0)
     return `GRN-${String(max + 1).padStart(3, "0")}`
   }
 
   const createPO = (data) => {
-    const po = { id: genId("po"), poNumber: nextPONum(), status: "draft", ...data, created_at: new Date().toISOString() }
-    setPurchaseOrders(prev => [po, ...prev])
+    let createdNum = ""
+    setPurchaseOrders(prev => {
+      const num = allocatePONum(prev)
+      createdNum = num
+      const po = { id: genId("po"), poNumber: num, status: "draft", ...data, created_at: new Date().toISOString() }
+      return [po, ...prev]
+    })
     setStoreScreen("list")
-    tt(`✓ ${po.poNumber} created`)
+    tt(`✓ ${createdNum} created`)
   }
 
   const updatePO = (id, updates) => {
@@ -1045,8 +1051,13 @@ export default function StoreScreen({ purchaseOrders, grns, setPurchaseOrders, s
   }
 
   const createGRN = (data) => {
-    const grn = { id: genId("grn"), grnNumber: nextGRNNum(), ...data, created_at: new Date().toISOString() }
-    setGrns(prev => [grn, ...prev])
+    let createdNum = ""
+    setGrns(prev => {
+      const num = allocateGRNNum(prev)
+      createdNum = num
+      const grn = { id: genId("grn"), grnNumber: num, ...data, created_at: new Date().toISOString() }
+      return [grn, ...prev]
+    })
 
     // Update PO received quantities if linked
     if (data.poId) {
@@ -1065,7 +1076,7 @@ export default function StoreScreen({ purchaseOrders, grns, setPurchaseOrders, s
 
     setStoreScreen("list")
     setStoreTab("grns")
-    tt(`✓ ${grn.grnNumber} recorded`)
+    tt(`✓ ${createdNum} recorded`)
   }
 
   // Sub-screens
@@ -1083,13 +1094,13 @@ export default function StoreScreen({ purchaseOrders, grns, setPurchaseOrders, s
 
   if (storeScreen === "new_po") {
     return <NewPOForm onSave={createPO} onSaveQuiet={(data) => {
-      // Save as draft without navigating away
-      const existing = purchaseOrders.find(p => p.poNumber === nextPONum())
-      if (!existing) {
-        const po = { id: genId("po"), poNumber: nextPONum(), status: "draft", ...data, created_at: new Date().toISOString() }
-        setPurchaseOrders(prev => [po, ...prev])
-      }
-    }} onCancel={() => setStoreScreen("list")} suppliers={suppliers} supplierRegistry={supplierRegistry} tt={tt} nextPONum={nextPONum()} />
+      // Save as draft without navigating away — atomic
+      setPurchaseOrders(prev => {
+        const num = allocatePONum(prev)
+        const po = { id: genId("po"), poNumber: num, status: "draft", ...data, created_at: new Date().toISOString() }
+        return [po, ...prev]
+      })
+    }} onCancel={() => setStoreScreen("list")} suppliers={suppliers} supplierRegistry={supplierRegistry} tt={tt} nextPONum={allocatePONum(purchaseOrders)} />
   }
   if (storeScreen === "view_po" && activePO) {
     const livePO = purchaseOrders.find(p => p.id === activePO.id) || activePO

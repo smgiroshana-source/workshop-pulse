@@ -494,15 +494,24 @@ export function WorkshopProvider({ children }) {
   const cat = jobCats[activeCat] || jobCats[0]; const aCat = jobCats[approvalCat] || jobCats[0]
   const pipeline = buildPipeline(isInsurance, estimates, workType, jobInfo.job_type)
   const isMinorJob = jobInfo.job_type === "quick"
-  const stageIdx = pipeline.indexOf(jobStage)
+  let stageIdx = pipeline.indexOf(jobStage)
+  // If current stage no longer in pipeline (e.g. paint removed from estimate while in paint_stage),
+  // find nearest valid stage based on a fixed canonical order
+  if (stageIdx === -1) {
+    const canonicalOrder = ["job_received","est_pending","est_ready","approved_dismantle","in_progress","paint_stage","qc","ready","delivered","follow_up","closed"]
+    const currentIdxInCanonical = canonicalOrder.indexOf(jobStage)
+    // Find the next pipeline stage that's at-or-after current canonical position
+    const nearest = pipeline.find(s => canonicalOrder.indexOf(s) >= currentIdxInCanonical) || pipeline[pipeline.length - 1]
+    stageIdx = pipeline.indexOf(nearest)
+  }
   const stageInfo = ALL_STAGES[jobStage] || ALL_STAGES.job_received
   const nextStage = stageIdx < pipeline.length - 1 ? pipeline[stageIdx + 1] : null
   const prevStage = stageIdx > 0 ? pipeline[stageIdx - 1] : null
   const hasEntry = (pid, ck) => estEntries.some(e => e.part_id === pid && e.category === ck)
   const getEntry = (pid, ck) => estEntries.find(e => e.part_id === pid && e.category === ck)
-  const catTotal = ck => estEntries.filter(e => e.category === ck).reduce((s, e) => s + e.qty * e.rate, 0)
-  const sundryTotal = sundryItems.reduce((s, i) => s + (i.remarks === "M/R" ? 0 : (i.rate * (i.qty || 1))), 0)
-  const grandTotal = estEntries.reduce((s, e) => s + e.qty * e.rate, 0) + sundryTotal
+  const catTotal = ck => estEntries.filter(e => e.category === ck).reduce((s, e) => s + (e.remarks === "M/R" ? 0 : (Number(e.qty) || 0) * (Number(e.rate) || 0)), 0)
+  const sundryTotal = sundryItems.reduce((s, i) => s + (i.remarks === "M/R" ? 0 : (Number(i.rate) || 0) * (Number(i.qty) || 1)), 0)
+  const grandTotal = estEntries.reduce((s, e) => s + (e.remarks === "M/R" ? 0 : (Number(e.qty) || 0) * (Number(e.rate) || 0)), 0) + sundryTotal
   const activeJob = jobs.find(j => j.id === activeJobId)
 
   // Parts tracker: get all Replace parts from all estimates
@@ -833,7 +842,19 @@ export function WorkshopProvider({ children }) {
   const goBackStage = () => {
     if (prevStage) {
       setJobStage(prevStage)
-      setJobs(prev => prev.map(j => j.id === activeJobId ? { ...j, stage: prevStage } : j))
+      setJobs(prev => prev.map(j => {
+        if (j.id !== activeJobId) return j
+        const patch = { ...j, stage: prevStage }
+        // Clear follow-up data if going back from delivered/follow_up
+        if (j.stage === "follow_up" || j.stage === "delivered") {
+          patch.followUpNote = ""
+          patch.followUpAttempts = 0
+          patch.followUpLog = []
+          patch.holdUntil = null
+          patch.onHold = false
+        }
+        return patch
+      }))
       tt(`Back to ${ALL_STAGES[prevStage].label}`)
     }
   }
@@ -866,16 +887,23 @@ export function WorkshopProvider({ children }) {
   }
 
   // ═══ ESTIMATE FUNCTIONS ═══
-  const addPart = (name) => { const t = name.trim(); if (!t || estParts.find(p => p.name.toLowerCase() === t.toLowerCase())) return; setEstParts(p => [...p, { id: "p" + Date.now() + Math.random().toString(36).slice(2, 5), name: t }]); setPartInput(""); setSuggestions([]); setTimeout(() => partInputRef.current?.focus(), 30) }
+  const addPart = (name) => {
+    const t = (name || "").trim()
+    if (!t) { tt("⚠️ Enter a part name"); return }
+    if (estParts.find(p => p.name.toLowerCase() === t.toLowerCase())) { tt("⚠️ Part already added"); return }
+    setEstParts(p => [...p, { id: genId("p"), name: t }])
+    setPartInput(""); setSuggestions([])
+    setTimeout(() => partInputRef.current?.focus(), 30)
+  }
   const removePart = (pid) => { setEstParts(p => p.filter(x => x.id !== pid)); setEstEntries(e => e.filter(x => x.part_id !== pid)) }
   const handlePartInput = (val) => { setPartInput(val); if (val.length >= 2) { const q = val.toLowerCase(); const ex = estParts.map(p => p.name.toLowerCase()); setSuggestions(COMMON_PARTS.filter(p => p.toLowerCase().includes(q) && !ex.includes(p.toLowerCase())).slice(0, 6)) } else setSuggestions([]) }
-  const toggleCheck = (part) => { const ck = cat.key; if (hasEntry(part.id, ck)) setEstEntries(e => e.filter(x => !(x.part_id === part.id && x.category === ck))); else { setEstEntries(e => [...e, { id: "e" + Date.now(), part_id: part.id, category: ck, qty: 1, rate: 0, remarks: ck === "replace" ? "S/H" : "" }]); setTimeout(() => rateRefs.current[part.id]?.focus(), 50) } }
+  const toggleCheck = (part) => { const ck = cat.key; if (hasEntry(part.id, ck)) setEstEntries(e => e.filter(x => !(x.part_id === part.id && x.category === ck))); else { setEstEntries(e => [...e, { id: genId("e"), part_id: part.id, category: ck, qty: 1, rate: 0, remarks: ck === "replace" ? "S/H" : "" }]); setTimeout(() => rateRefs.current[part.id]?.focus(), 50) } }
   const setRate = (pid, rate) => { setEstEntries(e => e.map(x => x.part_id === pid && x.category === cat.key ? { ...x, rate: Number(rate) || 0 } : x)) }
   const toggleRemarks = (pid) => { setEstEntries(e => e.map(x => x.part_id === pid && x.category === cat.key ? { ...x, remarks: x.remarks === "S/H" ? "M/R" : "S/H" } : x)) }
   const handleRateEnter = (pid) => { const ci = estParts.filter(p => hasEntry(p.id, cat.key)); const idx = ci.findIndex(p => p.id === pid); for (let i = idx + 1; i < ci.length; i++) { rateRefs.current[ci[i].id]?.focus(); return } tt("✓ Done") }
 
   const saveEstimate = () => {
-    const validSundries = sundryItems.filter(s => (Number(s.rate) || 0) > 0 || s.remarks === "M/R")
+    const validSundries = sundryItems.filter(s => (s.name || "").trim() && ((Number(s.rate) || 0) > 0 || s.remarks === "M/R")).map(s => ({ ...s, name: s.name.trim() }))
     const tot = estEntries.reduce((s, e) => s + (Number(e.qty) || 0) * (Number(e.rate) || 0), 0) + validSundries.reduce((s, i) => s + (i.remarks === "M/R" ? 0 : ((Number(i.rate) || 0) * (Number(i.qty) || 1))), 0)
     // Warn if editing estimate that already has linked invoices
     if (selEst && invoices.length > 0) {
@@ -898,7 +926,19 @@ export function WorkshopProvider({ children }) {
       if (insuranceResetApproval) {
         // Also reset job stage if in approved_dismantle (re-approval needed)
         setJobs(prev => prev.map(j => j.id === activeJobId && j.stage === "approved_dismantle" ? { ...j, stage: "est_ready" } : j))
-        tt(`⚠️ ${selEst.number} edited — re-approval required`)
+        // Rebuild PQ to include any new replace parts and remove deleted ones
+        const newReplaceEntries = estEntries.filter(e => e.category === "replace")
+        setPartsQuotation(prev => {
+          const existingByPartId = Object.fromEntries(prev.map(pq => [pq.partId.split("_")[0], pq]))
+          return newReplaceEntries.map(e => {
+            const part = estParts.find(p => p.id === e.part_id)
+            const existing = existingByPartId[e.part_id]
+            if (existing) return { ...existing, partName: part?.name || existing.partName, remarks: e.remarks || existing.remarks }
+            return { id: genId("pq"), partId: e.part_id + "_" + selEst.id, partName: part?.name || "Unknown", estLabel: selEst?.label || "Estimate", supplier: "", quotedPrice: null, approvedPrice: null, remarks: e.remarks || "S/H" }
+          })
+        })
+        setPqStatus("draft"); setPqApprovalPhoto(null)
+        tt(`⚠️ ${selEst.number} edited — PQ + approval reset`)
       } else {
         tt(`${selEst.number} updated`)
       }
@@ -1048,7 +1088,7 @@ export function WorkshopProvider({ children }) {
     const inv = { id: "inv_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6), invoice_number: nextInvoiceNumber(), source_estimates: ["Quick Job"], status: "draft", items, payments: [], created_at: new Date().toISOString() }
     setInvoices(p => [...p, inv]); setSelInv(inv); setScreen("inv_detail"); tt("Invoice created -- set labour charges")
   }
-  const invTotal = inv => (inv?.items || []).reduce((s, i) => s + i.qty * i.unit_price, 0)
+  const invTotal = inv => (inv?.items || []).reduce((s, i) => s + (Number(i.qty) || 0) * (Number(i.unit_price) || 0), 0)
   const invNet = inv => invTotal(inv) - (inv?.discount || 0)
   const invInsPayments = inv => (inv?.payments || []).filter(p => p.type === "insurance")
   const invCustPayments = inv => (inv?.payments || []).filter(p => p.type === "customer")
@@ -1072,7 +1112,15 @@ export function WorkshopProvider({ children }) {
     // All insurance payments must be actually received (not just recorded)
     return ip.every(p => p.ins_status === "received")
   }
-  const updateInvItem = (iid, patch) => { const upd = inv => ({ ...inv, items: inv.items.map(i => i.id === iid ? { ...i, ...patch, is_modified: true } : i) }); setInvoices(p => p.map(inv => inv.id === selInv.id ? upd(inv) : inv)); setSelInv(prev => upd(prev)) }
+  const updateInvItem = (iid, patch) => {
+    // Coerce numeric fields
+    const safePatch = { ...patch }
+    if ("unit_price" in safePatch) safePatch.unit_price = Number(safePatch.unit_price) || 0
+    if ("qty" in safePatch) safePatch.qty = Number(safePatch.qty) || 0
+    const upd = inv => ({ ...inv, items: inv.items.map(i => i.id === iid ? { ...i, ...safePatch, is_modified: true } : i) })
+    setInvoices(p => p.map(inv => inv.id === selInv.id ? upd(inv) : inv))
+    setSelInv(prev => upd(prev))
+  }
   const removeInvItem = (iid) => {
     // Block removal if payments exist (recalc of balance gets messy)
     if ((selInv.payments || []).length > 0) { tt("⚠️ Delete all payments first"); return }

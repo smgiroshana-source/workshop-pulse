@@ -1509,11 +1509,11 @@ function AppInner() {
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
                       <div>
                         <div style={{ fontSize: 12, color: C.muted, marginBottom: 3 }}>Supplier</div>
-                        <input value={p.supplier} onChange={e => setPartsQuotation(prev => prev.map(x => x.id === p.id ? { ...x, supplier: e.target.value } : x))} placeholder="Toyota Lanka" style={{ ...inp, fontSize: 16 }} />
+                        <input value={p.supplier} disabled={pqStatus === "approved"} onChange={e => setPartsQuotation(prev => prev.map(x => x.id === p.id ? { ...x, supplier: e.target.value } : x))} placeholder="Toyota Lanka" style={{ ...inp, fontSize: 16, opacity: pqStatus === "approved" ? 0.6 : 1 }} />
                       </div>
                       <div>
-                        <div style={{ fontSize: 12, color: C.muted, marginBottom: 3 }}>Quoted Price</div>
-                        <input type="number" value={p.quotedPrice === null ? "" : p.quotedPrice} onChange={e => setPartsQuotation(prev => prev.map(x => x.id === p.id ? { ...x, quotedPrice: e.target.value === "" ? null : Number(e.target.value) } : x))} placeholder="0" style={{ ...inp, fontSize: 20, fontFamily: MONO, fontWeight: 700, textAlign: "right" }} />
+                        <div style={{ fontSize: 12, color: C.muted, marginBottom: 3 }}>Quoted Price {pqStatus === "approved" && <span style={{ color: C.orange, fontSize: 10, fontWeight: 600 }}>🔒 LOCKED</span>}</div>
+                        <input type="number" value={p.quotedPrice === null ? "" : p.quotedPrice} disabled={pqStatus === "approved"} onChange={e => setPartsQuotation(prev => prev.map(x => x.id === p.id ? { ...x, quotedPrice: e.target.value === "" ? null : Number(e.target.value) } : x))} placeholder="0" style={{ ...inp, fontSize: 20, fontFamily: MONO, fontWeight: 700, textAlign: "right", opacity: pqStatus === "approved" ? 0.6 : 1 }} />
                       </div>
                     </div>
                   </div>
