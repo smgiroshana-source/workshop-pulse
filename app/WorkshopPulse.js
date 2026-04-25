@@ -1180,12 +1180,16 @@ function AppInner() {
             <div style={{ fontSize: 16, fontWeight: 600 }}>All payments received</div>
           </div>
         ) : pendingPaymentJobs.map(j => {
+          const jobTotal = (j.invoices || []).reduce((s, inv) => {
+            return s + (calcInvoiceTotal(inv) - (Number(inv.discount) || 0) - (Number(inv.customer_discount) || 0))
+          }, 0)
           const jobBalance = (j.invoices || []).reduce((s, inv) => {
             const t = calcInvoiceTotal(inv) - (Number(inv.discount) || 0) - (Number(inv.customer_discount) || 0)
             return s + Math.max(0, t - calcInvoicePaid(inv))
           }, 0)
           if (jobBalance <= 0) return null
           const balance = jobBalance
+          const total = jobTotal
           const stage = ALL_STAGES[j.stage] || ALL_STAGES.job_received
           return (
             <div key={j.id} onClick={() => openJob(j)} style={{ ...card, padding: "12px 16px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
