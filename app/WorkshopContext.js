@@ -235,6 +235,124 @@ export function WorkshopProvider({ children }) {
   // Clear search when switching home tabs (prevents stale query carrying between Jobs/Store)
   useEffect(() => { setSearchQuery("") }, [homeTab])
 
+  // ═══ DEMO DATA: comprehensive QA scenarios ═══
+  // 14 jobs covering: insurance×stages, direct, quick, cancelled, warranty, hold, partial pay
+  const buildDemoJobs = () => {
+    const today = new Date()
+    const daysAgo = (n) => new Date(today.getTime() - n * 86400000).toISOString()
+    const baseJob = (extra) => ({
+      paused: false, onHold: false, partsOrdered: false, partsArrived: {}, partsQuotation: [],
+      pqStatus: "draft", pqApprovalPhoto: null, pqLumpSum: null, pqLumpMode: false,
+      customerConfirmed: false, estimates: [], invoices: [], jobDocs: [], qcChecks: {},
+      supplierInvoices: [], followUpNote: "", followUpAttempts: 0, followUpLog: [], jobCosts: [],
+      ...extra,
+    })
+    return [
+      // 1. Insurance — just received
+      baseJob({ id: "demo_j1", jobNumber: "JOB-001", stage: "job_received", created_at: daysAgo(0),
+        jobInfo: { customer_name: "Mr. Kasun Perera", customer_phone: "0771234567", vehicle_reg: "CBB 5949", vehicle_make: "Toyota", vehicle_model: "Aqua", insurance_name: "SLIC", work_type: "paint", job_type: "insurance" } }),
+      // 2. Insurance — estimate pending (in progress)
+      baseJob({ id: "demo_j2", jobNumber: "JOB-002", stage: "est_pending", created_at: daysAgo(1),
+        jobInfo: { customer_name: "Mrs. Niluka Silva", customer_phone: "0712345678", vehicle_reg: "KG 5940", vehicle_make: "Nissan", vehicle_model: "Axio", insurance_name: "Ceylinco General", work_type: "paint", job_type: "insurance" } }),
+      // 3. Insurance — estimate ready, awaiting assessor
+      baseJob({ id: "demo_j3", jobNumber: "JOB-003", stage: "est_ready", created_at: daysAgo(2),
+        jobInfo: { customer_name: "Mr. Sampath Bandara", customer_phone: "0723456789", vehicle_reg: "CAB 1234", vehicle_make: "Honda", vehicle_model: "Vezel", insurance_name: "SLIC", work_type: "paint", job_type: "insurance" },
+        estimates: [{ id: "est_d3", number: "EST-001", type: "insurance_claim", label: "Insurance Claim", status: "draft", parts: [{ id: "p_d3a", name: "Front Bumper" }], entries: [{ id: "e_d3a", part_id: "p_d3a", category: "replace", qty: 1, rate: 35000, remarks: "S/H" }], sundries: [], total: 35000, created_at: daysAgo(2) }] }),
+      // 4. Insurance — approved, awaiting parts
+      baseJob({ id: "demo_j4", jobNumber: "JOB-004", stage: "approved_dismantle", created_at: daysAgo(5),
+        jobInfo: { customer_name: "Ms. Tharushi Fernando", customer_phone: "0773456789", vehicle_reg: "WP CAB 7890", vehicle_make: "Suzuki", vehicle_model: "Wagon R", insurance_name: "Allianz Insurance Lanka", work_type: "paint", job_type: "insurance" },
+        estimates: [{ id: "est_d4", number: "EST-001", type: "insurance_claim", label: "Insurance Claim", status: "approved", parts: [{ id: "p_d4a", name: "Rear Bumper" }, { id: "p_d4b", name: "Boot Lid" }], entries: [{ id: "e_d4a", part_id: "p_d4a", category: "replace", qty: 1, rate: 28000, remarks: "S/H" }, { id: "e_d4b", part_id: "p_d4b", category: "remove_refix", qty: 1, rate: 12000 }], sundries: [], total: 40000, approved_entries: [{ id: "e_d4a", part_id: "p_d4a", category: "replace", qty: 1, rate: 25000, approved_rate: 25000, approval_status: "cut", remarks: "S/H" }, { id: "e_d4b", part_id: "p_d4b", category: "remove_refix", qty: 1, rate: 12000, approved_rate: 12000, approval_status: "approved" }], approved_total: 37000, created_at: daysAgo(5) }],
+        partsQuotation: [{ id: "pq_d4", partId: "p_d4a_est_d4", partName: "Rear Bumper", estLabel: "Insurance Claim", supplier: "Toyota Lanka", quotedPrice: 22000, approvedPrice: 22000, remarks: "S/H" }],
+        pqStatus: "approved", pqApprovalPhoto: "https://placeholder.co/400x300?text=PQ+Approval" }),
+      // 5. Insurance — in progress, paint+mech work
+      baseJob({ id: "demo_j5", jobNumber: "JOB-005", stage: "in_progress", created_at: daysAgo(8),
+        jobInfo: { customer_name: "Mr. Roshan Wickramasinghe", customer_phone: "0759876543", vehicle_reg: "CAR 4567", vehicle_make: "Mitsubishi", vehicle_model: "Lancer", insurance_name: "Continental Insurance", work_type: "both", job_type: "insurance" },
+        estimates: [{ id: "est_d5", number: "EST-001", type: "insurance_claim", label: "Insurance Claim", status: "approved", parts: [{ id: "p_d5a", name: "RHS Front Door" }], entries: [{ id: "e_d5a", part_id: "p_d5a", category: "replace", qty: 1, rate: 45000, remarks: "S/H" }, { id: "e_d5b", part_id: "p_d5a", category: "booth_painting", qty: 1, rate: 15000 }], sundries: [], total: 60000, approved_entries: [{ id: "e_d5a", part_id: "p_d5a", category: "replace", qty: 1, rate: 45000, approved_rate: 45000, approval_status: "approved" }, { id: "e_d5b", part_id: "p_d5a", category: "booth_painting", qty: 1, rate: 15000, approved_rate: 15000, approval_status: "approved" }], approved_total: 60000, created_at: daysAgo(8) }],
+        partsOrdered: true, partsArrived: { "p_d5a": true } }),
+      // 6. Direct — non-insurance job in progress
+      baseJob({ id: "demo_j6", jobNumber: "JOB-006", stage: "in_progress", created_at: daysAgo(3),
+        jobInfo: { customer_name: "Mr. Ajith Kumara", customer_phone: "0716543210", vehicle_reg: "GC 7890", vehicle_make: "Toyota", vehicle_model: "Hilux", insurance_name: "", work_type: "mechanical", job_type: "direct" },
+        estimates: [{ id: "est_d6", number: "EST-001", type: "quotation", label: "Quotation", status: "approved", parts: [{ id: "p_d6a", name: "Brake Pads (Front)" }], entries: [{ id: "e_d6a", part_id: "p_d6a", category: "replace", qty: 1, rate: 8500 }, { id: "e_d6b", part_id: "p_d6a", category: "labour", qty: 1, rate: 3500 }], sundries: [{ id: "sun_d6", name: "Brake Fluid", rate: 1200, qty: 1 }], total: 13200, approved_entries: [{ id: "e_d6a", part_id: "p_d6a", category: "replace", qty: 1, rate: 8500 }, { id: "e_d6b", part_id: "p_d6a", category: "labour", qty: 1, rate: 3500 }], approved_total: 12000, created_at: daysAgo(3) }] }),
+      // 7. Quick job — being worked on
+      baseJob({ id: "demo_j7", jobNumber: "JOB-007", stage: "job_received", created_at: daysAgo(0),
+        jobInfo: { customer_name: "Walk-in Customer", customer_phone: "0789876543", vehicle_reg: "KP 1997", vehicle_make: "Toyota", vehicle_model: "Aqua", insurance_name: "", work_type: "paint", job_type: "quick" },
+        jobCosts: [{ id: "jc_d7a", name: "Touch-up paint", type: "part", source: "ex_stock", cost: 0, confirmed: true }, { id: "jc_d7b", name: "Polishing labour", type: "labour", source: null, cost: 2500, confirmed: true }] }),
+      // 8. Insurance — closed (fully paid)
+      baseJob({ id: "demo_j8", jobNumber: "JOB-008", stage: "closed", created_at: daysAgo(60),
+        jobInfo: { customer_name: "Dr. Lakshman Gunaratne", customer_phone: "0704567890", vehicle_reg: "BBB 1111", vehicle_make: "Mercedes-Benz", vehicle_model: "C200", insurance_name: "Janashakthi Insurance", work_type: "paint", job_type: "insurance" },
+        estimates: [{ id: "est_d8", number: "EST-001", type: "insurance_claim", label: "Insurance Claim", status: "approved", parts: [{ id: "p_d8a", name: "Front Bumper" }], entries: [{ id: "e_d8a", part_id: "p_d8a", category: "replace", qty: 1, rate: 85000 }], sundries: [], total: 85000, approved_entries: [{ id: "e_d8a", part_id: "p_d8a", category: "replace", qty: 1, rate: 85000, approved_rate: 85000, approval_status: "approved" }], approved_total: 85000, created_at: daysAgo(60) }],
+        invoices: [{ id: "inv_d8", invoice_number: `INV-${today.getFullYear()}-0001`, source_estimates: ["EST-001"], status: "paid", items: [{ id: "ii_d8", description: "Front Bumper", category: "replace", qty: 1, unit_price: 85000 }], payments: [{ id: "pay_d8a", amount: 85000, type: "insurance", date: daysAgo(20), ins_status: "received", reference: "CHQ-22456" }], created_at: daysAgo(58), finalized_at: daysAgo(45) }] }),
+      // 9. Quick — closed, cash paid
+      baseJob({ id: "demo_j9", jobNumber: "JOB-009", stage: "closed", created_at: daysAgo(15),
+        jobInfo: { customer_name: "Mr. Dinesh Madushan", customer_phone: "0728765432", vehicle_reg: "PV 2345", vehicle_make: "Honda", vehicle_model: "Fit", insurance_name: "", work_type: "paint", job_type: "quick" },
+        invoices: [{ id: "inv_d9", invoice_number: `INV-${today.getFullYear()}-0002`, source_estimates: ["Quick Job"], status: "paid", items: [{ id: "ii_d9a", description: "Bonnet polishing", category: "labour", qty: 1, unit_price: 3500 }], payments: [{ id: "pay_d9", amount: 3500, type: "customer", date: daysAgo(15), method: "cash" }], created_at: daysAgo(15), finalized_at: daysAgo(15) }],
+        jobCosts: [{ id: "jc_d9", name: "Bonnet polishing", type: "labour", cost: 0, confirmed: true }] }),
+      // 10. Cancelled job (customer changed mind)
+      baseJob({ id: "demo_j10", jobNumber: "JOB-010", stage: "cancelled", created_at: daysAgo(7), cancelledAt: daysAgo(5),
+        jobInfo: { customer_name: "Ms. Anushka Perera", customer_phone: "0747890123", vehicle_reg: "BAA 8888", vehicle_make: "Suzuki", vehicle_model: "Swift", insurance_name: "Fairfirst Insurance", work_type: "paint", job_type: "insurance" },
+        estimates: [{ id: "est_d10", number: "EST-001", type: "insurance_claim", label: "Insurance Claim", status: "draft", parts: [{ id: "p_d10", name: "RHS Fender" }], entries: [{ id: "e_d10", part_id: "p_d10", category: "replace", qty: 1, rate: 22000, remarks: "S/H" }], sundries: [], total: 22000, created_at: daysAgo(6) }] }),
+      // 11. Warranty job (linked to closed JOB-008)
+      baseJob({ id: "demo_j11", jobNumber: "JOB-011", stage: "in_progress", created_at: daysAgo(2),
+        is_warranty: true, parent_job_id: "demo_j8", parent_job_number: "JOB-008", parent_job_date: daysAgo(60),
+        jobInfo: { customer_name: "Dr. Lakshman Gunaratne", customer_phone: "0704567890", vehicle_reg: "BBB 1111", vehicle_make: "Mercedes-Benz", vehicle_model: "C200", insurance_name: "", work_type: "paint", job_type: "direct" } }),
+      // 12. Job on hold (delivered, awaiting follow-up)
+      baseJob({ id: "demo_j12", jobNumber: "JOB-012", stage: "follow_up", created_at: daysAgo(20), onHold: true, holdUntil: daysAgo(-7),
+        jobInfo: { customer_name: "Mr. Pradeep Silva", customer_phone: "0759876543", vehicle_reg: "BAS 7777", vehicle_make: "Toyota", vehicle_model: "Vitz", insurance_name: "AIA Insurance Lanka", work_type: "paint", job_type: "insurance" },
+        estimates: [{ id: "est_d12", number: "EST-001", type: "insurance_claim", label: "Insurance Claim", status: "approved", parts: [{ id: "p_d12", name: "Rear Bumper" }], entries: [{ id: "e_d12", part_id: "p_d12", category: "replace", qty: 1, rate: 18000 }], sundries: [], total: 18000, approved_entries: [{ id: "e_d12", part_id: "p_d12", category: "replace", qty: 1, rate: 18000, approved_rate: 18000, approval_status: "approved" }], approved_total: 18000, created_at: daysAgo(20) }],
+        invoices: [{ id: "inv_d12", invoice_number: `INV-${today.getFullYear()}-0003`, source_estimates: ["EST-001"], status: "partially_paid", items: [{ id: "ii_d12", description: "Rear Bumper", category: "replace", qty: 1, unit_price: 18000 }], payments: [{ id: "pay_d12", amount: 18000, type: "insurance", date: daysAgo(8), ins_status: "recorded", reference: "Pending claim" }], created_at: daysAgo(15), finalized_at: daysAgo(10) }],
+        followUpNote: "Customer didn't answer twice", followUpAttempts: 2 }),
+      // 13. Direct, ready for delivery, customer pays cash
+      baseJob({ id: "demo_j13", jobNumber: "JOB-013", stage: "ready", created_at: daysAgo(4),
+        jobInfo: { customer_name: "Mrs. Chamari Jayasinghe", customer_phone: "0712098765", vehicle_reg: "WP CAW 3210", vehicle_make: "Honda", vehicle_model: "Civic", insurance_name: "", work_type: "paint", job_type: "direct" },
+        estimates: [{ id: "est_d13", number: "EST-001", type: "quotation", label: "Quotation", status: "approved", parts: [{ id: "p_d13", name: "LHS Side Mirror" }], entries: [{ id: "e_d13", part_id: "p_d13", category: "replace", qty: 1, rate: 8500 }], sundries: [], total: 8500, approved_entries: [{ id: "e_d13", part_id: "p_d13", category: "replace", qty: 1, rate: 8500 }], approved_total: 8500, created_at: daysAgo(4) }],
+        invoices: [{ id: "inv_d13", invoice_number: `INV-${today.getFullYear()}-0004`, source_estimates: ["EST-001"], status: "draft", items: [{ id: "ii_d13", description: "LHS Side Mirror", category: "replace", qty: 1, unit_price: 8500 }], payments: [], created_at: daysAgo(4) }] }),
+      // 14. Insurance with U/S replace + supplementary estimate
+      baseJob({ id: "demo_j14", jobNumber: "JOB-014", stage: "qc", created_at: daysAgo(12),
+        jobInfo: { customer_name: "Mr. Ravi Senanayake", customer_phone: "0714567890", vehicle_reg: "CAR 8901", vehicle_make: "Mazda", vehicle_model: "Demio", insurance_name: "LOLC General Insurance", work_type: "paint", job_type: "insurance" },
+        estimates: [{ id: "est_d14a", number: "EST-001", type: "insurance_claim", label: "Insurance Claim", status: "approved", parts: [{ id: "p_d14a", name: "Front Bumper" }, { id: "p_d14b", name: "Bonnet" }], entries: [{ id: "e_d14a", part_id: "p_d14a", category: "replace", qty: 1, rate: 32000, remarks: "S/H" }, { id: "e_d14b", part_id: "p_d14b", category: "remove_refix", qty: 1, rate: 8000 }], sundries: [], total: 40000, approved_entries: [{ id: "e_d14a", part_id: "p_d14a", category: "replace", qty: 1, rate: 0, approved_rate: 0, approval_status: "use_same", remarks: "U/S" }, { id: "e_d14b", part_id: "p_d14b", category: "remove_refix", qty: 1, rate: 8000, approved_rate: 8000, approval_status: "approved" }], approved_total: 8000, created_at: daysAgo(12) }, { id: "est_d14b", number: "EST-001-S1", type: "supplementary", label: "Supplementary 1", status: "approved", parts: [{ id: "p_d14c", name: "Front Grille" }], entries: [{ id: "e_d14c", part_id: "p_d14c", category: "replace", qty: 1, rate: 4500 }], sundries: [], total: 4500, approved_entries: [{ id: "e_d14c", part_id: "p_d14c", category: "replace", qty: 1, rate: 4500, approved_rate: 4500, approval_status: "approved" }], approved_total: 4500, created_at: daysAgo(8) }] }),
+    ]
+  }
+
+  const seedDemoData = async () => {
+    if (!confirm("⚠️ This will WIPE all your jobs, POs, GRNs and load 14 demo jobs + sample store/cash data. Continue?")) return false
+    try {
+      // Wipe Supabase tables
+      await supabase.from("jobs").delete().neq("id", "_never_match_")
+      await supabase.from("store_data").delete().eq("id", "main")
+      // Build demo jobs
+      const demoJobs = buildDemoJobs()
+      // Insert jobs into Supabase
+      const rows = demoJobs.map(j => ({ id: j.id, data: j, created_at: j.created_at, stage: j.stage }))
+      const { error } = await supabase.from("jobs").upsert(rows)
+      if (error) throw error
+      // Seed store + cashbook
+      const today = new Date()
+      const daysAgo = (n) => new Date(today.getTime() - n * 86400000).toISOString().slice(0, 10)
+      const demoCashBook = {
+        openingCash: 25000,
+        bankBalance: 350000,
+        miscExpenses: [
+          { id: genId("exp"), date: daysAgo(0), description: "Lunch for staff", amount: 1500, category: "food" },
+          { id: genId("exp"), date: daysAgo(0), description: "CEB electricity bill", amount: 8500, category: "utility" },
+          { id: genId("exp"), date: daysAgo(1), description: "Diesel for compressor", amount: 4500, category: "transport" },
+        ],
+        dailyCounts: [{ date: daysAgo(1), actualCash: 24850, note: "Rs. 150 short — investigated", timestamp: daysAgo(1) }],
+      }
+      await supabase.from("store_data").upsert({ id: "main", data: { purchaseOrders: DEMO_POS, grns: DEMO_GRNS, cashBook: demoCashBook }, updated_at: new Date().toISOString() })
+      // Reload local state
+      setJobs(demoJobs)
+      setPurchaseOrders(DEMO_POS)
+      setGrns(DEMO_GRNS)
+      setCashBook(demoCashBook)
+      tt("✅ Demo data seeded — 14 jobs, store, cashbook ready")
+      return true
+    } catch (err) {
+      console.error("Seed failed:", err)
+      tt("❌ Seed failed — check console")
+      return false
+    }
+  }
+
   // ═══ STORE / PROCUREMENT ═══
   const DEMO_POS = [
     { id: "po_demo1", poNumber: "PO-001", status: "ordered", supplier: "Nippon Paint Lanka", supplierPhone: "0112345678", supplierWhatsapp: "0771234567", supplierEmail: "orders@nipponpaint.lk", supplierAddress: "Colombo 10", items: [
@@ -599,7 +717,7 @@ export function WorkshopProvider({ children }) {
 
   // ═══ PDF GENERATION ═══
   const SHOP = { name: "MacForce Auto Engineering", addr: "No.555, Pannipitiya Road, Thalawathugoda", phone: "+94 772 291 219" }
-  const APP_VERSION = "2.4.0"
+  const APP_VERSION = "2.5.0"
   const pdfStyles = `@page{size:A4;margin:15mm}*{margin:0;padding:0;box-sizing:border-box;font-family:-apple-system,Arial,sans-serif}body{padding:20px;color:#1a1a1a;font-size:13px}.header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;padding-bottom:15px;border-bottom:3px solid #007AFF}.shop-name{font-size:22px;font-weight:700;color:#007AFF}.shop-detail{font-size:12px;color:#666;margin-top:3px}.doc-title{font-size:28px;font-weight:700;text-align:right;color:#1a1a1a}.doc-sub{font-size:13px;color:#666;text-align:right;margin-top:2px}.info-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:18px;background:#f8f8f8;padding:14px;border-radius:8px}.info-label{font-size:11px;color:#888;text-transform:uppercase;letter-spacing:0.5px}.info-value{font-size:15px;font-weight:600;margin-top:2px}table{width:100%;border-collapse:collapse;margin-bottom:18px}th{background:#f0f0f0;padding:10px 12px;text-align:left;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:#555;border-bottom:2px solid #ddd}td{padding:10px 12px;border-bottom:1px solid #eee;font-size:13px}.text-right{text-align:right}.text-center{text-align:center}.mono{font-family:'SF Mono','Courier New',monospace}.bold{font-weight:700}.cut{text-decoration:line-through;color:#999}.tag{display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600}.tag-sh{background:#fff3e0;color:#e65100}.tag-mr{background:#e8f5e9;color:#2e7d32}.tag-us{background:#e3f2fd;color:#1565c0}.total-row td{font-weight:700;font-size:15px;border-top:2px solid #333;background:#fafafa}.summary-box{background:#f8f8f8;padding:16px;border-radius:8px;margin-bottom:18px}.footer{margin-top:30px;padding-top:15px;border-top:1px solid #ddd;font-size:11px;color:#888;display:flex;justify-content:space-between}.stamp{margin-top:40px;display:flex;justify-content:space-between}.stamp-box{text-align:center;width:200px}.stamp-line{border-top:1px solid #333;margin-top:50px;padding-top:5px;font-size:12px}@media print{body{padding:0}.no-print{display:none}}.print-btn{position:fixed;top:15px;right:15px;background:#007AFF;color:#fff;border:none;padding:12px 24px;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer;z-index:100}`;
   const openPDF = (title, bodyHtml) => {
     try {
@@ -1322,7 +1440,7 @@ export function WorkshopProvider({ children }) {
     generatePOText, generatePQText, sharePQ,
     generateEstimatePDF, generateInvoicePDF, generatePQPDF, openPDF,
     saveCurrentJob, openJob, goHome,
-    startNewJob, startWarrantyJob, validateAndCreateJob,
+    startNewJob, startWarrantyJob, validateAndCreateJob, seedDemoData,
     toggleHold, deleteJob, deleteEstimate,
     advanceStage, goBackStage, getNextActionLabel, canAdvance,
     addPart, removePart, handlePartInput, toggleCheck, setRate, toggleRemarks, handleRateEnter,

@@ -1,7 +1,7 @@
 "use client"
 import { useState, useEffect } from "react"
 import { useAuth, listUsers, addUser, updateUserRole, toggleUserActive, removeUser } from "../AuthGate"
-import { C, FONT, card, btn, btnSm, inp, NavBar, Sheet } from "../WorkshopContext"
+import { C, FONT, card, btn, btnSm, inp, NavBar, Sheet, useWorkshop } from "../WorkshopContext"
 
 const ROLES = [
   { key: "viewer", label: "Viewer", desc: "Read-only access", icon: "👁️", color: C.muted },
@@ -12,7 +12,9 @@ const ROLES = [
 
 export default function UserManagement({ onBack }) {
   const { isSuperAdmin, user } = useAuth()
+  const { seedDemoData } = useWorkshop()
   const [users, setUsers] = useState([])
+  const [seeding, setSeeding] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [showAdd, setShowAdd] = useState(false)
@@ -119,6 +121,23 @@ export default function UserManagement({ onBack }) {
           <div style={{ fontSize: 14, fontWeight: 600, color: C.accent }}>Super Admin</div>
           <div style={{ fontSize: 13, color: C.sub }}>{user?.email} (hardcoded — always has access)</div>
         </div>
+      </div>
+
+      {/* Demo data seed (super admin only) */}
+      <div style={{ ...card, background: "#FF950010", border: "1px solid #FF950040", marginTop: 12 }}>
+        <div style={{ fontSize: 14, fontWeight: 600, color: C.orange, marginBottom: 4 }}>🧪 Reset & Seed Demo Data</div>
+        <div style={{ fontSize: 13, color: C.sub, marginBottom: 12 }}>
+          Wipes ALL existing jobs, POs, GRNs, cashbook and loads 14 demo jobs covering every scenario:
+          insurance × all stages, direct, quick, cancelled, warranty, on-hold, partial payment, U/S parts, supplementary estimates.
+        </div>
+        <button onClick={async () => {
+          setSeeding(true)
+          await seedDemoData()
+          setSeeding(false)
+          setTimeout(() => location.reload(), 500)
+        }} disabled={seeding} style={{ ...btn(C.orange, "#fff"), opacity: seeding ? 0.6 : 1, cursor: seeding ? "wait" : "pointer" }}>
+          {seeding ? "⏳ Wiping & seeding…" : "🧪 Reset & Seed Demo Data"}
+        </button>
       </div>
 
       {/* SQL Setup notice */}
