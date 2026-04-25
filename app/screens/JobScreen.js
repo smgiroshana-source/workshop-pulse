@@ -608,7 +608,10 @@ export default function JobScreen() {
           const arrived = !!partsArrived[p.id]
           return <div key={p.id} onClick={() => {
             if (!partsOrdered) { tt("⚠️ Mark parts as ordered first"); return }
-            setPartsArrived(prev => ({ ...prev, [p.id]: !prev[p.id] }))
+            const newState = { ...partsArrived, [p.id]: !partsArrived[p.id] }
+            setPartsArrived(newState)
+            // Persist immediately to avoid loss on navigation
+            setJobs(prev => prev.map(j => j.id === activeJobId ? { ...j, partsArrived: newState } : j))
           }} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 0", borderBottom: `1px solid ${C.border}`, cursor: partsOrdered ? "pointer" : "not-allowed", opacity: partsOrdered ? 1 : 0.5 }}>
             <div style={{ width: 44, height: 44, borderRadius: 10, border: `2px solid ${arrived ? C.green : C.border}`, background: arrived ? C.green + "12" : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
               {arrived && <span style={{ color: C.green, fontSize: 20, fontWeight: 700 }}>✓</span>}

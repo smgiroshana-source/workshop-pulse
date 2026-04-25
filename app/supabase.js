@@ -28,13 +28,22 @@ async function compressImage(file, targetKB = 100) {
   // Skip if already small enough
   if (file.size <= targetKB * 1024) return file
 
-  return new Promise((resolve) => {
+  return new Promise(async (resolve) => {
+    // Try to get EXIF orientation via createImageBitmap (auto-corrects orientation in supported browsers)
+    let bitmap = null
+    try {
+      if (typeof createImageBitmap === "function") {
+        bitmap = await createImageBitmap(file, { imageOrientation: "from-image" })
+      }
+    } catch { bitmap = null }
+
     const img = new Image()
     const url = URL.createObjectURL(file)
     img.onload = () => {
       URL.revokeObjectURL(url)
       const canvas = document.createElement("canvas")
-      let { width, height } = img
+      let width = bitmap ? bitmap.width : img.width
+      let height = bitmap ? bitmap.height : img.height
 
       // Scale down large images (max 1200px on longest side)
       const MAX = 1200
@@ -47,7 +56,8 @@ async function compressImage(file, targetKB = 100) {
       canvas.width = width
       canvas.height = height
       const ctx = canvas.getContext("2d")
-      ctx.drawImage(img, 0, 0, width, height)
+      ctx.drawImage(bitmap || img, 0, 0, width, height)
+      if (bitmap?.close) bitmap.close()
 
       // Binary search for quality that gives ~80-120kb
       let lo = 0.1, hi = 0.9, bestBlob = null
@@ -83,12 +93,29 @@ async function compressImage(file, targetKB = 100) {
 
 // Upload a File or Blob to storage, return public URL
 export async function uploadPhoto(file, path) {
-  const compressed = await compressImage(file)
+  if (!navigator.onLine) throw new Error("OFFLINE: No internet connection")
+  let compressed
+  try {
+    compressed = await compressImage(file)
+  } catch (e) {
+    throw new Error("COMPRESS_FAIL: Could not process image — try a different file")
+  }
   const { error } = await supabase.storage.from(BUCKET).upload(path, compressed, {
     upsert: true,
     contentType: "image/jpeg",
   })
-  if (error) throw error
+  if (error) {
+    if (/bucket.*not.*found|404/i.test(error.message)) {
+      throw new Error(`STORAGE_NOT_CONFIGURED: Storage bucket "${BUCKET}" not found in Supabase. Contact admin.`)
+    }
+    if (/exceeded|too large|payload/i.test(error.message)) {
+      throw new Error("FILE_TOO_LARGE: Photo too large after compression")
+    }
+    if (/permission|denied|policy/i.test(error.message)) {
+      throw new Error("PERMISSION_DENIED: Not allowed to upload — check Supabase RLS")
+    }
+    throw new Error(`UPLOAD_FAIL: ${error.message}`)
+  }
   return getBaseUrl() + path
 }
 

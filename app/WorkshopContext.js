@@ -17,7 +17,12 @@ export const C = {
 export const SP = { xs: 4, sm: 8, md: 12, lg: 16, xl: 20, xxl: 24, xxxl: 32 }
 export const FONT = "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', sans-serif"
 export const MONO = "'SF Mono', ui-monospace, 'Menlo', monospace"
-export const fmt = n => Number(n || 0).toLocaleString("en-LK", { minimumFractionDigits: 2 })
+export const fmt = n => {
+  const v = Number(n || 0)
+  // Avoid scientific notation for large numbers
+  if (!isFinite(v)) return "0.00"
+  return v.toLocaleString("en-LK", { minimumFractionDigits: 2, useGrouping: true, maximumFractionDigits: 2 })
+}
 
 export const card = { background: C.card, borderRadius: 16, padding: SP.lg, marginBottom: SP.md, boxShadow: "0 0.5px 1px rgba(0,0,0,0.05)" }
 export const pill = (color) => ({ fontSize: 13, fontWeight: 600, color, background: color + "15", padding: "5px 12px", borderRadius: 20 })
@@ -142,7 +147,11 @@ export const normalizePhone = (raw) => {
   return { valid: false, normalized: d, error: "Need 10 digits (with 0) or 9 (without). Got " + d.length };
 };
 export const phoneSearchKey = (raw) => {
-  const d = (raw || "").replace(/[\s\-()]/g, "");
+  // Match the same normalization as normalizePhone for consistency
+  let d = (raw || "").replace(/[\s\-().]/g, "");
+  if (d.startsWith("+94")) d = d.slice(3);
+  else if (d.startsWith("0094")) d = d.slice(4);
+  else if (d.length === 11 && d.startsWith("94")) d = d.slice(2);
   return (d.length === 10 && d[0] === "0") ? d.slice(1) : d;
 };
 
@@ -223,6 +232,8 @@ export function WorkshopProvider({ children }) {
   const [showSubFlowPrompt, setShowSubFlowPrompt] = useState(false)
   const [showArchived, setShowArchived] = useState(false)
   const [homeTab, setHomeTab] = useState("active") // active | on_hold | closed | store
+  // Clear search when switching home tabs (prevents stale query carrying between Jobs/Store)
+  useEffect(() => { setSearchQuery("") }, [homeTab])
 
   // ═══ STORE / PROCUREMENT ═══
   const DEMO_POS = [
@@ -588,7 +599,7 @@ export function WorkshopProvider({ children }) {
 
   // ═══ PDF GENERATION ═══
   const SHOP = { name: "MacForce Auto Engineering", addr: "No.555, Pannipitiya Road, Thalawathugoda", phone: "+94 772 291 219" }
-  const APP_VERSION = "2.3.0"
+  const APP_VERSION = "2.4.0"
   const pdfStyles = `@page{size:A4;margin:15mm}*{margin:0;padding:0;box-sizing:border-box;font-family:-apple-system,Arial,sans-serif}body{padding:20px;color:#1a1a1a;font-size:13px}.header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;padding-bottom:15px;border-bottom:3px solid #007AFF}.shop-name{font-size:22px;font-weight:700;color:#007AFF}.shop-detail{font-size:12px;color:#666;margin-top:3px}.doc-title{font-size:28px;font-weight:700;text-align:right;color:#1a1a1a}.doc-sub{font-size:13px;color:#666;text-align:right;margin-top:2px}.info-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:18px;background:#f8f8f8;padding:14px;border-radius:8px}.info-label{font-size:11px;color:#888;text-transform:uppercase;letter-spacing:0.5px}.info-value{font-size:15px;font-weight:600;margin-top:2px}table{width:100%;border-collapse:collapse;margin-bottom:18px}th{background:#f0f0f0;padding:10px 12px;text-align:left;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:#555;border-bottom:2px solid #ddd}td{padding:10px 12px;border-bottom:1px solid #eee;font-size:13px}.text-right{text-align:right}.text-center{text-align:center}.mono{font-family:'SF Mono','Courier New',monospace}.bold{font-weight:700}.cut{text-decoration:line-through;color:#999}.tag{display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600}.tag-sh{background:#fff3e0;color:#e65100}.tag-mr{background:#e8f5e9;color:#2e7d32}.tag-us{background:#e3f2fd;color:#1565c0}.total-row td{font-weight:700;font-size:15px;border-top:2px solid #333;background:#fafafa}.summary-box{background:#f8f8f8;padding:16px;border-radius:8px;margin-bottom:18px}.footer{margin-top:30px;padding-top:15px;border-top:1px solid #ddd;font-size:11px;color:#888;display:flex;justify-content:space-between}.stamp{margin-top:40px;display:flex;justify-content:space-between}.stamp-box{text-align:center;width:200px}.stamp-line{border-top:1px solid #333;margin-top:50px;padding-top:5px;font-size:12px}@media print{body{padding:0}.no-print{display:none}}.print-btn{position:fixed;top:15px;right:15px;background:#007AFF;color:#fff;border:none;padding:12px 24px;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer;z-index:100}`;
   const openPDF = (title, bodyHtml) => {
     try {
@@ -796,6 +807,8 @@ export function WorkshopProvider({ children }) {
   const [confirmDelJob, setConfirmDelJob] = useState(false)
   const deleteJob = () => {
     if (!confirmDelJob) { setConfirmDelJob(true); setTimeout(() => setConfirmDelJob(false), 3000); return }
+    // Clear all active references to this job to prevent orphaned invoice/payment edits
+    setSelInv(null); setSelEst(null)
     setJobs(prev => prev.filter(j => j.id !== activeJobId))
     setActiveJobId(null); setScreen("home"); setConfirmDelJob(false)
     tt("Job deleted")
@@ -1005,6 +1018,11 @@ export function WorkshopProvider({ children }) {
       const workStarted = ["in_progress", "paint_stage", "qc", "ready", "delivered", "follow_up", "closed"].includes(job.stage)
       if (workStarted && !confirm(`⚠️ This estimate was already approved and work has started (stage: ${job.stage}).\n\nRe-doing approval may cause invoice mismatches. Continue?`)) return
     }
+    // If returning to same estimate with existing in-progress approval, preserve those values
+    if (selEst?.id === est.id && approvalItems.length > 0) {
+      setScreen("approve_entry")
+      return
+    }
     setSelEst(est)
     // Preserve previous approval as `previous_approval` for audit trail
     const prevSnapshot = est.status === "approved" ? { approved_entries: est.approved_entries, approved_total: est.approved_total, reset_at: new Date().toISOString() } : null
@@ -1029,6 +1047,9 @@ export function WorkshopProvider({ children }) {
   const approveAllCatAsIs = () => { setApprovalItems(prev => prev.map(i => i.category !== aCat.key || i.approved_rate !== null ? i : { ...i, approved_rate: i.original_rate, approval_status: "approved" })); tt(`All ${aCat.label} approved`) }
   const handleApprovalEnter = (eid) => { const ci = approvalItems.filter(i => i.category === aCat.key); const idx = ci.findIndex(i => i.id === eid); for (let n = idx + 1; n < ci.length; n++) { if (ci[n].approved_rate === null) { approvalRefs.current[ci[n].id]?.focus(); return } } tt("✓ Done") }
   const finalizeApproval = () => {
+    if (!approvalItems.length) { tt("⚠️ No items to approve"); return }
+    const approvedItems = approvalItems.filter(i => i.approved_rate !== null || i.approval_status === "use_same")
+    if (approvedItems.length === 0) { tt("⚠️ Approve at least one item before finalizing"); return }
     // Check if parts quotation has unfilled prices (insurance only)
     const hasReplaceItems = approvalItems.some(i => i.category === "replace" && i.approval_status !== "use_same")
     const unfilledPQ = partsQuotation.filter(p => p.quotedPrice === null || p.quotedPrice === 0)
