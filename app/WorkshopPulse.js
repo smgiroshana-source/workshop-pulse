@@ -1267,6 +1267,50 @@ function AppInner() {
           )}
         </div>
 
+        {/* ═══ ACTION QUEUE — what to work on today ═══ */}
+        {(() => {
+          const active = jobs.filter(j => !j.onHold && j.stage !== "closed" && j.stage !== "cancelled")
+          const newJobsNoEst = active.filter(j => j.stage === "job_received" && (j.estimates || []).length === 0).length
+          const estToSubmit = active.filter(j => j.stage === "est_pending").length
+          const partsToOrder = active.filter(j => j.stage === "approved_dismantle").length
+          const partsWaiting = active.filter(j => (j.estimates || []).flatMap(e => (e.approved_entries || e.entries || []).filter(en => en.category === "replace")).some(p => !j.partsArrived?.[p.id])).length
+          const inQc = active.filter(j => j.stage === "qc").length
+          const readyForDelivery = active.filter(j => j.stage === "ready").length
+          const followUpsDue = jobs.filter(j => j.onHold && j.stage === "follow_up" && j.holdUntil && new Date(j.holdUntil) < new Date()).length
+
+          const goToStage = (s) => { setSearchQuery(""); setHomeTab("active"); setFilterStage(s) }
+          const goToOnHold = () => { setSearchQuery(""); setHomeTab("on_hold") }
+
+          const items = [
+            { count: newJobsNoEst,    icon: "📝", label: "Estimates to create",      color: C.accent, onClick: () => goToStage("job_received") },
+            { count: estToSubmit,     icon: "📤", label: "Estimates to submit",      color: C.orange, onClick: () => goToStage("est_pending") },
+            { count: partsToOrder,    icon: "🔩", label: "Parts to order",           color: C.orange, onClick: () => goToStage("approved_dismantle") },
+            { count: partsWaiting,    icon: "📦", label: "Parts not yet arrived",    color: C.purple, onClick: () => goToStage("parts_waiting") },
+            { count: inQc,            icon: "🔍", label: "Jobs in QC",               color: C.green,  onClick: () => goToStage("qc") },
+            { count: readyForDelivery,icon: "🚗", label: "Ready for delivery",       color: C.green,  onClick: () => goToStage("ready") },
+            { count: followUpsDue,    icon: "📞", label: "Follow-ups due",           color: C.red,    onClick: goToOnHold },
+          ].filter(i => i.count > 0)
+
+          if (items.length === 0) return null
+          return (
+            <div style={{ ...card, padding: "12px 14px", marginBottom: 16, border: `1px solid ${C.accent}25` }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: C.accent, textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 10, display: "flex", alignItems: "center", gap: 6 }}>
+                <span>👋</span> Needs Your Attention
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {items.map(it => (
+                  <div key={it.label} onClick={it.onClick} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 12px", borderRadius: 10, cursor: "pointer", background: it.color + "08", border: `1px solid ${it.color}20`, transition: "all 0.15s" }}>
+                    <span style={{ fontSize: 20, flexShrink: 0 }}>{it.icon}</span>
+                    <span style={{ fontSize: 14, fontWeight: 600, color: C.text, flex: 1 }}>{it.label}</span>
+                    <span style={{ fontFamily: MONO, fontSize: 15, fontWeight: 700, color: it.color, minWidth: 28, textAlign: "right" }}>{it.count}</span>
+                    <span style={{ fontSize: 16, color: it.color, opacity: 0.6 }}>›</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )
+        })()}
+
         <div data-hub-grid style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
           {/* Store — 2x2 grid */}
           <div style={{ ...card, padding: "14px 12px", border: `1px solid ${C.purple}20` }}>

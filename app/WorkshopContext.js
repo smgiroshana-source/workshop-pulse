@@ -993,17 +993,27 @@ export function WorkshopProvider({ children }) {
     if (jobPaused) return null
     if (!nextStage) return null
     const ns = ALL_STAGES[nextStage]
-    const labels = {
-      approved_dismantle: "Mark Dismantle Complete",
-      in_progress: "Repair Complete",
-      paint_stage: "Painting Complete",
-      qc: "QC Passed",
-      ready: "✅ Mark Ready for Delivery",
-      delivered: "📦 Mark as Delivered",
-      follow_up: "📞 Follow Up Done",
-      closed: "🏁 Close Job",
-    }
-    return labels[nextStage] || `Next → ${ns.label}`
+    // Labels describe the ACTION the click performs (move INTO the next stage),
+    // not completing the next stage. Verb-first, emoji-led so users always
+    // know what tapping the button will do.
+    // Keyed by (currentStage -> nextStage) where ambiguous; otherwise by nextStage.
+    if (jobStage === "est_ready" && nextStage === "approved_dismantle") return "✅ Insurance Approved — Start Dismantle"
+    if (jobStage === "est_ready" && nextStage === "in_progress")        return "🛠️ Customer Approved — Start Work"
+    if (nextStage === "approved_dismantle")                              return "✅ Mark Estimate Approved"
+    if (nextStage === "in_progress")                                     return "🛠️ Start Repair Work"
+    if (nextStage === "paint_stage")                                     return "🎨 Send to Paint Booth"
+    if (nextStage === "qc")                                              return "🔍 Send for QC Check"
+    if (nextStage === "ready")                                           return "🚗 Mark Ready for Delivery"
+    if (nextStage === "delivered")                                       return "📦 Mark as Delivered"
+    if (nextStage === "closed")                                          return "🏁 Close Job"
+    return `Next → ${ns.label}`
+  }
+  // Short hint shown under the pipeline strip, e.g. "👉 Next: QC Check"
+  const getNextStepHint = () => {
+    if (jobPaused) return "⏸ Resume to continue"
+    if (!nextStage) return null
+    const ns = ALL_STAGES[nextStage]
+    return `👉 Next: ${ns.label}`
   }
   const canAdvance = () => {
     if (jobPaused) return false
@@ -1442,7 +1452,7 @@ export function WorkshopProvider({ children }) {
     saveCurrentJob, openJob, goHome,
     startNewJob, startWarrantyJob, validateAndCreateJob, seedDemoData,
     toggleHold, deleteJob, deleteEstimate,
-    advanceStage, goBackStage, getNextActionLabel, canAdvance,
+    advanceStage, goBackStage, getNextActionLabel, getNextStepHint, canAdvance,
     addPart, removePart, handlePartInput, toggleCheck, setRate, toggleRemarks, handleRateEnter,
     saveEstimate,
     startApproval, setApproved, approveAsIs, markUseSame, approveAllCatAsIs, handleApprovalEnter, finalizeApproval,

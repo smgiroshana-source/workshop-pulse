@@ -262,7 +262,7 @@ export default function JobScreen() {
     supplierInvoices, setSupplierInvoices,
     showSupplierInvForm, setShowSupplierInvForm,
     goHome, saveCurrentJob,
-    advanceStage, goBackStage, getNextActionLabel, canAdvance,
+    advanceStage, goBackStage, getNextActionLabel, getNextStepHint, canAdvance,
     toggleHold, deleteJob, deleteEstimate,
     confirmCustomer, sharePQ,
     generateEstimatePDF, generateInvoicePDF, generatePQPDF,
@@ -379,6 +379,12 @@ export default function JobScreen() {
             </div>
           </React.Fragment> })}
         </div>
+        {/* Always-visible "Next: X" hint so users know what's coming */}
+        {!jobPaused && nextStage && getNextStepHint() && (
+          <div style={{ fontSize: 13, fontWeight: 600, color: ALL_STAGES[nextStage]?.color || C.accent, textAlign: "center", marginTop: 8, padding: "6px 12px", background: (ALL_STAGES[nextStage]?.color || C.accent) + "10", borderRadius: 8 }}>
+            {getNextStepHint()}
+          </div>
+        )}
         {/* Next action */}
         {canAdvance() && <button onClick={() => {
           if (jobStage === "qc" && !qcChecks["qc_passed"]) { tt("⚠️ Tick QC Checked first"); return }
