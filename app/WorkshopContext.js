@@ -24,7 +24,7 @@ export const fmt = n => {
   return v.toLocaleString("en-LK", { minimumFractionDigits: 2, useGrouping: true, maximumFractionDigits: 2 })
 }
 
-export const card = { background: C.card, borderRadius: 16, padding: SP.lg, marginBottom: SP.md, boxShadow: "0 0.5px 1px rgba(0,0,0,0.05)" }
+export const card = { background: C.card, borderRadius: 16, padding: SP.lg, marginBottom: SP.md, border: `1px solid ${"#E5E5EA"}60`, boxShadow: "0 1px 2px rgba(0,0,0,0.04), 0 2px 8px rgba(0,0,0,0.03)" }
 export const pill = (color) => ({ fontSize: 13, fontWeight: 600, color, background: color + "15", padding: "5px 12px", borderRadius: 20 })
 export const btn = (bg, color) => ({ border: "none", borderRadius: 12, padding: "16px 24px", fontSize: 17, fontWeight: 600, cursor: "pointer", color: color || "#fff", background: bg || C.accent, fontFamily: FONT, width: "100%", textAlign: "center", letterSpacing: "-0.3px", minHeight: 52, transition: "all 0.15s ease", boxShadow: "0 1px 2px rgba(0,0,0,0.04)" })
 export const btnSm = (bg, color) => ({ ...btn(bg, color), padding: "12px 18px", fontSize: 15, borderRadius: 10, minHeight: 44 })
@@ -154,6 +154,11 @@ export const phoneSearchKey = (raw) => {
   else if (d.length === 11 && d.startsWith("94")) d = d.slice(2);
   return (d.length === 10 && d[0] === "0") ? d.slice(1) : d;
 };
+// Full international format for tel:/wa.me links — "94771234567"
+export const phoneIntl = (raw) => {
+  const d = phoneSearchKey(raw);
+  return d.length === 9 ? "94" + d : d.replace(/\D/g, "");
+};
 
 // ═══ CONTEXT ═══
 const WorkshopContext = createContext(null)
@@ -167,7 +172,15 @@ export function useWorkshop() {
 export function WorkshopProvider({ children }) {
   const [screen, setScreen] = useState("home")
   const [toast, setToast] = useState(null)
-  const tt = m => { setToast(m); setTimeout(() => setToast(null), 2000) }
+  const toastTimerRef = useRef(null)
+  // Errors/warnings stay 4.5s so they can actually be read; success messages 2.2s.
+  // Always cancels the previous timer so a new toast is never dismissed early.
+  const tt = m => {
+    setToast(m)
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
+    const slow = /⚠️|❌|❗|⏳|error|failed|blocked|wrong|invalid|outstanding/i.test(String(m))
+    toastTimerRef.current = setTimeout(() => setToast(null), slow ? 4500 : 2200)
+  }
 
   // ═══ JOBS LIST ═══
   const [jobs, setJobs] = useState([])
@@ -204,6 +217,8 @@ export function WorkshopProvider({ children }) {
   const [supplierInvoices, setSupplierInvoices] = useState([]) // [{id, supplierName, photo, partIds:[]}]
   // Job costs for minor/quick jobs (and cost tracking for all jobs)
   const [jobCosts, setJobCosts] = useState([]) // [{id, name, type:"part"|"sundry"|"outsource"|"labour", source:"purchased"|"ex_stock", cost:0, confirmed:false}]
+  // Advance payments taken before invoicing: [{id, amount, method:"cash"|"bank"|"cheque", note, date, appliedTo: invoiceId|null}]
+  const [advances, setAdvances] = useState([])
   const [showSupplierInvForm, setShowSupplierInvForm] = useState(false)
   const suppInvPhotoRef = useRef(null)
   const [followUpNote, setFollowUpNote] = useState("")
@@ -244,7 +259,7 @@ export function WorkshopProvider({ children }) {
       paused: false, onHold: false, partsOrdered: false, partsArrived: {}, partsQuotation: [],
       pqStatus: "draft", pqApprovalPhoto: null, pqLumpSum: null, pqLumpMode: false,
       customerConfirmed: false, estimates: [], invoices: [], jobDocs: [], qcChecks: {},
-      supplierInvoices: [], followUpNote: "", followUpAttempts: 0, followUpLog: [], jobCosts: [],
+      supplierInvoices: [], followUpNote: "", followUpAttempts: 0, followUpLog: [], jobCosts: [], advances: [],
       ...extra,
     })
     return [
@@ -387,11 +402,19 @@ export function WorkshopProvider({ children }) {
   const [grns, setGrns] = useState([])
   // CashBook: { miscExpenses: [{id, date, description, amount, category}], dailyCounts: [{date, actualCash, note}], bankBalance: number, openingCash: number }
   const [cashBook, setCashBook] = useState({ miscExpenses: [], dailyCounts: [], bankBalance: 0, openingCash: 0 })
+  // Assessor reference list: [{id, name, phone, insurance}] — built up as jobs record assessors
+  const [assessors, setAssessors] = useState([])
   const storeSyncRef = useRef(false)
   // Load from Supabase
   useEffect(() => {
     supabase.from("store_data").select("*").eq("id", "main").single()
-      .then(({ data }) => {
+      .then(({ data, error }) => {
+        if (error && error.code !== "PGRST116") {
+          // Transient load failure — do NOT seed demo data or enable sync,
+          // otherwise the next sync would overwrite real data with demo/empty state
+          console.error("Failed to load store data:", error)
+          return
+        }
         if (data?.data && (data.data.purchaseOrders?.length > 0 || data.data.grns?.length > 0)) {
           setPurchaseOrders(data.data.purchaseOrders || [])
           setGrns(data.data.grns || [])
@@ -401,8 +424,25 @@ export function WorkshopProvider({ children }) {
           setGrns(DEMO_GRNS)
         }
         if (data?.data?.cashBook) setCashBook(data.data.cashBook)
+        if (data?.data?.assessors) setAssessors(data.data.assessors)
         storeSyncRef.current = true
       })
+  }, [])
+  // Remember an assessor in the reference list (upsert by name, case-insensitive)
+  const rememberAssessor = useCallback((name, phone, insurance) => {
+    const n = (name || "").trim()
+    if (!n) return
+    const p = (phone || "").trim()
+    setAssessors(prev => {
+      const idx = prev.findIndex(a => a.name.toLowerCase() === n.toLowerCase())
+      if (idx >= 0) {
+        const existing = prev[idx]
+        const updated = { ...existing, phone: p || existing.phone, insurance: insurance || existing.insurance }
+        if (updated.phone === existing.phone && updated.insurance === existing.insurance) return prev
+        return prev.map((a, i) => i === idx ? updated : a)
+      }
+      return [...prev, { id: genId("ass"), name: n, phone: p, insurance: insurance || "" }]
+    })
   }, [])
   // Sync store data to Supabase (debounced)
   const storeDirtyRef = useRef(false)
@@ -413,12 +453,12 @@ export function WorkshopProvider({ children }) {
     if (storeTimerRef.current) clearTimeout(storeTimerRef.current)
     storeTimerRef.current = setTimeout(() => {
       if (!storeDirtyRef.current) return
-      supabase.from("store_data").upsert({ id: "main", data: { purchaseOrders, grns, cashBook }, updated_at: new Date().toISOString() })
+      supabase.from("store_data").upsert({ id: "main", data: { purchaseOrders, grns, cashBook, assessors }, updated_at: new Date().toISOString() })
         .then(({ error }) => { if (error) console.error("Store sync error:", error) })
       storeDirtyRef.current = false
     }, 1000)
     return () => { if (storeTimerRef.current) clearTimeout(storeTimerRef.current) }
-  }, [purchaseOrders, grns, cashBook])
+  }, [purchaseOrders, grns, cashBook, assessors])
   // Parts Quotation (insurance) / PO (direct)
   const [partsQuotation, setPartsQuotation] = useState([]) // [{id, partName, estLabel, supplier, quotedPrice, approvedPrice, remarks}]
   const [pqStatus, setPqStatus] = useState("draft") // draft | submitted | approved
@@ -599,6 +639,11 @@ export function WorkshopProvider({ children }) {
             if (j.stage === "follow_up") {
               // No-answer retry reactivated -- check if 3rd attempt -> auto-close
               if ((j.followUpAttempts || 0) >= 3) {
+                // Never auto-close while money is outstanding (e.g. insurance cheque pending)
+                if (jobOutstandingTotal(j) > 0) {
+                  const keptLog = [...(j.followUpLog || []), { text: "3 no-answer attempts — kept open: payment outstanding", time: now }]
+                  return { ...j, onHold: false, holdUntil: null, followUpLog: keptLog }
+                }
                 const closedLog = [...(j.followUpLog || []), { text: "Auto-closed after 3 no-answer attempts", time: now }]
                 return { ...j, onHold: false, holdUntil: null, stage: "closed", followUpNote: (j.followUpNote || "") + (j.followUpNote ? ". " : "") + "Auto-closed: 3 no-answer attempts", followUpLog: closedLog }
               }
@@ -717,7 +762,7 @@ export function WorkshopProvider({ children }) {
 
   // ═══ PDF GENERATION ═══
   const SHOP = { name: "MacForce Auto Engineering", addr: "No.555, Pannipitiya Road, Thalawathugoda", phone: "+94 772 291 219" }
-  const APP_VERSION = "2.5.0"
+  const APP_VERSION = "2.6.0"
   const pdfStyles = `@page{size:A4;margin:15mm}*{margin:0;padding:0;box-sizing:border-box;font-family:-apple-system,Arial,sans-serif}body{padding:20px;color:#1a1a1a;font-size:13px}.header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;padding-bottom:15px;border-bottom:3px solid #007AFF}.shop-name{font-size:22px;font-weight:700;color:#007AFF}.shop-detail{font-size:12px;color:#666;margin-top:3px}.doc-title{font-size:28px;font-weight:700;text-align:right;color:#1a1a1a}.doc-sub{font-size:13px;color:#666;text-align:right;margin-top:2px}.info-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:18px;background:#f8f8f8;padding:14px;border-radius:8px}.info-label{font-size:11px;color:#888;text-transform:uppercase;letter-spacing:0.5px}.info-value{font-size:15px;font-weight:600;margin-top:2px}table{width:100%;border-collapse:collapse;margin-bottom:18px}th{background:#f0f0f0;padding:10px 12px;text-align:left;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:#555;border-bottom:2px solid #ddd}td{padding:10px 12px;border-bottom:1px solid #eee;font-size:13px}.text-right{text-align:right}.text-center{text-align:center}.mono{font-family:'SF Mono','Courier New',monospace}.bold{font-weight:700}.cut{text-decoration:line-through;color:#999}.tag{display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600}.tag-sh{background:#fff3e0;color:#e65100}.tag-mr{background:#e8f5e9;color:#2e7d32}.tag-us{background:#e3f2fd;color:#1565c0}.total-row td{font-weight:700;font-size:15px;border-top:2px solid #333;background:#fafafa}.summary-box{background:#f8f8f8;padding:16px;border-radius:8px;margin-bottom:18px}.footer{margin-top:30px;padding-top:15px;border-top:1px solid #ddd;font-size:11px;color:#888;display:flex;justify-content:space-between}.stamp{margin-top:40px;display:flex;justify-content:space-between}.stamp-box{text-align:center;width:200px}.stamp-line{border-top:1px solid #333;margin-top:50px;padding-top:5px;font-size:12px}@media print{body{padding:0}.no-print{display:none}}.print-btn{position:fixed;top:15px;right:15px;background:#007AFF;color:#fff;border:none;padding:12px 24px;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer;z-index:100}`;
   const openPDF = (title, bodyHtml) => {
     try {
@@ -764,11 +809,14 @@ export function WorkshopProvider({ children }) {
   const generateInvoicePDF = (inv) => {
     const isInsurance = !!jobInfo.insurance_name
     const total = invTotal(inv)
-    const disc = inv.insurance_discount || 0
+    const disc = inv.discount || 0
     const custDisc = inv.customer_discount || 0
     const afterInsDisc = total - disc
     const afterAllDisc = afterInsDisc - custDisc
-    const paid = (inv.payments || []).reduce((s, p) => s + p.amount, 0)
+    // Only count insurance payments actually RECEIVED (matches the app's receivable math)
+    const paid = (inv.payments || []).reduce((s, p) => (p.type === "insurance" && p.ins_status !== "received") ? s : s + p.amount, 0)
+    const excess = invExcess(inv)
+    const insShare = invInsExpected(inv)
     let rows = ""
     const ci = (inv.items || []).filter(i => i.category !== "sundry" && i.category !== "labour" && i.category !== "other")
     ci.forEach((item, i) => {
@@ -778,6 +826,11 @@ export function WorkshopProvider({ children }) {
     if (disc > 0) totalSection += "<tr><td colspan=\"5\" class=\"text-right\" style=\"color:#e53935\">Insurance Discount</td><td class=\"text-right mono\" style=\"color:#e53935\">-Rs." + (total - afterInsDisc).toLocaleString() + "</td></tr>"
     if (custDisc > 0) totalSection += "<tr><td colspan=\"5\" class=\"text-right\" style=\"color:#e53935\">Customer Discount</td><td class=\"text-right mono\" style=\"color:#e53935\">-Rs." + (afterInsDisc - afterAllDisc).toLocaleString() + "</td></tr>"
     totalSection += "<tr class=\"total-row\"><td colspan=\"5\" class=\"text-right\" style=\"font-size:16px\">NET TOTAL</td><td class=\"text-right mono\" style=\"font-size:16px\">Rs." + afterAllDisc.toLocaleString() + "</td></tr>"
+    // Insurance / customer split (when excess is known or insurance share recorded)
+    if (isInsurance && (excess > 0 || insShare > 0)) {
+      totalSection += "<tr><td colspan=\"5\" class=\"text-right\" style=\"color:#1565c0\">Insurance Portion</td><td class=\"text-right mono\" style=\"color:#1565c0\">Rs." + insShare.toLocaleString() + "</td></tr>"
+      totalSection += "<tr><td colspan=\"5\" class=\"text-right\" style=\"color:#e65100\">Customer Portion" + (excess > 0 ? " (Excess)" : "") + "</td><td class=\"text-right mono\" style=\"color:#e65100\">Rs." + Math.max(0, afterAllDisc - insShare).toLocaleString() + "</td></tr>"
+    }
     const payRows = (inv.payments || []).map((p, i) => "<tr><td>" + new Date(p.date).toLocaleDateString() + "</td><td>" + (p.type === "insurance" ? "Insurance" : p.method) + "</td><td>" + (p.reference || "-") + "</td><td class=\"text-right mono\">Rs." + p.amount.toLocaleString() + "</td></tr>").join("")
     const html = "<div class=\"header\"><div><div class=\"shop-name\">" + SHOP.name + "</div><div class=\"shop-detail\">" + SHOP.addr + "</div><div class=\"shop-detail\">" + SHOP.phone + "</div></div><div><div class=\"doc-title\">INVOICE</div><div class=\"doc-sub\">" + inv.invoice_number + "</div><div class=\"doc-sub\">" + new Date(inv.created_at).toLocaleDateString() + "</div></div></div><div class=\"info-grid\"><div><div class=\"info-label\">Vehicle</div><div class=\"info-value\">" + jobInfo.vehicle_reg + "</div></div><div><div class=\"info-label\">Make / Model</div><div class=\"info-value\">" + jobInfo.vehicle_make + " " + jobInfo.vehicle_model + "</div></div><div><div class=\"info-label\">Customer</div><div class=\"info-value\">" + jobInfo.customer_name + "</div></div><div><div class=\"info-label\">" + (isInsurance ? "Insurance" : "Phone") + "</div><div class=\"info-value\">" + (isInsurance ? jobInfo.insurance_name : jobInfo.customer_phone) + "</div></div></div><table><thead><tr><th>#</th><th>Description</th><th class=\"text-center\">Cat</th><th class=\"text-center\">Qty</th><th class=\"text-right\">Rate</th><th class=\"text-right\">Amount</th></tr></thead><tbody>" + rows + totalSection + "</tbody></table>" + (payRows ? "<h3 style=\"margin:18px 0 8px;font-size:15px\">Payments Received</h3><table><thead><tr><th>Date</th><th>Type</th><th>Ref</th><th class=\"text-right\">Amount</th></tr></thead><tbody>" + payRows + "</tbody></table>" : "") + "<div style=\"margin:18px 0\"><div><strong>Total:</strong> Rs." + afterAllDisc.toLocaleString() + "</div><div><strong>Paid:</strong> Rs." + paid.toLocaleString() + "</div><div><strong>Balance:</strong> <span style=\"color:" + (afterAllDisc - paid > 0 ? "#e53935" : "#2e7d32") + ";font-weight:700\">Rs." + (afterAllDisc - paid).toLocaleString() + "</span></div></div><div class=\"stamp\"><div class=\"stamp-box\"><div class=\"stamp-line\">" + SHOP.name + "</div></div><div class=\"stamp-box\"><div class=\"stamp-line\">Customer Signature</div></div></div><div class=\"footer\"><span>" + SHOP.name + "</span><span>Generated " + new Date().toLocaleDateString() + "</span></div>"
     openPDF(inv.invoice_number + " - " + jobInfo.vehicle_reg, html)
@@ -797,7 +850,7 @@ export function WorkshopProvider({ children }) {
   // ═══ JOB MANAGEMENT ═══
   const saveCurrentJob = () => {
     if (!activeJobId) return
-    setJobs(prev => prev.map(j => j.id === activeJobId ? { ...j, jobInfo: { ...jobInfo }, stage: jobStage, paused: jobPaused, partsOrdered, partsArrived: { ...partsArrived }, partsQuotation: [...partsQuotation], pqStatus, pqApprovalPhoto, pqLumpSum, pqLumpMode, customerConfirmed, estimates: [...estimates], invoices: [...invoices], jobDocs: [...jobDocs], qcChecks: { ...qcChecks }, supplierInvoices: [...supplierInvoices], jobCosts: [...jobCosts], followUpNote, followUpAttempts, followUpLog: [...followUpLog] } : j))
+    setJobs(prev => prev.map(j => j.id === activeJobId ? { ...j, jobInfo: { ...jobInfo }, stage: jobStage, paused: jobPaused, partsOrdered, partsArrived: { ...partsArrived }, partsQuotation: [...partsQuotation], pqStatus, pqApprovalPhoto, pqLumpSum, pqLumpMode, customerConfirmed, estimates: [...estimates], invoices: [...invoices], jobDocs: [...jobDocs], qcChecks: { ...qcChecks }, supplierInvoices: [...supplierInvoices], jobCosts: [...jobCosts], advances: [...advances], followUpNote, followUpAttempts, followUpLog: [...followUpLog] } : j))
   }
   const openJob = (job) => {
     saveCurrentJob() // save any unsaved changes before switching jobs
@@ -819,6 +872,7 @@ export function WorkshopProvider({ children }) {
     setQcChecks({ ...(job.qcChecks || {}) })
     setSupplierInvoices([...(job.supplierInvoices || [])])
     setJobCosts([...(job.jobCosts || [])])
+    setAdvances([...(job.advances || [])])
     setFollowUpNote(job.followUpNote || "")
     setFollowUpAttempts(job.followUpAttempts || 0)
     setFollowUpLog([...(job.followUpLog || [])])
@@ -828,7 +882,8 @@ export function WorkshopProvider({ children }) {
     setScreen("job"); setSidebarExpanded(false)
   }
   const goHome = () => { saveCurrentJob(); setActiveJobId(null); setScreen("home"); setSidebarExpanded(false) }
-  const [newJobInfo, setNewJobInfo] = useState({ customer_name:"", customer_phone:"", vehicle_reg:"", vehicle_make:"", vehicle_model:"", insurance_name:null, work_type:"paint", job_type:null })
+  const emptyNewJob = { customer_name:"", customer_phone:"", vehicle_reg:"", vehicle_make:"", vehicle_model:"", insurance_name:null, work_type:"paint", job_type:null, assessor_name:"", assessor_phone:"", paint_code:"", mileage:"", fuel_level:"", condition_notes:"" }
+  const [newJobInfo, setNewJobInfo] = useState(emptyNewJob)
   const [newJobMakeSugg, setNewJobMakeSugg] = useState([])
   const [newJobInsDD, setNewJobInsDD] = useState(false)
   const [insSearch, setInsSearch] = useState("")
@@ -856,7 +911,7 @@ export function WorkshopProvider({ children }) {
     return { byReg: reg, byPhone, byPhoneAll }
   }, [jobs])
   const startNewJob = () => {
-    setNewJobInfo({ customer_name:"", customer_phone:"", vehicle_reg:"", vehicle_make:"", vehicle_model:"", insurance_name:null, work_type:"paint", job_type:null })
+    setNewJobInfo(emptyNewJob)
     setNewJobErrors({}); setNewJobInsDD(false); setNewJobMakeSugg([]); setInsSearch(""); setNewJobPhoto(null); setCustomerMatch(null)
     setScreen("new_job")
   }
@@ -866,6 +921,7 @@ export function WorkshopProvider({ children }) {
     if (!parentJob?.jobInfo) return
     const pi = parentJob.jobInfo
     setNewJobInfo({
+      ...emptyNewJob,
       customer_name: pi.customer_name || "",
       customer_phone: pi.customer_phone || "",
       vehicle_reg: pi.vehicle_reg || "",
@@ -907,7 +963,8 @@ export function WorkshopProvider({ children }) {
     const jobDocs = []
     if (newJobPhoto) jobDocs.push({ id: genId("d"), dataUrl: newJobPhoto, estId: null, label: "Vehicle" })
     const finalInfo = { ...newJobInfo, vehicle_reg: normReg, customer_phone: ph.normalized, insurance_name: newJobInfo.job_type === "insurance" ? newJobInfo.insurance_name : "" }
-    const newJob = { id, jobNumber: `JOB-${jobNum}`, jobInfo: finalInfo, stage: "job_received", paused: false, onHold: false, partsOrdered: false, partsArrived: {}, partsQuotation: [], pqStatus: "draft", pqApprovalPhoto: null, pqLumpSum: null, pqLumpMode: false, customerConfirmed: false, estimates: [], invoices: [], jobDocs, qcChecks: {}, supplierInvoices: [], followUpNote: "", followUpAttempts: 0, followUpLog: [], jobCosts: [], created_at: new Date().toISOString(), ...(newJobInfo.is_warranty ? { is_warranty: true, parent_job_id: newJobInfo.parent_job_id, parent_job_number: newJobInfo.parent_job_number, parent_job_date: newJobInfo.parent_job_date } : {}) }
+    const newJob = { id, jobNumber: `JOB-${jobNum}`, jobInfo: finalInfo, stage: "job_received", paused: false, onHold: false, partsOrdered: false, partsArrived: {}, partsQuotation: [], pqStatus: "draft", pqApprovalPhoto: null, pqLumpSum: null, pqLumpMode: false, customerConfirmed: false, estimates: [], invoices: [], jobDocs, qcChecks: {}, supplierInvoices: [], followUpNote: "", followUpAttempts: 0, followUpLog: [], jobCosts: [], advances: [], created_at: new Date().toISOString(), ...(newJobInfo.is_warranty ? { is_warranty: true, parent_job_id: newJobInfo.parent_job_id, parent_job_number: newJobInfo.parent_job_number, parent_job_date: newJobInfo.parent_job_date } : {}) }
+    if (finalInfo.assessor_name) rememberAssessor(finalInfo.assessor_name, finalInfo.assessor_phone, finalInfo.insurance_name)
     setJobs(prev => [newJob, ...prev])
     openJob(newJob)
     tt(`${newJob.jobNumber} created`)
@@ -1247,8 +1304,19 @@ export function WorkshopProvider({ children }) {
   const invInsReceivedTotal = inv => invInsPayments(inv).filter(p => p.ins_status === "received").reduce((s, p) => s + p.amount, 0)
   const invCustPaidTotal = inv => invCustPayments(inv).reduce((s, p) => s + p.amount, 0)
   const invCustDiscount = inv => inv?.customer_discount || 0
-  // Customer portion = what insurance is EXPECTED to cover deducted from net
-  const invCustPortion = inv => invNet(inv) - invInsTotal(inv)
+  // Excess (deductible): the part of the claim the CUSTOMER pays, known from the approval letter
+  const invExcess = inv => Math.max(0, Number(inv?.excess) || 0)
+  // What insurance is expected to cover: recorded payments win; before any are
+  // recorded, derive from excess (net - excess) so the customer share is known at delivery
+  const invInsExpected = inv => {
+    const recorded = invInsTotal(inv)
+    if (recorded > 0) return recorded
+    const exc = invExcess(inv)
+    if (exc > 0) return Math.max(0, invNet(inv) - exc)
+    return 0
+  }
+  // Customer portion = net minus what insurance is expected to cover
+  const invCustPortion = inv => invNet(inv) - invInsExpected(inv)
   const invCustOwes = inv => Math.max(0, invCustPortion(inv) - invCustDiscount(inv))
   const invCustBalance = inv => Math.max(0, invCustOwes(inv) - invCustPaidTotal(inv))
   // Outstanding from insurance (recorded but not yet received)
@@ -1311,8 +1379,13 @@ export function WorkshopProvider({ children }) {
     setInvoices(p => p.map(inv => inv.id === selInv.id ? { ...inv, payments: np, status: ns } : inv))
     setSelInv(prev => ({ ...prev, payments: np, status: ns }))
     // Reverse bank balance for deleted bank/online payments
-    if (removed && removed.type !== "insurance" && (removed.method === "bank_transfer" || removed.method === "bank" || removed.method === "online")) {
+    // (skip advance-applied payments — their bank entry was made when the advance was recorded)
+    if (removed && removed.type !== "insurance" && !removed.advance_id && (removed.method === "bank_transfer" || removed.method === "bank" || removed.method === "online")) {
       setCashBook(prev => ({ ...prev, bankBalance: (Number(prev.bankBalance) || 0) - (Number(removed.amount) || 0) }))
+    }
+    // Release the source advance so it can be re-applied
+    if (removed?.advance_id) {
+      setAdvances(prev => prev.map(a => a.id === removed.advance_id ? { ...a, appliedTo: null } : a))
     }
     setConfirmDel(null); tt("Payment deleted")
   }
@@ -1333,6 +1406,65 @@ export function WorkshopProvider({ children }) {
     setSelInv(prev => ({ ...prev, customer_discount: amt }))
     setShowCustDiscInput(false); tt(amt > 0 ? `Customer discount Rs.${fmt(amt)}` : "Customer discount removed")
   }
+  // Excess (customer-payable deductible from the approval letter)
+  const applyExcess = (v) => {
+    const amt = Math.max(0, Number(v) || 0)
+    if (amt > invNet(selInv)) { tt(`⚠️ Excess Rs.${fmt(amt)} exceeds net total Rs.${fmt(invNet(selInv))}`); return }
+    const updated = { ...selInv, excess: amt }
+    const ns = (updated.payments || []).length > 0 ? calcStatus(updated) : updated.status
+    setInvoices(p => p.map(inv => inv.id === selInv.id ? { ...inv, excess: amt, status: ns } : inv))
+    setSelInv(prev => ({ ...prev, excess: amt, status: ns }))
+    tt(amt > 0 ? `Excess Rs.${fmt(amt)} — customer pays this share` : "Excess removed")
+  }
+
+  // ═══ ADVANCE PAYMENTS (before invoicing) ═══
+  const advanceTotal = advances.reduce((s, a) => s + (Number(a.amount) || 0), 0)
+  const unappliedAdvances = advances.filter(a => !a.appliedTo)
+  const unappliedAdvanceTotal = unappliedAdvances.reduce((s, a) => s + (Number(a.amount) || 0), 0)
+  const addAdvance = (amount, method, note) => {
+    const amt = Number(amount)
+    if (!isFinite(amt) || amt <= 0) { tt("⚠️ Enter a valid amount"); return false }
+    const adv = { id: genId("adv"), amount: amt, method: method || "cash", note: (note || "").trim(), date: new Date().toISOString(), appliedTo: null }
+    setAdvances(prev => [...prev, adv])
+    if (method === "bank" || method === "bank_transfer" || method === "online") {
+      setCashBook(prev => ({ ...prev, bankBalance: (Number(prev.bankBalance) || 0) + amt }))
+    }
+    tt(`💵 Advance Rs.${fmt(amt)} recorded`)
+    return true
+  }
+  const deleteAdvance = (id) => {
+    const a = advances.find(x => x.id === id)
+    if (!a) return
+    if (a.appliedTo) { tt("⚠️ Already applied to an invoice — delete the invoice payment instead"); return }
+    setAdvances(prev => prev.filter(x => x.id !== id))
+    if (a.method === "bank" || a.method === "bank_transfer" || a.method === "online") {
+      setCashBook(prev => ({ ...prev, bankBalance: (Number(prev.bankBalance) || 0) - (Number(a.amount) || 0) }))
+    }
+    tt("Advance removed")
+  }
+  // Convert unapplied advances into customer payments on the selected invoice.
+  // The payment carries advance_id so cash-book income doesn't count it twice.
+  const applyAdvancesToInvoice = () => {
+    const unapplied = advances.filter(a => !a.appliedTo)
+    if (!unapplied.length || !selInv) return
+    const newPays = unapplied.map(a => ({ id: genId("pay"), amount: a.amount, type: "customer", date: a.date, method: a.method, reference: a.note ? `Advance · ${a.note}` : "Advance", advance_id: a.id }))
+    const np = [...(selInv.payments || []), ...newPays]
+    const updated = { ...selInv, payments: np }
+    const ns = calcStatus(updated)
+    setInvoices(p => p.map(inv => inv.id === selInv.id ? { ...inv, payments: np, status: ns } : inv))
+    setSelInv(prev => ({ ...prev, payments: np, status: ns }))
+    setAdvances(prev => prev.map(a => a.appliedTo ? a : { ...a, appliedTo: selInv.id }))
+    const total = unapplied.reduce((s, a) => s + a.amount, 0)
+    tt(`✓ Advance Rs.${fmt(total)} applied to invoice`)
+  }
+
+  // Outstanding money on a JOB object (insurance counted only when received)
+  const jobOutstandingTotal = (j) => (j?.invoices || []).reduce((s, inv) => {
+    const net = (inv.items || []).reduce((t, i) => t + (Number(i.qty) || 0) * (Number(i.unit_price) || 0), 0) - (Number(inv.discount) || 0) - (Number(inv.customer_discount) || 0)
+    const pays = inv.payments?.length ? inv.payments : [...(inv.insurance_payments || []), ...(inv.customer_payments || [])]
+    const paid = pays.reduce((t, p) => (p.type === "insurance" && p.ins_status !== "received") ? t : t + (Number(p.amount) || 0), 0)
+    return s + Math.max(0, net - paid)
+  }, 0)
 
   // ═══ RENDER support ═══
   const isDetailScreen = screen !== "home";
@@ -1403,6 +1535,9 @@ export function WorkshopProvider({ children }) {
     purchaseOrders, setPurchaseOrders,
     grns, setGrns,
     cashBook, setCashBook,
+    assessors, setAssessors, rememberAssessor,
+    advances, setAdvances, advanceTotal, unappliedAdvances, unappliedAdvanceTotal,
+    addAdvance, deleteAdvance, applyAdvancesToInvoice,
     partsQuotation, setPartsQuotation,
     pqStatus, setPqStatus,
     pqApprovalPhoto, setPqApprovalPhoto,
@@ -1459,8 +1594,9 @@ export function WorkshopProvider({ children }) {
     generateInvoice, generateMinorInvoice,
     invTotal, invNet, invInsPayments, invCustPayments, invInsTotal, invInsReceivedTotal, invInsOutstanding, invCustPaidTotal,
     invCustDiscount, invCustPortion, invCustOwes, invCustBalance, invTotalDiscount, invFullyPaid,
+    invExcess, invInsExpected, jobOutstandingTotal,
     updateInvItem, removeInvItem, setInvStatus, calcStatus,
-    addPayment, deletePayment, updateInsStatus, applyCustomerDiscount,
+    addPayment, deletePayment, updateInsStatus, applyCustomerDiscount, applyExcess,
     uploadPhoto, deletePhoto,
   }
 

@@ -1,6 +1,6 @@
 "use client"
 import { useWorkshop } from "../WorkshopContext"
-import { useEffect } from "react"
+import { useEffect, useState } from "react"
 import { C, FONT, MONO, inp, btn, btnSm, card, NavBar, VEHICLE_MAKES, INSURANCE_COMPANIES, normalizeReg, normalizePhone, regSearchKey, phoneSearchKey } from "../WorkshopContext"
 import { uploadPhoto } from "../supabase"
 
@@ -16,8 +16,10 @@ export default function NewJobScreen() {
     newJobPhoto, setNewJobPhoto,
     customerRegistry,
     validateAndCreateJob,
+    assessors,
     tt,
   } = useWorkshop()
+  const [showCondition, setShowCondition] = useState(false)
 
   const nj = newJobInfo
   const er = newJobErrors
@@ -62,7 +64,7 @@ export default function NewJobScreen() {
                 if (match.vehicle_model && !nj.vehicle_model) set("vehicle_model", match.vehicle_model)
               } else { setCustomerMatch(null) }
             } else { setCustomerMatch(null) }
-          }} placeholder="e.g. CBB 9636" autoComplete="off" style={{ ...inp, fontFamily: MONO, fontWeight: 700, fontSize: 22, border: errBorder("vehicle_reg") }} />
+          }} placeholder="e.g. CBB 9636" autoComplete="off" autoCapitalize="characters" autoCorrect="off" spellCheck={false} style={{ ...inp, fontFamily: MONO, fontWeight: 700, fontSize: 22, border: errBorder("vehicle_reg") }} />
           {nj.vehicle_reg && !/^[A-Z]{2,3} \d{4}$/.test(nj.vehicle_reg.trim()) && nj.vehicle_reg.length > 2 && <div style={{ fontSize: 12, color: C.orange, marginTop: 4 }}>Format: 2-3 letters + 4 digits (e.g. CBB 5949)</div>}
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
@@ -122,7 +124,7 @@ export default function NewJobScreen() {
           }} onBlur={() => {
             const ph = normalizePhone(nj.customer_phone)
             if (ph.valid && ph.normalized !== nj.customer_phone) set("customer_phone", ph.normalized)
-          }} placeholder="077 123 4567" autoComplete="off" style={{ ...inp, fontFamily: MONO, border: errBorder("customer_phone") }} />
+          }} placeholder="077 123 4567" autoComplete="off" type="tel" inputMode="tel" style={{ ...inp, fontFamily: MONO, border: errBorder("customer_phone") }} />
           {er.phone_msg && <div style={{ fontSize: 12, color: C.red, marginTop: 4, fontWeight: 600 }}>⚠️ {er.phone_msg}</div>}
           {nj.customer_phone && !er.customer_phone && (() => { const ph = normalizePhone(nj.customer_phone); return ph.valid && ph.normalized !== nj.customer_phone ? <div style={{ fontSize: 12, color: C.accent, marginTop: 4 }}>→ {ph.normalized}</div> : null })()}
         </div>
@@ -147,6 +149,24 @@ export default function NewJobScreen() {
               {filtered.map(c => <div key={c} onClick={() => { set("insurance_name", c); setNewJobInsDD(false); setInsSearch(""); setNewJobErrors(p => { const n = { ...p }; delete n.insurance; return n }) }} style={{ padding: "14px 18px", fontSize: 17, cursor: "pointer", borderBottom: `1px solid ${C.border}`, fontWeight: nj.insurance_name === c ? 600 : 400, color: nj.insurance_name === c ? C.accent : C.text }}>{c}</div>)}
             </div> : <div style={{ padding: "14px 18px", fontSize: 15, color: C.muted, textAlign: "center" }}>No match</div> })()}
           </div>}
+          {/* Assessor — optional */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 12 }}>
+            <div>
+              <div style={{ fontSize: 14, color: C.sub, marginBottom: 5, fontWeight: 500 }}>Assessor <span style={{ color: C.muted, fontWeight: 400 }}>(optional)</span></div>
+              <input value={nj.assessor_name || ""} onChange={e => {
+                const v = e.target.value
+                set("assessor_name", v)
+                // Auto-fill phone from the reference list on exact name match
+                const match = assessors.find(a => a.name.toLowerCase() === v.trim().toLowerCase())
+                if (match?.phone && !nj.assessor_phone) set("assessor_phone", match.phone)
+              }} list="nj-assessor-names" placeholder="Assessor name" autoComplete="off" style={inp} />
+              <datalist id="nj-assessor-names">{assessors.map(a => <option key={a.id} value={a.name}>{a.phone ? `${a.phone}${a.insurance ? ` · ${a.insurance}` : ""}` : a.insurance}</option>)}</datalist>
+            </div>
+            <div>
+              <div style={{ fontSize: 14, color: C.sub, marginBottom: 5, fontWeight: 500 }}>Assessor Phone</div>
+              <input value={nj.assessor_phone || ""} onChange={e => set("assessor_phone", e.target.value)} type="tel" inputMode="tel" placeholder="077 123 4567" autoComplete="off" style={{ ...inp, fontFamily: MONO }} />
+            </div>
+          </div>
         </div>}
         {nj.job_type === "direct" && <div style={{ padding: "12px 16px", background: C.green + "08", borderRadius: 12, border: `1px solid ${C.green}30` }}>
           <span style={{ fontSize: 15, color: C.green, fontWeight: 600 }}>💰 Non-insurance — estimate + full pipeline</span>
@@ -162,6 +182,32 @@ export default function NewJobScreen() {
         <div style={{ display: "flex", gap: 8 }}>
           {[{k:"paint",l:"🎨 Paint & Body",c:C.orange},{k:"mechanical",l:"🔧 Mechanical",c:C.accent},{k:"both",l:"🎨+🔧 Both",c:C.purple}].map(w => <div key={w.k} onClick={() => setNewJobInfo(p => ({...p, work_type: w.k}))} style={{ flex: 1, padding: "14px 8px", textAlign: "center", borderRadius: 12, cursor: "pointer", background: nj.work_type === w.k ? w.c + "15" : C.bg, border: `2px solid ${nj.work_type === w.k ? w.c : C.border}`, color: nj.work_type === w.k ? w.c : C.muted, fontWeight: nj.work_type === w.k ? 700 : 500, fontSize: 14, transition: "all 0.15s" }}>{w.l}</div>)}
         </div>
+      </div>
+
+      {/* Vehicle Condition at intake — optional but protects the workshop at delivery */}
+      <div style={card}>
+        <div onClick={() => setShowCondition(!showCondition)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", minHeight: 32 }}>
+          <span style={{ fontSize: 14, fontWeight: 600, color: C.sub, textTransform: "uppercase", letterSpacing: 0.8 }}>📋 Vehicle Condition <span style={{ color: C.muted, fontWeight: 400, textTransform: "none" }}>(optional)</span></span>
+          <span style={{ fontSize: 16, color: C.muted, transform: showCondition ? "rotate(0deg)" : "rotate(-90deg)", transition: "transform 0.2s", fontWeight: 700 }}>▾</span>
+        </div>
+        {showCondition && <div style={{ marginTop: 12 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
+            <div>
+              <div style={{ fontSize: 14, color: C.sub, marginBottom: 5, fontWeight: 500 }}>Paint Code</div>
+              <input value={nj.paint_code || ""} onChange={e => set("paint_code", e.target.value.toUpperCase())} placeholder="e.g. NH788P" autoComplete="off" style={{ ...inp, fontFamily: MONO }} />
+            </div>
+            <div>
+              <div style={{ fontSize: 14, color: C.sub, marginBottom: 5, fontWeight: 500 }}>Mileage (km)</div>
+              <input value={nj.mileage || ""} onChange={e => set("mileage", e.target.value.replace(/[^0-9]/g, ""))} inputMode="numeric" placeholder="e.g. 84500" autoComplete="off" style={{ ...inp, fontFamily: MONO }} />
+            </div>
+          </div>
+          <div style={{ fontSize: 14, color: C.sub, marginBottom: 5, fontWeight: 500 }}>Fuel Level</div>
+          <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
+            {["E", "¼", "½", "¾", "F"].map(f => <div key={f} onClick={() => set("fuel_level", nj.fuel_level === f ? "" : f)} style={{ flex: 1, textAlign: "center", padding: "10px 0", borderRadius: 10, cursor: "pointer", background: nj.fuel_level === f ? C.accent + "15" : C.bg, border: `1.5px solid ${nj.fuel_level === f ? C.accent : C.border}`, fontWeight: 700, color: nj.fuel_level === f ? C.accent : C.muted }}>{f}</div>)}
+          </div>
+          <div style={{ fontSize: 14, color: C.sub, marginBottom: 5, fontWeight: 500 }}>Existing damage / items in vehicle</div>
+          <textarea value={nj.condition_notes || ""} onChange={e => set("condition_notes", e.target.value)} rows={2} placeholder="e.g. Old scratch LHS rear door · spare wheel, jack, dashcam present" style={{ ...inp, fontSize: 15, resize: "vertical", minHeight: 56 }} />
+        </div>}
       </div>
 
       {/* Vehicle Photo (mandatory for insurance + direct, optional for quick) */}

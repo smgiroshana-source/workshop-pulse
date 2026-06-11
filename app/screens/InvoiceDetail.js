@@ -1,4 +1,5 @@
 "use client"
+import { useState } from "react"
 import { useWorkshop } from "../WorkshopContext"
 import { C, FONT, MONO, inp, btn, btnSm, card, pill, Sheet, NavBar, fmt, INV_STATUS, WORKSHOP } from "../WorkshopContext"
 import { uploadPhoto } from "../supabase"
@@ -30,11 +31,16 @@ export default function InvoiceDetail() {
     isInsurance, isDirectJob,
     invTotal, invNet, invInsPayments, invCustPayments, invInsTotal, invCustPaidTotal,
     invCustDiscount, invCustPortion, invCustOwes, invCustBalance, invTotalDiscount, invFullyPaid,
+    invExcess, invInsExpected,
     updateInvItem, removeInvItem, setInvStatus, calcStatus,
-    addPayment, deletePayment, updateInsStatus, applyCustomerDiscount,
+    addPayment, deletePayment, updateInsStatus, applyCustomerDiscount, applyExcess,
+    unappliedAdvances, unappliedAdvanceTotal, applyAdvancesToInvoice,
+    saveCurrentJob,
     generateInvoicePDF,
     tt,
   } = useWorkshop()
+  const [showExcessInput, setShowExcessInput] = useState(false)
+  const [excessVal, setExcessVal] = useState("")
 
   if (!selInv) return null
 
@@ -58,7 +64,7 @@ export default function InvoiceDetail() {
           <div style={{ padding: "10px 18px", background: c.color + "06", display: "flex", justifyContent: "space-between" }}><span style={{ fontSize: 15, fontWeight: 600, color: c.color }}>{c.icon} {c.label}</span><span style={{ fontFamily: MONO, fontSize: 15, color: c.color, fontWeight: 600 }}>Rs.{fmt(ci.reduce((s, i) => s + i.qty * i.unit_price, 0))}</span></div>
           {ci.map(item => <div key={item.id} style={{ padding: "10px 18px", display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: `1px solid ${C.border}` }}>
             {editingItem === item.id && selInv.status === "draft" ? <div style={{ flex: 1 }}>
-              <div style={{ display: "flex", gap: 8 }}><input value={item.description} onChange={e => updateInvItem(item.id, { description: e.target.value })} style={{ ...inp, flex: 1, fontSize: 16 }} /><input type="number" value={item.unit_price} onChange={e => updateInvItem(item.id, { unit_price: Number(e.target.value) || 0 })} style={{ ...inp, width: 90, textAlign: "right", fontFamily: MONO }} /></div>
+              <div style={{ display: "flex", gap: 8 }}><input value={item.description} onChange={e => updateInvItem(item.id, { description: e.target.value })} style={{ ...inp, flex: 1, fontSize: 16 }} /><input type="number" inputMode="decimal" value={item.unit_price} onChange={e => updateInvItem(item.id, { unit_price: Number(e.target.value) || 0 })} style={{ ...inp, width: 90, textAlign: "right", fontFamily: MONO }} /></div>
               <div style={{ display: "flex", gap: 8, marginTop: 8 }}><button onClick={() => setEditingItem(null)} style={{ ...btnSm(C.green + "12", C.green), width: "auto" }}>Done</button><button onClick={() => { removeInvItem(item.id); setEditingItem(null) }} style={{ ...btnSm(C.red + "12", C.red), width: "auto" }}>Remove</button></div>
             </div> : <>
               <div style={{ flex: 1 }} onClick={() => selInv.status === "draft" && setEditingItem(item.id)}>
@@ -76,7 +82,7 @@ export default function InvoiceDetail() {
         </div>}
         {selInv.items.filter(i => i.category === "labour").length > 0 && <div>
           <div style={{ padding: "10px 18px", background: C.accent + "06", display: "flex", justifyContent: "space-between" }}><span style={{ fontSize: 15, fontWeight: 600, color: C.accent }}>👷 Labour</span><span style={{ fontFamily: MONO, fontSize: 15, color: C.accent, fontWeight: 600 }}>Rs.{fmt(selInv.items.filter(i => i.category === "labour").reduce((s, i) => s + i.qty * i.unit_price, 0))}</span></div>
-          {selInv.items.filter(i => i.category === "labour").map(item => <div key={item.id} style={{ padding: "10px 18px", display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: `1px solid ${C.border}` }}><span style={{ fontSize: 16 }}>{item.description}</span><div style={{ display: "flex", alignItems: "center", gap: 6 }}>{selInv.status === "draft" ? <input type="number" value={item.unit_price || ""} onChange={e => updateInvItem(item.id, { unit_price: Number(e.target.value) || 0 })} style={{ width: 100, padding: "6px 10px", background: C.bg, border: `2px solid ${C.accent}40`, borderRadius: 8, color: C.text, fontSize: 17, fontFamily: MONO, fontWeight: 700, textAlign: "right", outline: "none" }} placeholder="Rate" /> : <span style={{ fontFamily: MONO, fontSize: 16, fontWeight: 600 }}>Rs.{fmt(item.unit_price)}</span>}</div></div>)}
+          {selInv.items.filter(i => i.category === "labour").map(item => <div key={item.id} style={{ padding: "10px 18px", display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: `1px solid ${C.border}` }}><span style={{ fontSize: 16 }}>{item.description}</span><div style={{ display: "flex", alignItems: "center", gap: 6 }}>{selInv.status === "draft" ? <input type="number" inputMode="decimal" value={item.unit_price || ""} onChange={e => updateInvItem(item.id, { unit_price: Number(e.target.value) || 0 })} style={{ width: 100, padding: "6px 10px", background: C.bg, border: `2px solid ${C.accent}40`, borderRadius: 8, color: C.text, fontSize: 17, fontFamily: MONO, fontWeight: 700, textAlign: "right", outline: "none" }} placeholder="Rate" /> : <span style={{ fontFamily: MONO, fontSize: 16, fontWeight: 600 }}>Rs.{fmt(item.unit_price)}</span>}</div></div>)}
         </div>}
         {selInv.items.filter(i => i.category === "other").length > 0 && <div>
           <div style={{ padding: "10px 18px", background: C.orange + "06", display: "flex", justifyContent: "space-between" }}><span style={{ fontSize: 15, fontWeight: 600, color: C.orange }}>📦 Outsource</span><span style={{ fontFamily: MONO, fontSize: 15, color: C.orange, fontWeight: 600 }}>Rs.{fmt(selInv.items.filter(i => i.category === "other").reduce((s, i) => s + i.qty * i.unit_price, 0))}</span></div>
@@ -88,7 +94,7 @@ export default function InvoiceDetail() {
           {selInv.discount > 0 && !showDiscountInput ? <div style={{ display: "flex", justifyContent: "space-between", fontSize: 15, marginBottom: 6, alignItems: "center" }}><span style={{ color: C.orange, fontWeight: 500, cursor: "pointer" }} onClick={() => { setDiscount(selInv.discount); setShowDiscountInput(true) }}>Discount ✏️</span><span style={{ fontFamily: MONO, color: C.orange, fontWeight: 600 }}>-Rs.{fmt(selInv.discount)}</span></div>
             : showDiscountInput ? <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
               <span style={{ fontSize: 14, color: C.orange, flexShrink: 0 }}>Discount:</span>
-              <input type="number" min="0" value={discount || ""} onChange={e => { const v = Number(e.target.value); if (v < 0) return; setDiscount(v || 0) }} placeholder="0" style={{ flex: 1, padding: "8px 10px", background: C.bg, border: `2px solid ${C.orange}`, borderRadius: 8, color: C.text, fontSize: 18, fontFamily: MONO, fontWeight: 700, textAlign: "right", outline: "none" }} onKeyDown={e => { if (e.key === "Enter") { const d = Math.max(0, Number(discount) || 0); const sub = invTotal(selInv); if (d > sub) { tt(`⚠️ Discount cannot exceed subtotal Rs.${fmt(sub)}`); return }; setInvoices(p => p.map(inv => inv.id === selInv.id ? { ...inv, discount: d } : inv)); setSelInv(prev => ({ ...prev, discount: d })); setShowDiscountInput(false); tt(d > 0 ? `Discount Rs.${fmt(d)}` : "Removed") } }} />
+              <input type="number" inputMode="decimal" min="0" value={discount || ""} onChange={e => { const v = Number(e.target.value); if (v < 0) return; setDiscount(v || 0) }} placeholder="0" style={{ flex: 1, padding: "8px 10px", background: C.bg, border: `2px solid ${C.orange}`, borderRadius: 8, color: C.text, fontSize: 18, fontFamily: MONO, fontWeight: 700, textAlign: "right", outline: "none" }} onKeyDown={e => { if (e.key === "Enter") { const d = Math.max(0, Number(discount) || 0); const sub = invTotal(selInv); if (d > sub) { tt(`⚠️ Discount cannot exceed subtotal Rs.${fmt(sub)}`); return }; setInvoices(p => p.map(inv => inv.id === selInv.id ? { ...inv, discount: d } : inv)); setSelInv(prev => ({ ...prev, discount: d })); setShowDiscountInput(false); tt(d > 0 ? `Discount Rs.${fmt(d)}` : "Removed") } }} />
               <button onClick={() => { const d = Math.max(0, Number(discount) || 0); const sub = invTotal(selInv); if (d > sub) { tt(`⚠️ Discount cannot exceed subtotal Rs.${fmt(sub)}`); return }; setInvoices(p => p.map(inv => inv.id === selInv.id ? { ...inv, discount: d } : inv)); setSelInv(prev => ({ ...prev, discount: d })); setShowDiscountInput(false); tt(d > 0 ? `Discount Rs.${fmt(d)}` : "Removed") }} style={{ padding: "8px 14px", borderRadius: 8, border: "none", background: C.orange, color: "#fff", fontWeight: 700, fontSize: 14, cursor: "pointer" }}>✓</button>
             </div>
             : (selInv.status === "draft" || selInv.status === "finalized") ? <div onClick={() => { setDiscount(0); setShowDiscountInput(true) }} style={{ fontSize: 14, color: C.orange, marginBottom: 6, cursor: "pointer", opacity: 0.7 }}>+ Add discount</div> : null}
@@ -122,18 +128,34 @@ export default function InvoiceDetail() {
             </div>
           </div> })}
         {invInsPayments(selInv).length === 0 && <div style={{ ...card, textAlign: "center", color: C.sub, fontSize: 14, padding: 16 }}>No insurance payment recorded</div>}
-        <button onClick={() => { setPayType("insurance"); const expected = Math.max(0, invNet(selInv) - invCustBalance(selInv) - invInsTotal(selInv)); setPayAmount(expected > 0 ? expected.toString() : ""); setPayRef(""); setInsPayPhoto(null); setShowPayForm(true) }} style={{ ...btn(C.accent + "15", C.accent), marginTop: 4, fontSize: 14, border: `1px solid ${C.accent}30` }}>+ Record Insurance Payment</button>
+        <button onClick={() => { setPayType("insurance"); const exc = invExcess(selInv); const expected = exc > 0 ? Math.max(0, invNet(selInv) - exc - invInsTotal(selInv)) : Math.max(0, invNet(selInv) - invCustBalance(selInv) - invInsTotal(selInv)); setPayAmount(expected > 0 ? expected.toString() : ""); setPayRef(""); setInsPayPhoto(null); setShowPayForm(true) }} style={{ ...btn(C.accent + "15", C.accent), marginTop: 4, fontSize: 14, border: `1px solid ${C.accent}30` }}>+ Record Insurance Payment</button>
       </div>}
 
       {/* Customer Settlement */}
       <div style={{ marginTop: 14 }}>
         <div style={{ fontSize: 13, color: C.muted, marginBottom: 6, letterSpacing: 0.5 }}>{isDirectJob ? "💰 PAYMENT" : "👤 CUSTOMER"}</div>
         <div style={{ ...card, padding: "14px 16px" }}>
+          {/* Excess (deductible) — what the customer pays per the approval letter */}
+          {isInsurance && (invExcess(selInv) > 0 && !showExcessInput ? (
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, marginBottom: 4, alignItems: "center" }}>
+              <span style={{ color: C.purple, fontWeight: 500, cursor: "pointer" }} onClick={() => { setExcessVal(String(invExcess(selInv))); setShowExcessInput(true) }}>Excess (customer) ✏️</span>
+              <span style={{ fontFamily: MONO, color: C.purple, fontWeight: 600 }}>Rs.{fmt(invExcess(selInv))}</span>
+            </div>
+          ) : showExcessInput ? (
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+              <span style={{ fontSize: 13, color: C.purple, flexShrink: 0 }}>Excess:</span>
+              <input type="number" inputMode="decimal" inputMode="decimal" min="0" value={excessVal} onChange={e => setExcessVal(e.target.value)} placeholder="0" autoFocus style={{ flex: 1, padding: "6px 8px", background: C.bg, border: `2px solid ${C.purple}`, borderRadius: 8, color: C.text, fontSize: 16, fontFamily: MONO, fontWeight: 700, textAlign: "right", outline: "none" }} onKeyDown={e => { if (e.key === "Enter") { applyExcess(excessVal); setShowExcessInput(false) } }} />
+              <button onClick={() => { applyExcess(excessVal); setShowExcessInput(false) }} style={{ padding: "6px 12px", borderRadius: 8, border: "none", background: C.purple, color: "#fff", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>✓</button>
+            </div>
+          ) : (
+            <div onClick={() => { setExcessVal(""); setShowExcessInput(true) }} style={{ fontSize: 13, color: C.purple, marginBottom: 4, cursor: "pointer", opacity: 0.7 }}>+ Excess (customer pays)</div>
+          ))}
+          {isInsurance && invInsExpected(selInv) > 0 && <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, marginBottom: 4 }}><span style={{ color: C.accent }}>Insurance covers</span><span style={{ fontFamily: MONO, color: C.accent, fontWeight: 600 }}>Rs.{fmt(invInsExpected(selInv))}</span></div>}
           {isInsurance && <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, marginBottom: 4 }}><span style={{ color: C.sub }}>Customer Portion</span><span style={{ fontFamily: MONO, fontWeight: 600 }}>Rs.{fmt(invCustPortion(selInv))}</span></div>}
           {invCustDiscount(selInv) > 0 && !showCustDiscInput ? <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, marginBottom: 4, alignItems: "center" }}><span style={{ color: C.orange, cursor: "pointer" }} onClick={() => { setCustDiscount(invCustDiscount(selInv)); setShowCustDiscInput(true) }}>{isDirectJob ? "Discount" : "Customer Discount"} ✏️</span><span style={{ fontFamily: MONO, color: C.orange, fontWeight: 600 }}>-Rs.{fmt(invCustDiscount(selInv))}</span></div>
             : showCustDiscInput ? <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
               <span style={{ fontSize: 13, color: C.orange, flexShrink: 0 }}>Discount:</span>
-              <input type="number" value={custDiscount || ""} onChange={e => setCustDiscount(Number(e.target.value) || 0)} placeholder="0" style={{ flex: 1, padding: "6px 8px", background: C.bg, border: `2px solid ${C.orange}`, borderRadius: 8, color: C.text, fontSize: 16, fontFamily: MONO, fontWeight: 700, textAlign: "right", outline: "none" }} onKeyDown={e => { if (e.key === "Enter") applyCustomerDiscount(Number(custDiscount) || 0) }} />
+              <input type="number" inputMode="decimal" value={custDiscount || ""} onChange={e => setCustDiscount(Number(e.target.value) || 0)} placeholder="0" style={{ flex: 1, padding: "6px 8px", background: C.bg, border: `2px solid ${C.orange}`, borderRadius: 8, color: C.text, fontSize: 16, fontFamily: MONO, fontWeight: 700, textAlign: "right", outline: "none" }} onKeyDown={e => { if (e.key === "Enter") applyCustomerDiscount(Number(custDiscount) || 0) }} />
               <button onClick={() => applyCustomerDiscount(Number(custDiscount) || 0)} style={{ padding: "6px 12px", borderRadius: 8, border: "none", background: C.orange, color: "#fff", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>✓</button>
             </div>
             : <div onClick={() => { setCustDiscount(0); setShowCustDiscInput(true) }} style={{ fontSize: 13, color: C.orange, marginBottom: 4, cursor: "pointer", opacity: 0.7 }}>+ {isDirectJob ? "Discount" : "Customer discount"}</div>}
@@ -146,6 +168,14 @@ export default function InvoiceDetail() {
             <span onClick={() => deletePayment(p.id)} style={{ fontSize: confirmDel === p.id ? 13 : 16, color: C.red, cursor: "pointer", opacity: confirmDel === p.id ? 1 : 0.4, background: confirmDel === p.id ? C.red + "15" : "none", padding: confirmDel === p.id ? "2px 8px" : "0", borderRadius: 6, fontWeight: confirmDel === p.id ? 700 : 400 }}>{confirmDel === p.id ? "Delete?" : "✕"}</span>
           </div>
         </div>)}
+        {/* Unapplied advances — apply to this invoice */}
+        {unappliedAdvances.length > 0 && <div style={{ ...card, marginTop: 8, padding: "12px 14px", background: C.green + "06", border: `1.5px dashed ${C.green}50`, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: C.green }}>💵 Advance Rs.{fmt(unappliedAdvanceTotal)} received</div>
+            <div style={{ fontSize: 12, color: C.sub }}>{unappliedAdvances.length} advance{unappliedAdvances.length > 1 ? "s" : ""} not yet on this invoice</div>
+          </div>
+          <button onClick={applyAdvancesToInvoice} style={{ ...btnSm(C.green, "#fff"), width: "auto", padding: "10px 16px", flexShrink: 0 }}>Apply</button>
+        </div>}
         {invCustBalance(selInv) > 0 && <button onClick={() => { setPayType("customer"); setPayAmount(invCustBalance(selInv).toString()); setPayRef(""); setShowPayForm(true) }} style={{ ...btn(C.green, "#fff"), marginTop: 8 }}>💰 Record Payment</button>}
         {invCustBalance(selInv) <= 0 && invCustPayments(selInv).length > 0 && <div style={{ textAlign: "center", color: C.green, fontSize: 14, fontWeight: 600, marginTop: 8 }}>✓ {isDirectJob ? "Fully Paid" : "Customer settled"}</div>}
       </div>
@@ -169,6 +199,7 @@ export default function InvoiceDetail() {
       {invFullyPaid(selInv) && jobStage !== "closed" && (
         <button onClick={() => {
           if (!confirm("Close this job?")) return
+          saveCurrentJob() // persist invoices/payments before closing — otherwise the payment just recorded is lost
           setJobs(prev => prev.map(j => j.id === activeJobId ? { ...j, stage: "closed" } : j))
           setJobStage("closed")
           tt("🏁 Job closed")
@@ -185,7 +216,7 @@ export default function InvoiceDetail() {
           <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 6 }}>🛡️ Insurance Payment</div>
           <div style={{ fontSize: 15, color: C.sub, marginBottom: 16 }}>Net Total: Rs.{fmt(invNet(selInv))}</div>
           <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6, color: C.sub }}>AMOUNT</div>
-          <input type="number" value={payAmount} onChange={e => setPayAmount(e.target.value)} placeholder="0" style={{ ...inp, fontFamily: MONO, fontSize: 28, fontWeight: 700, textAlign: "center", marginBottom: 16 }} />
+          <input type="number" inputMode="decimal" value={payAmount} onChange={e => setPayAmount(e.target.value)} placeholder="0" style={{ ...inp, fontFamily: MONO, fontSize: 28, fontWeight: 700, textAlign: "center", marginBottom: 16 }} />
           <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6, color: C.sub }}>RELEASE LETTER / CHEQUE NUMBER</div>
           <input value={payRef} onChange={e => setPayRef(e.target.value)} placeholder="Optional" style={{ ...inp, marginBottom: 16 }} />
           <div style={{ marginBottom: 16 }}>
@@ -202,7 +233,7 @@ export default function InvoiceDetail() {
           <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 6 }}>{isDirectJob ? "💰 Payment" : "👤 Customer Payment"}</div>
           <div style={{ fontSize: 15, color: C.sub, marginBottom: 16 }}>{isDirectJob ? "Due" : "Owes"}: Rs.{fmt(invCustOwes(selInv))}</div>
           <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6, color: C.sub }}>AMOUNT</div>
-          <input type="number" value={payAmount} onChange={e => setPayAmount(e.target.value)} placeholder="0" style={{ ...inp, fontFamily: MONO, fontSize: 28, fontWeight: 700, textAlign: "center", marginBottom: 16 }} />
+          <input type="number" inputMode="decimal" value={payAmount} onChange={e => setPayAmount(e.target.value)} placeholder="0" style={{ ...inp, fontFamily: MONO, fontSize: 28, fontWeight: 700, textAlign: "center", marginBottom: 16 }} />
           <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6, color: C.sub }}>METHOD</div>
           <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
             {[["cash", "💵 Cash"], ["bank_transfer", "🏦 Bank"], ["cheque", "📝 Cheque"], ["online", "📱 Online"]].map(([k, l]) => <div key={k} onClick={() => setPayMethod(k)} style={{ flex: 1, textAlign: "center", padding: "12px 4px", borderRadius: 12, cursor: "pointer", background: payMethod === k ? C.green + "15" : C.bg, border: `1px solid ${payMethod === k ? C.green + "50" : C.border}`, fontSize: 14, fontWeight: payMethod === k ? 600 : 400, color: payMethod === k ? C.green : C.sub }}>{l}</div>)}

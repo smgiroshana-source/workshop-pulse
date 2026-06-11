@@ -1,7 +1,7 @@
 "use client"
 import React, { useState } from "react"
 import { useWorkshop } from "../WorkshopContext"
-import { C, FONT, MONO, inp, btn, btnSm, btnOutline, btnText, card, pill, Sheet, NavBar, ALL_STAGES, VEHICLE_MAKES, INSURANCE_COMPANIES, INV_STATUS, fmt, SP, genId } from "../WorkshopContext"
+import { C, FONT, MONO, inp, btn, btnSm, btnOutline, btnText, card, pill, Sheet, NavBar, ALL_STAGES, VEHICLE_MAKES, INSURANCE_COMPANIES, INV_STATUS, fmt, SP, genId, phoneIntl } from "../WorkshopContext"
 import { uploadPhoto } from "../supabase"
 
 // ═══ QUICK JOB COSTS — One-Line Entry with Category Dropdown ═══
@@ -111,7 +111,7 @@ function QuickJobCosts({ jobCosts, setJobCosts, invoices, generateMinorInvoice, 
           placeholder={isLabourCat ? "Labour item..." : isSundry ? "Sundry item..." : "Item name..."}
           style={{ ...inp, flex: 1, fontSize: 15, fontWeight: 600, background: C.card, padding: "12px 14px" }} />
         {showCost && (
-          <input type="number" min="0" value={addCost} onChange={e => { const v = Number(e.target.value); if (v < 0) return; setAddCost(e.target.value) }}
+          <input type="number" inputMode="decimal" min="0" value={addCost} onChange={e => { const v = Number(e.target.value); if (v < 0) return; setAddCost(e.target.value) }}
             placeholder="Cost" onKeyDown={e => { if (e.key === "Enter") addItem() }}
             style={{ ...inp, width: 110, flex: "0 0 110px", fontSize: 16, fontFamily: MONO, fontWeight: 700, background: C.card, padding: "12px 14px", textAlign: "right" }} />
         )}
@@ -168,7 +168,7 @@ function QuickJobCosts({ jobCosts, setJobCosts, invoices, generateMinorInvoice, 
               {/* Inline cost edit */}
               {isEditing && (
                 <div style={{ display: "flex", gap: 4, alignItems: "center", flexShrink: 0 }}>
-                  <input type="number" value={editCost} onChange={e => setEditCost(e.target.value)} autoFocus
+                  <input type="number" inputMode="decimal" value={editCost} onChange={e => setEditCost(e.target.value)} autoFocus
                     onKeyDown={e => { if (e.key === "Enter") saveEditCost(item.id); if (e.key === "Escape") setEditingId(null) }}
                     style={{ width: 90, padding: "6px 8px", fontSize: 15, fontFamily: MONO, fontWeight: 700, borderRadius: 8, border: `2px solid ${C.accent}`, outline: "none", textAlign: "right" }} placeholder="0" />
                   <div onClick={() => saveEditCost(item.id)} style={{ padding: "6px 10px", borderRadius: 8, background: C.green, color: "#fff", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>✓</div>
@@ -271,6 +271,9 @@ export default function JobScreen() {
     invTotal, invNet, invInsPayments, invCustPayments, invInsTotal, invCustPaidTotal,
     invCustDiscount, invCustPortion, invCustOwes, invCustBalance, invTotalDiscount, invFullyPaid,
     INV_STATUS: invStatusConst,
+    assessors, rememberAssessor,
+    advances, advanceTotal, unappliedAdvances, addAdvance, deleteAdvance,
+    jobOutstandingTotal,
     tt,
   } = useWorkshop()
 
@@ -295,6 +298,11 @@ export default function JobScreen() {
   // Vehicle & Customer edit mode
   const [editingDetails, setEditingDetails] = useState(false)
   const [detailsBackup, setDetailsBackup] = useState(null)
+  // Advance payment form
+  const [showAdvForm, setShowAdvForm] = useState(false)
+  const [advAmt, setAdvAmt] = useState("")
+  const [advMethod, setAdvMethod] = useState("cash")
+  const [advNote, setAdvNote] = useState("")
 
   const startEditDetails = () => {
     setDetailsBackup({ ...jobInfo })
@@ -312,6 +320,7 @@ export default function JobScreen() {
     setEditingDetails(false)
     setMakeSuggestions([])
     setShowInsDropdown(false)
+    if (jobInfo.assessor_name) rememberAssessor(jobInfo.assessor_name, jobInfo.assessor_phone, jobInfo.insurance_name)
     tt("✓ Details saved")
   }
 
@@ -450,8 +459,8 @@ export default function JobScreen() {
         {jobStage === "follow_up" && <>
           <div style={{ fontSize: 14, color: C.sub, marginBottom: 10 }}>Call customer and record feedback before closing the job.</div>
           <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
-            <a href={`tel:${jobInfo.customer_phone}`} style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "12px 0", background: C.green + "10", borderRadius: 12, color: C.green, fontWeight: 600, fontSize: 15, textDecoration: "none", border: `1px solid ${C.green}30` }}>📞 Call {jobInfo.customer_name?.split(" ")[0] || "Customer"}</a>
-            <a href={`https://wa.me/${(jobInfo.customer_phone || "").replace(/\D/g, "")}`} target="_blank" style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "12px 0", background: "#25d366" + "10", borderRadius: 12, color: "#25d366", fontWeight: 600, fontSize: 15, textDecoration: "none", border: "1px solid #25d36630" }}>💬 WhatsApp</a>
+            <a href={`tel:+${phoneIntl(jobInfo.customer_phone)}`} style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "12px 0", background: C.green + "10", borderRadius: 12, color: C.green, fontWeight: 600, fontSize: 15, textDecoration: "none", border: `1px solid ${C.green}30` }}>📞 Call {jobInfo.customer_name?.split(" ")[0] || "Customer"}</a>
+            <a href={`https://wa.me/${phoneIntl(jobInfo.customer_phone)}`} target="_blank" style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "12px 0", background: "#25d366" + "10", borderRadius: 12, color: "#25d366", fontWeight: 600, fontSize: 15, textDecoration: "none", border: "1px solid #25d36630" }}>💬 WhatsApp</a>
           </div>
         </>}
 
@@ -480,7 +489,15 @@ export default function JobScreen() {
               const newLog = [...followUpLog, logEntry]
               setFollowUpAttempts(newAttempts)
               setFollowUpLog(newLog)
-              if (newAttempts >= 3) {
+              const outstanding = jobOutstandingTotal({ invoices }) // live working copy, not the saved job
+              if (newAttempts >= 3 && outstanding > 0) {
+                // 3 no-answers but money still owed -- keep open, don't lose the receivable
+                const keptLog = [...newLog, { text: `Kept open after 3 no-answers — Rs.${fmt(outstanding)} outstanding`, time: now }]
+                setFollowUpLog(keptLog)
+                saveCurrentJob()
+                setJobs(prev => prev.map(j => j.id === activeJobId ? { ...j, onHold: false, holdUntil: null, followUpAttempts: newAttempts, followUpLog: keptLog, followUpNote } : j))
+                tt(`⚠️ Rs.${fmt(outstanding)} outstanding — job kept open`)
+              } else if (newAttempts >= 3) {
                 // 3rd no-answer -> auto-close
                 const closeNote = (followUpNote ? followUpNote + ". " : "") + "Auto-closed: 3 no-answer attempts"
                 setFollowUpNote(closeNote)
@@ -503,6 +520,8 @@ export default function JobScreen() {
             {/* Close Job */}
             <button onClick={() => {
               if (!followUpNote.trim()) { tt("⚠️ Add a follow-up comment first"); return }
+              const outstanding = jobOutstandingTotal({ invoices })
+              if (outstanding > 0 && !confirm(`⚠️ Rs.${fmt(outstanding)} is still outstanding on this job${isInsurance ? " (insurance not yet received?)" : ""}.\n\nClose anyway? The amount will still show in Receivable.`)) return
               const now = new Date().toISOString()
               const newLog = [...followUpLog, { text: followUpNote, time: now }]
               setFollowUpLog(newLog)
@@ -532,10 +551,21 @@ export default function JobScreen() {
             <div><div style={{ fontSize: 12, color: C.muted, marginBottom: 3, fontWeight: 500 }}>Model</div><div style={{ fontSize: 16, color: C.text }}>{jobInfo.vehicle_model || "—"}</div></div>
             <div><div style={{ fontSize: 12, color: C.muted, marginBottom: 3, fontWeight: 500 }}>Phone</div>
               {jobInfo.customer_phone
-                ? <a href={`tel:${jobInfo.customer_phone}`} style={{ fontSize: 16, color: C.accent, textDecoration: "none", fontWeight: 500 }}>{jobInfo.customer_phone}</a>
+                ? <a href={`tel:+${phoneIntl(jobInfo.customer_phone)}`} style={{ fontSize: 16, color: C.accent, textDecoration: "none", fontWeight: 500 }}>{jobInfo.customer_phone}</a>
                 : <div style={{ fontSize: 16, color: C.text }}>—</div>}
             </div>
             <div><div style={{ fontSize: 12, color: C.muted, marginBottom: 3, fontWeight: 500 }}>Insurance</div><div style={{ fontSize: 16, color: jobInfo.insurance_name ? C.accent : C.muted, fontWeight: jobInfo.insurance_name ? 600 : 400 }}>{jobInfo.insurance_name || "No insurance"}</div></div>
+            {isInsurance && <div><div style={{ fontSize: 12, color: C.muted, marginBottom: 3, fontWeight: 500 }}>Assessor</div>
+              {jobInfo.assessor_name
+                ? <div style={{ fontSize: 15, color: C.text, fontWeight: 600 }}>{jobInfo.assessor_name}{jobInfo.assessor_phone && <> · <a href={`tel:+${phoneIntl(jobInfo.assessor_phone)}`} style={{ color: C.accent, textDecoration: "none", fontWeight: 500 }}>📞</a> <a href={`https://wa.me/${phoneIntl(jobInfo.assessor_phone)}`} target="_blank" rel="noreferrer" style={{ color: "#25d366", textDecoration: "none" }}>💬</a></>}</div>
+                : <div style={{ fontSize: 15, color: C.muted }}>Not assigned</div>}
+            </div>}
+            {jobInfo.paint_code && <div><div style={{ fontSize: 12, color: C.muted, marginBottom: 3, fontWeight: 500 }}>Paint Code</div><div style={{ fontSize: 16, fontFamily: MONO, fontWeight: 700, color: C.purple }}>{jobInfo.paint_code}</div></div>}
+            {(jobInfo.mileage || jobInfo.fuel_level) && <div><div style={{ fontSize: 12, color: C.muted, marginBottom: 3, fontWeight: 500 }}>Intake</div><div style={{ fontSize: 15, color: C.text }}>{jobInfo.mileage ? `${jobInfo.mileage} km` : ""}{jobInfo.mileage && jobInfo.fuel_level ? " · " : ""}{jobInfo.fuel_level ? `Fuel ${jobInfo.fuel_level}` : ""}</div></div>}
+          </div>}
+          {!editingDetails && jobInfo.condition_notes && <div style={{ marginTop: 10, padding: "10px 12px", background: C.orange + "08", border: `1px solid ${C.orange}25`, borderRadius: 10 }}>
+            <div style={{ fontSize: 12, color: C.orange, fontWeight: 700, marginBottom: 2 }}>⚠️ Condition at intake</div>
+            <div style={{ fontSize: 14, color: C.sub, whiteSpace: "pre-wrap" }}>{jobInfo.condition_notes}</div>
           </div>}
 
           {/* Edit mode */}
@@ -561,6 +591,35 @@ export default function JobScreen() {
                   {INSURANCE_COMPANIES.map(c => <div key={c} onMouseDown={() => { setJobInfo(j => ({ ...j, insurance_name: c })); setShowInsDropdown(false) }} style={{ padding: "14px 18px", fontSize: 17, cursor: "pointer", borderBottom: `1px solid ${C.border}`, fontWeight: jobInfo.insurance_name === c ? 600 : 400, color: jobInfo.insurance_name === c ? C.accent : C.text }}>{c}</div>)}
                 </div>}
               </div>
+              {isInsurance && <>
+                <div><div style={{ fontSize: 14, color: C.sub, marginBottom: 5, fontWeight: 500 }}>Assessor (optional)</div>
+                  <input value={jobInfo.assessor_name || ""} onChange={e => setJobInfo({ ...jobInfo, assessor_name: e.target.value })} list="assessor-names" placeholder="Assessor name" autoComplete="off" style={inp} />
+                  <datalist id="assessor-names">{assessors.map(a => <option key={a.id} value={a.name}>{a.phone ? `${a.phone}${a.insurance ? ` · ${a.insurance}` : ""}` : a.insurance}</option>)}</datalist>
+                </div>
+                <div><div style={{ fontSize: 14, color: C.sub, marginBottom: 5, fontWeight: 500 }}>Assessor Phone</div>
+                  <input value={jobInfo.assessor_phone || ""} onChange={e => {
+                    setJobInfo({ ...jobInfo, assessor_phone: e.target.value })
+                    // Auto-fill phone from the assessor list when the name matches
+                  }} onFocus={() => {
+                    if (!jobInfo.assessor_phone && jobInfo.assessor_name) {
+                      const match = assessors.find(a => a.name.toLowerCase() === (jobInfo.assessor_name || "").toLowerCase())
+                      if (match?.phone) setJobInfo(prev => ({ ...prev, assessor_phone: match.phone }))
+                    }
+                  }} type="tel" inputMode="tel" placeholder="077 123 4567" style={{ ...inp, fontFamily: MONO }} />
+                </div>
+              </>}
+              <div><div style={{ fontSize: 14, color: C.sub, marginBottom: 5, fontWeight: 500 }}>Paint Code</div><input value={jobInfo.paint_code || ""} onChange={e => setJobInfo({ ...jobInfo, paint_code: e.target.value.toUpperCase() })} placeholder="e.g. NH788P" autoComplete="off" style={{ ...inp, fontFamily: MONO }} /></div>
+              <div><div style={{ fontSize: 14, color: C.sub, marginBottom: 5, fontWeight: 500 }}>Mileage (km)</div><input value={jobInfo.mileage || ""} onChange={e => setJobInfo({ ...jobInfo, mileage: e.target.value.replace(/[^0-9]/g, "") })} inputMode="numeric" placeholder="e.g. 84500" autoComplete="off" style={{ ...inp, fontFamily: MONO }} /></div>
+            </div>
+            <div style={{ marginTop: 10 }}>
+              <div style={{ fontSize: 14, color: C.sub, marginBottom: 5, fontWeight: 500 }}>Fuel Level</div>
+              <div style={{ display: "flex", gap: 6 }}>
+                {["E", "¼", "½", "¾", "F"].map(f => <div key={f} onClick={() => setJobInfo({ ...jobInfo, fuel_level: jobInfo.fuel_level === f ? "" : f })} style={{ flex: 1, textAlign: "center", padding: "10px 0", borderRadius: 10, cursor: "pointer", background: jobInfo.fuel_level === f ? C.accent + "15" : C.bg, border: `1.5px solid ${jobInfo.fuel_level === f ? C.accent : C.border}`, fontWeight: 700, color: jobInfo.fuel_level === f ? C.accent : C.muted }}>{f}</div>)}
+              </div>
+            </div>
+            <div style={{ marginTop: 10 }}>
+              <div style={{ fontSize: 14, color: C.sub, marginBottom: 5, fontWeight: 500 }}>Condition at intake — old damage, items in vehicle</div>
+              <textarea value={jobInfo.condition_notes || ""} onChange={e => setJobInfo({ ...jobInfo, condition_notes: e.target.value })} rows={2} placeholder="e.g. Scratch on LHS rear door (old), spare wheel + jack present" style={{ ...inp, fontSize: 15, resize: "vertical", minHeight: 56 }} />
             </div>
             <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
               <button onClick={cancelEditDetails} style={{ ...btnSm("transparent", C.sub), flex: 1, border: `1px solid ${C.border}`, background: "transparent" }}>Cancel</button>
@@ -726,6 +785,34 @@ export default function JobScreen() {
 
       {/* Invoices -- visible for all job types */}
       {invoices.map(inv => { const st = INV_STATUS[inv.status]; return <div key={inv.id} onClick={() => { setSelInv(inv); setScreen("inv_detail") }} style={{ ...card, cursor: "pointer" }}><div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}><div style={{ display: "flex", alignItems: "center", gap: 10 }}><span style={{ fontSize: 18, fontWeight: 700, fontFamily: MONO }}>{inv.invoice_number}</span><span style={pill(st.c)}>{st.l}</span></div><span style={{ fontFamily: MONO, fontSize: 20, fontWeight: 700 }}>Rs.{fmt(invTotal(inv))}</span></div>{isDirectJob ? <div style={{ fontSize: 14, color: C.sub, marginTop: 6 }}>Balance: Rs.{fmt(invCustBalance(inv))}</div> : invInsTotal(inv) > 0 && <div style={{ fontSize: 14, color: C.sub, marginTop: 6 }}>Ins: Rs.{fmt(invInsTotal(inv))} {invInsPayments(inv).some(p => p.ins_status !== "received") ? "⏳" : "✓"} · Cust bal: Rs.{fmt(invCustBalance(inv))}</div>}</div> })}
+
+      {/* ═══ ADVANCE PAYMENTS — money taken before/while invoicing ═══ */}
+      {jobStage !== "closed" && jobStage !== "cancelled" && <div style={{ ...card, padding: "14px 16px", border: `1px solid ${advances.length ? C.green + "30" : C.border}` }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: advances.length || showAdvForm ? 10 : 0 }}>
+          <span style={{ fontSize: 14, fontWeight: 600, color: C.sub, textTransform: "uppercase", letterSpacing: 0.8 }}>💵 Advances{advanceTotal > 0 ? ` · Rs.${fmt(advanceTotal)}` : ""}</span>
+          {!showAdvForm && <span onClick={() => setShowAdvForm(true)} style={{ fontSize: 14, fontWeight: 600, color: C.green, cursor: "pointer", padding: "6px 12px", background: C.green + "10", borderRadius: 8 }}>+ Record Advance</span>}
+        </div>
+        {advances.map(a => <div key={a.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: `1px solid ${C.border}` }}>
+          <div>
+            <span style={{ fontFamily: MONO, fontSize: 16, fontWeight: 700, color: C.green }}>Rs.{fmt(a.amount)}</span>
+            <span style={{ fontSize: 13, color: C.sub, marginLeft: 8 }}>{a.method === "bank" ? "🏦 Bank" : a.method === "cheque" ? "📝 Cheque" : "💵 Cash"}{a.note ? ` · ${a.note}` : ""}</span>
+            <div style={{ fontSize: 12, color: C.muted }}>{new Date(a.date).toLocaleDateString("en-LK", { month: "short", day: "numeric" })}{a.appliedTo ? " · ✓ applied to invoice" : ""}</div>
+          </div>
+          {!a.appliedTo && <span onClick={() => deleteAdvance(a.id)} style={{ fontSize: 16, color: C.red, opacity: 0.5, cursor: "pointer", padding: "8px 10px" }}>✕</span>}
+        </div>)}
+        {showAdvForm && <div style={{ marginTop: 10 }}>
+          <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
+            <input type="number" inputMode="decimal" inputMode="decimal" min="0" value={advAmt} onChange={e => setAdvAmt(e.target.value)} placeholder="Amount" autoFocus style={{ ...inp, flex: 1, fontFamily: MONO, fontWeight: 700, fontSize: 18, textAlign: "right" }} />
+            {[["cash", "💵"], ["bank", "🏦"], ["cheque", "📝"]].map(([k, ic]) => <div key={k} onClick={() => setAdvMethod(k)} style={{ width: 52, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 12, cursor: "pointer", background: advMethod === k ? C.green + "15" : C.bg, border: `1.5px solid ${advMethod === k ? C.green : C.border}`, fontSize: 18 }}>{ic}</div>)}
+          </div>
+          <input value={advNote} onChange={e => setAdvNote(e.target.value)} placeholder="Note (e.g. 50% advance to start work)" style={{ ...inp, marginBottom: 8, fontSize: 14 }} />
+          <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={() => { setShowAdvForm(false); setAdvAmt(""); setAdvNote("") }} style={{ ...btnSm("transparent", C.sub), flex: 1, border: `1px solid ${C.border}` }}>Cancel</button>
+            <button onClick={() => { if (addAdvance(advAmt, advMethod, advNote)) { setShowAdvForm(false); setAdvAmt(""); setAdvNote("") } }} style={{ ...btnSm(C.green, "#fff"), flex: 1 }}>✓ Record</button>
+          </div>
+        </div>}
+        {!advances.length && !showAdvForm && <div style={{ fontSize: 13, color: C.muted, marginTop: 6 }}>Record customer advances (e.g. 50% to start) — they'll be applied to the invoice later.</div>}
+      </div>}
 
       {/* On Hold / Reactivate / Delete / Cancel / Convert */}
       <div style={{ marginTop: 20, borderTop: `1px solid ${C.border}`, paddingTop: 16 }}>

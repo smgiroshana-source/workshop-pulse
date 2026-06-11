@@ -1,6 +1,6 @@
 "use client"
 import { useState, useRef, useEffect } from "react"
-import { WorkshopProvider, useWorkshop, C, FONT, MONO, btn, btnSm, inp, card, pill, Sheet, NavBar, ALL_STAGES, fmt, regSearchKey, phoneSearchKey, SP } from "./WorkshopContext"
+import { WorkshopProvider, useWorkshop, C, FONT, MONO, btn, btnSm, inp, card, pill, Sheet, NavBar, ALL_STAGES, fmt, regSearchKey, phoneSearchKey, phoneIntl, SP } from "./WorkshopContext"
 import { useAuth } from "./AuthGate"
 import { uploadPhoto, deletePhoto, compressForPreview } from "./supabase"
 import UserManagement from "./screens/UserManagement"
@@ -86,6 +86,7 @@ function CashBookScreen({ cashBook, setCashBook, grns, setGrns, jobs, loadClosed
         const pays = (inv.payments?.length ? inv.payments : [...(inv.insurance_payments || []), ...(inv.customer_payments || [])])
         pays.forEach(p => {
           if (!p || !p.date) return
+          if (p.advance_id) return // advance applied to invoice — already counted as income on the day it was taken
           const pid = p.id || `${p.date}_${p.amount}_${p.type}`
           if (seen.has(pid)) return
           if (toLocalDate(p.date) !== date) return
@@ -100,6 +101,14 @@ function CashBookScreen({ cashBook, setCashBook, grns, setGrns, jobs, loadClosed
             seen.add(pid)
           }
         })
+      })
+      // Advance payments taken before invoicing
+      ;(j.advances || []).forEach(a => {
+        if (!a || !a.date || seen.has(a.id)) return
+        if (toLocalDate(a.date) !== date) return
+        const m = a.method === "cash" ? "cash" : a.method === "cheque" ? "cheque" : "bank"
+        items.push({ id: a.id, desc: `${j.jobInfo?.vehicle_reg || "Job"} — advance`, amount: num(a.amount), method: m, chequeNo: a.note })
+        seen.add(a.id)
       })
     })
     return items
@@ -884,6 +893,8 @@ function AppInner() {
     customerRegistry,
     loadClosedJobs,
     startWarrantyJob,
+    assessors,
+    jobOutstandingTotal,
   } = useWorkshop()
   const { signOut, isSuperAdmin, role } = useAuth()
   const [showUserMgmt, setShowUserMgmt] = useState(false)
@@ -1064,9 +1075,11 @@ function AppInner() {
   }
 
   function rightPanelHub() {
-    // Pending payments: jobs with invoices that aren't fully paid
+    // Pending payments: jobs with invoices that aren't fully paid.
+    // Closed jobs ARE included — closing a job doesn't write off the receivable
+    // (insurance often pays weeks after delivery/closure).
     const pendingPaymentJobs = jobs.filter(j => {
-      if (j.stage === "closed" || j.stage === "cancelled") return false
+      if (j.stage === "cancelled") return false
       const invs = j.invoices || []
       return invs.some(inv => {
         const total = calcInvoiceTotal(inv) - (Number(inv.discount) || 0) - (Number(inv.customer_discount) || 0)
@@ -1156,13 +1169,21 @@ function AppInner() {
     }
 
     if (rightTab === "receivable") {
-      const totalReceivable = pendingPaymentJobs.reduce((sum, j) => {
-        return sum + (j.invoices || []).reduce((s, inv) => {
-          const total = calcInvoiceTotal(inv) - (Number(inv.discount) || 0) - (Number(inv.customer_discount) || 0)
-          const paid = calcInvoicePaid(inv)
-          return s + Math.max(0, total - paid)
-        }, 0)
+      const jobBalance = (j) => (j.invoices || []).reduce((s, inv) => {
+        const t = calcInvoiceTotal(inv) - (Number(inv.discount) || 0) - (Number(inv.customer_discount) || 0)
+        return s + Math.max(0, t - calcInvoicePaid(inv))
       }, 0)
+      const totalReceivable = pendingPaymentJobs.reduce((sum, j) => sum + jobBalance(j), 0)
+      // Group outstanding by insurer — the number you take to the insurer's office
+      const byInsurer = {}
+      pendingPaymentJobs.forEach(j => {
+        const bal = jobBalance(j)
+        if (bal <= 0) return
+        const key = j.jobInfo?.insurance_name || (j.jobInfo?.job_type === "quick" ? "Walk-in / Quick" : "Direct Customers")
+        if (!byInsurer[key]) byInsurer[key] = { total: 0, count: 0 }
+        byInsurer[key].total += bal; byInsurer[key].count += 1
+      })
+      const insurerRows = Object.entries(byInsurer).sort((a, b) => b[1].total - a[1].total)
       return <div>
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
           <span onClick={() => setRightTab(null)} style={{ fontSize: 14, color: C.accent, cursor: "pointer", fontWeight: 600 }}>← Back</span>
@@ -1172,6 +1193,17 @@ function AppInner() {
           <div style={{ ...card, background: C.orange + "08", display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 16px", marginBottom: 8 }}>
             <span style={{ fontSize: 14, fontWeight: 600, color: C.sub }}>Total Outstanding</span>
             <span style={{ fontFamily: MONO, fontSize: 20, fontWeight: 700, color: C.orange }}>Rs.{totalReceivable.toLocaleString()}</span>
+          </div>
+        )}
+        {insurerRows.length > 1 && (
+          <div style={{ ...card, padding: "12px 16px", marginBottom: 8 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: C.muted, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 }}>By Insurer</div>
+            {insurerRows.map(([name, v]) => (
+              <div key={name} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderBottom: `1px solid ${C.border}` }}>
+                <span style={{ fontSize: 14, color: C.text, fontWeight: 500 }}>{name} <span style={{ fontSize: 12, color: C.muted }}>· {v.count} job{v.count > 1 ? "s" : ""}</span></span>
+                <span style={{ fontFamily: MONO, fontSize: 15, fontWeight: 700, color: C.orange }}>Rs.{v.total.toLocaleString()}</span>
+              </div>
+            ))}
           </div>
         )}
         {pendingPaymentJobs.length === 0 ? (
@@ -1215,13 +1247,53 @@ function AppInner() {
       return <CashBookScreen cashBook={cashBook} setCashBook={setCashBook} grns={grns} setGrns={setGrns} jobs={jobs} loadClosedJobs={loadClosedJobs} tt={tt} onBack={() => setRightTab(null)} />
     }
 
+    if (rightTab === "assessors") {
+      // Reference list of insurance assessors — built up from jobs as they're recorded
+      const activeByAssessor = {}
+      jobs.forEach(j => {
+        const n = (j.jobInfo?.assessor_name || "").trim().toLowerCase()
+        if (!n || j.stage === "closed" || j.stage === "cancelled") return
+        activeByAssessor[n] = (activeByAssessor[n] || 0) + 1
+      })
+      return <div className="screen-fade">
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
+          <span onClick={() => setRightTab(null)} style={{ fontSize: 14, color: C.accent, cursor: "pointer", fontWeight: 600 }}>← Back</span>
+          <span style={{ fontSize: 20, fontWeight: 700 }}>Assessors</span>
+        </div>
+        <div style={{ fontSize: 13, color: C.muted, marginBottom: 12 }}>Reference list — assessors are added automatically when you record them on a job.</div>
+        {assessors.length === 0 ? (
+          <div style={{ textAlign: "center", padding: 40, color: C.muted }}>
+            <div style={{ fontSize: 40, marginBottom: 12 }}>🕵️</div>
+            <div style={{ fontSize: 16, fontWeight: 600 }}>No assessors recorded yet</div>
+            <div style={{ fontSize: 14, marginTop: 6 }}>Add an assessor name on an insurance job — it will appear here.</div>
+          </div>
+        ) : [...assessors].sort((a, b) => a.name.localeCompare(b.name)).map(a => (
+          <div key={a.id} style={{ ...card, padding: "12px 16px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div>
+              <div style={{ fontSize: 16, fontWeight: 600 }}>{a.name}{activeByAssessor[a.name.toLowerCase()] ? <span style={{ fontSize: 12, fontWeight: 700, color: C.orange, marginLeft: 8 }}>{activeByAssessor[a.name.toLowerCase()]} active job{activeByAssessor[a.name.toLowerCase()] > 1 ? "s" : ""}</span> : null}</div>
+              <div style={{ fontSize: 13, color: C.sub }}>{a.phone || "No phone"}{a.insurance ? ` · ${a.insurance}` : ""}</div>
+            </div>
+            {a.phone && <div style={{ display: "flex", gap: 8 }}>
+              <a href={`tel:+${phoneIntl(a.phone)}`} style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 44, height: 44, borderRadius: 12, background: C.green + "10", border: `1px solid ${C.green}30`, textDecoration: "none", fontSize: 18 }}>📞</a>
+              <a href={`https://wa.me/${phoneIntl(a.phone)}`} target="_blank" rel="noreferrer" style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 44, height: 44, borderRadius: 12, background: "#25d36610", border: "1px solid #25d36630", textDecoration: "none", fontSize: 18 }}>💬</a>
+            </div>}
+          </div>
+        ))}
+      </div>
+    }
+
     if (rightTab === "payable") {
       return <PayableScreen unpaidPOs={unpaidPOs} setPurchaseOrders={setPurchaseOrders} setGrns={setGrns} cashBook={cashBook} setCashBook={setCashBook} tt={tt} onBack={() => setRightTab(null)} />
     }
 
     // Today's quick stats for hub summary
     const todayStr = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}` })()
-    const todayIncomeTotal = jobs.reduce((sum, j) => sum + (j.invoices || []).reduce((s2, inv) => s2 + (inv.payments || []).filter(p => p.date?.slice(0,10) === todayStr || (()=>{try{const d=new Date(p.date);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`===todayStr}catch{return false}})()).reduce((s3, p) => s3 + (p.amount || 0), 0), 0), 0)
+    const isTodayPay = (p) => { try { const d = new Date(p.date); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}` === todayStr } catch { return false } }
+    const todayIncomeTotal = jobs.reduce((sum, j) =>
+      sum
+      + (j.invoices || []).reduce((s2, inv) => s2 + (inv.payments || []).filter(p => !p.advance_id && isTodayPay(p)).reduce((s3, p) => s3 + (p.amount || 0), 0), 0)
+      + (j.advances || []).filter(isTodayPay).reduce((s2, a) => s2 + (a.amount || 0), 0)
+    , 0)
     const dueTodayCheques = grns.filter(g => g.paid && g.paymentMethod === "cheque" && g.chequeDate === todayStr && !g.chequeCleared).length
     const activeCount = jobs.filter(j => !j.onHold && j.stage !== "closed" && j.stage !== "cancelled").length
     const hour = new Date().getHours()
@@ -1356,8 +1428,16 @@ function AppInner() {
             <div style={{ fontFamily: MONO, fontSize: 14, fontWeight: 700, color: C.green, marginTop: 8 }}>{regEntries.length} vehicles</div>
           </div>
 
+          {/* Assessor reference list */}
+          <div data-card-hover onClick={() => setRightTab("assessors")} style={{ ...card, cursor: "pointer", padding: "20px 16px", textAlign: "center", border: `1px solid ${C.purple}20` }}>
+            <div style={{ fontSize: 36, marginBottom: 8 }}>🕵️</div>
+            <div style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 4 }}>Assessors</div>
+            <div style={{ fontSize: 13, color: C.muted }}>Insurance contacts</div>
+            <div style={{ fontFamily: MONO, fontSize: 14, fontWeight: 700, color: C.purple, marginTop: 8 }}>{assessors.length} saved</div>
+          </div>
+
           {/* Receivable — pending insurance / credit payments */}
-          <div data-card-hover onClick={() => setRightTab("receivable")} style={{ ...card, cursor: "pointer", padding: "20px 16px", textAlign: "center", border: `1px solid ${pendingPaymentJobs.length > 0 ? C.orange : C.border}20` }}>
+          <div data-card-hover onClick={() => { loadClosedJobs(); setRightTab("receivable") }} style={{ ...card, cursor: "pointer", padding: "20px 16px", textAlign: "center", border: `1px solid ${pendingPaymentJobs.length > 0 ? C.orange : C.border}20` }}>
             <div style={{ fontSize: 36, marginBottom: 8 }}>💰</div>
             <div style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 4 }}>Receivable</div>
             <div style={{ fontSize: 13, color: C.muted }}>Credit & Insurance</div>
@@ -1460,7 +1540,7 @@ function AppInner() {
       <div style={{ flex: isTablet ? 1 : undefined, maxWidth: isTablet ? undefined : 480, margin: isTablet ? undefined : "0 auto", padding: isTablet ? "16px 28px" : "14px 16px", paddingTop: isTablet ? 16 : "max(14px, env(safe-area-inset-top))", paddingBottom: !isTablet && screen === "home" ? "max(90px, calc(90px + env(safe-area-inset-bottom)))" : "max(100px, calc(100px + env(safe-area-inset-bottom)))", minHeight: "100vh", overflowY: isTablet ? "auto" : undefined, maxHeight: isTablet ? "100vh" : undefined }}>
 
         {/* Toast */}
-        {toast && <div key={toast} className="toast-appear" style={{ position: "fixed", top: "max(20px, calc(20px + env(safe-area-inset-top)))", left: "50%", transform: "translateX(-50%)", background: /⚠️|❌|❗|error|failed/i.test(toast) ? C.red : /✓|✅|success|saved|added|recorded|done|nice|🎉|👏/i.test(toast) ? C.green : C.text, color: "#fff", padding: "14px 22px", borderRadius: 14, fontWeight: 600, fontSize: 16, zIndex: 999, boxShadow: "0 8px 40px rgba(0,0,0,0.25)", maxWidth: "min(92vw, 500px)", textAlign: "center" }}>{toast}</div>}
+        {toast && <div key={toast} className="toast-appear" style={{ position: "fixed", top: "max(20px, calc(20px + env(safe-area-inset-top)))", left: "50%", transform: "translateX(-50%)", background: /⚠️|❌|❗|error|failed|blocked|wrong|invalid|outstanding/i.test(toast) ? C.red : /⏳|uploading/i.test(toast) ? C.accent : /✓|✅|success|saved|added|recorded|done|nice|🎉|👏|💵|💰/i.test(toast) ? C.green : C.text, color: "#fff", padding: "14px 22px", borderRadius: 14, fontWeight: 600, fontSize: 16, zIndex: 3000, boxShadow: "0 8px 40px rgba(0,0,0,0.25)", maxWidth: "min(92vw, 500px)", textAlign: "center" }}>{toast}</div>}
 
         {/* Hidden file inputs */}
         <input ref={uploadRef} type="file" accept="image/*" style={{ display: "none" }} id="galleryInput" onChange={async e => { const f = e.target.files[0]; if (f) { const label = showUploadMenu === "approval" && selEst ? (selEst.type === "supplementary" ? selEst.label : "Estimate") : photoTag; const docId = "d_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 6); tt("⏳ Uploading…"); try { const url = await uploadPhoto(f, `${activeJobId}/${docId}.jpg`); setJobDocs(p => [...p, { id: docId, dataUrl: url, estId: selEst?.id || null, label }]); tt(`📸 ${label} photo saved`); setShowUploadMenu(null); setPhotoTag("General") } catch { tt("❌ Upload failed") } } e.target.value = "" }} />

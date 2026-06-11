@@ -3,8 +3,9 @@ export const metadata = { title: "Workshop Pulse", description: "MacForce Auto E
 export const viewport = {
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
+  // Pinch-zoom enabled for accessibility (input-focus zoom is prevented separately via the 16px font rule)
+  maximumScale: 5,
+  userScalable: true,
   viewportFit: "cover",
   themeColor: "#007AFF",
 }
@@ -16,9 +17,17 @@ export default function RootLayout({ children }) {
     <style dangerouslySetInnerHTML={{ __html: `
     html, body { overscroll-behavior-y: contain; }
     body { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; padding-bottom: env(safe-area-inset-bottom); }
-    input:focus, textarea:focus, select:focus { border-color: #007AFF !important; box-shadow: 0 0 0 3px rgba(0,122,255,0.25) !important; }
-    input::placeholder { color: #AEAEB2; }
+    input:focus, textarea:focus, select:focus { border-color: #007AFF !important; box-shadow: 0 0 0 3px rgba(0,122,255,0.18) !important; }
+    input::placeholder, textarea::placeholder { color: #AEAEB2; }
     * { -webkit-tap-highlight-color: transparent; box-sizing: border-box; }
+
+    /* Hide number input spinners — cleaner money fields */
+    input[type="number"]::-webkit-outer-spin-button,
+    input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+    input[type="number"] { -moz-appearance: textfield; }
+
+    /* Consistent, calm transitions on interactive elements */
+    input, textarea, select { transition: border-color 0.15s ease, box-shadow 0.15s ease; }
 
     /* Touch optimizations */
     button, a { touch-action: manipulation; }

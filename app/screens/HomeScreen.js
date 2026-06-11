@@ -16,8 +16,8 @@ function JobCard({ j, isTablet, isSelected, openJob, setHoverJobId, setHoverY })
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 }}>
         <span style={{ fontFamily: MONO, fontSize: isTablet ? 16 : 18, fontWeight: 700 }}>{j.jobInfo.vehicle_reg || "New Job"}</span>
         <div style={{ display: "flex", gap: 4, alignItems: "center", flexShrink: 0 }}>
-          {j.paused && <span style={{ fontSize: 12, fontWeight: 700, color: C.orange, background: C.orange + "15", padding: "5px 10px", borderRadius: 6 }}>⏸</span>}
-          {j.onHold && <span style={{ fontSize: 12, fontWeight: 700, color: C.orange, background: C.orange + "15", padding: "5px 10px", borderRadius: 6 }}>📌</span>}
+          {j.paused && <span style={{ fontSize: 11, fontWeight: 700, color: C.orange, background: C.orange + "15", padding: "5px 8px", borderRadius: 6, whiteSpace: "nowrap" }}>⏸ Paused</span>}
+          {j.onHold && <span style={{ fontSize: 11, fontWeight: 700, color: C.orange, background: C.orange + "15", padding: "5px 8px", borderRadius: 6, whiteSpace: "nowrap" }}>📌 Hold</span>}
           <span style={{ fontSize: isTablet ? 11 : 12, fontWeight: 700, color: stage.color, background: stage.color + "12", padding: "5px 10px", borderRadius: 8, whiteSpace: "nowrap" }}>{stage.icon} {stage.label}</span>
         </div>
       </div>
@@ -254,10 +254,12 @@ export function ClosedHistory({ jobs, searchQuery, openJob, isTablet, activeJobI
   // Search filter
   if (searchQuery.trim()) {
     const q = searchQuery.toLowerCase().replace(/[\s\-]/g, "")
+    const flat = s => (s || "").toLowerCase().replace(/[\s\-]/g, "")
     vehicles = vehicles.filter(v =>
-      v.key.includes(q) || v.make.toLowerCase().includes(q) || v.model.toLowerCase().includes(q) ||
-      v.customers.some(c => c.toLowerCase().includes(q)) ||
-      v.partsRepaired.some(p => p.toLowerCase().includes(q))
+      v.key.includes(q) || flat(`${v.make}${v.model}`).includes(q) ||
+      v.customers.some(c => flat(c).includes(q)) ||
+      v.partsRepaired.some(p => flat(p).includes(q)) ||
+      v.jobs.some(j => flat(j.jobNumber).includes(q) || phoneSearchKey(j.jobInfo.customer_phone).includes(q))
     )
   }
 
@@ -504,17 +506,24 @@ export default function HomeScreen() {
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <div style={{ fontSize: isTablet ? 28 : 36, fontWeight: 700, color: C.text, letterSpacing: "-1px" }}>Jobs</div>
             <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-              <div onClick={() => setSortBy(s => s === "newest" ? "oldest" : s === "oldest" ? "highest_value" : s === "highest_value" ? "stage_order" : "newest")} style={{ fontSize: 12, color: C.accent, cursor: "pointer", padding: "4px 10px", borderRadius: 8, background: C.accent + "08" }}>
-                {sortBy === "newest" ? "↓ New" : sortBy === "oldest" ? "↑ Old" : sortBy === "highest_value" ? "💰 Value" : "📊 Stage"}
-              </div>
-              <div style={{ fontFamily: MONO, fontSize: 15, color: C.sub }}>{jobs.filter(j => !j.onHold && j.stage !== "closed" && j.stage !== "cancelled").length}</div>
+              {/* Clear, labeled sort — native picker is the easiest control on phones */}
+              <label style={{ display: "inline-flex", alignItems: "center", gap: 6, background: C.card, border: `1px solid ${C.border}`, borderRadius: 10, padding: "8px 10px", cursor: "pointer" }}>
+                <span style={{ fontSize: 12, color: C.muted, fontWeight: 600 }}>Sort</span>
+                <select value={sortBy} onChange={e => setSortBy(e.target.value)} style={{ border: "none", outline: "none", background: "transparent", fontSize: 13, fontWeight: 600, color: C.accent, fontFamily: FONT, cursor: "pointer", appearance: "none", WebkitAppearance: "none", paddingRight: 2 }}>
+                  <option value="newest">Newest first</option>
+                  <option value="oldest">Oldest first</option>
+                  <option value="highest_value">Highest value</option>
+                  <option value="stage_order">By stage</option>
+                </select>
+                <span style={{ fontSize: 10, color: C.accent }}>▾</span>
+              </label>
             </div>
           </div>
         </div>
 
         <div style={{ position: "relative", marginBottom: 12 }}>
           <span style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", fontSize: 16, pointerEvents: "none" }}>🔍</span>
-          <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search vehicles..." style={{ ...inp, background: C.card, fontSize: isTablet ? 15 : 17, paddingLeft: 42, boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }} />
+          <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search reg, customer, phone, job no…" style={{ ...inp, background: C.card, fontSize: isTablet ? 15 : 17, paddingLeft: 42, boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }} />
           {searchQuery && <span onClick={() => setSearchQuery("")} style={{ position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)", fontSize: 18, cursor: "pointer", color: C.muted, padding: 4 }}>✕</span>}
         </div>
 
@@ -541,7 +550,16 @@ export default function HomeScreen() {
               filtered = filtered.filter(j => j.stage === filterStage)
             }
           }
-          if (searchQuery.trim()) { const q = searchQuery.toLowerCase().replace(/[\s\-]/g, ""); filtered = filtered.filter(j => { const reg = regSearchKey(j.jobInfo.vehicle_reg); const phone = phoneSearchKey(j.jobInfo.customer_phone); const name = (j.jobInfo.customer_name || "").toLowerCase(); const make = (j.jobInfo.vehicle_make || "").toLowerCase(); const num = (j.jobNumber || "").toLowerCase(); return reg.includes(q) || phone.includes(q) || name.includes(q) || make.includes(q) || num.includes(q) }) }
+          if (searchQuery.trim()) {
+            // Normalize BOTH sides (strip spaces/hyphens) so "Kasun Perera", "JOB-001" and "CBB 5949" all match
+            const q = searchQuery.toLowerCase().replace(/[\s\-]/g, "")
+            const flat = s => (s || "").toLowerCase().replace(/[\s\-]/g, "")
+            filtered = filtered.filter(j => {
+              const reg = regSearchKey(j.jobInfo.vehicle_reg)
+              const phone = phoneSearchKey(j.jobInfo.customer_phone)
+              return reg.includes(q) || phone.includes(q) || flat(j.jobInfo.customer_name).includes(q) || flat(`${j.jobInfo.vehicle_make}${j.jobInfo.vehicle_model}`).includes(q) || flat(j.jobNumber).includes(q)
+            })
+          }
           filtered = sortJobs(filtered, sortBy)
           return filtered.length ? filtered.map(j => <JobCard key={j.id} j={j} isTablet={isTablet} isSelected={isTablet && activeJobId === j.id} openJob={openJob} setHoverJobId={setHoverJobId} setHoverY={setHoverY} />)
             : <div className="screen-fade" style={{ textAlign: "center", padding: "48px 20px", color: C.muted }}>

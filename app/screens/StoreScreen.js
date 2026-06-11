@@ -120,13 +120,13 @@ function PODetail({ po, onBack, onUpdate, onCreateGRN, onDelete, grns, tt }) {
             <div key={item.id} style={{ display: "flex", gap: 6, alignItems: "center", padding: "6px 0", borderBottom: `1px solid ${C.border}` }}>
               <input value={item.name} onChange={e => setItems(prev => prev.map(i => i.id === item.id ? { ...i, name: e.target.value } : i))}
                 style={{ ...inp, flex: 1, fontSize: 15, fontWeight: 600, padding: "10px 12px" }} />
-              <input type="number" value={item.qty} onChange={e => setItems(prev => prev.map(i => i.id === item.id ? { ...i, qty: Number(e.target.value) || 0 } : i))}
+              <input type="number" inputMode="decimal" value={item.qty} onChange={e => setItems(prev => prev.map(i => i.id === item.id ? { ...i, qty: Number(e.target.value) || 0 } : i))}
                 style={{ ...inp, width: 80, flex: "0 0 80px", fontSize: 16, fontFamily: MONO, fontWeight: 600, textAlign: "center", padding: "10px 6px" }} />
               <select value={item.unit} onChange={e => setItems(prev => prev.map(i => i.id === item.id ? { ...i, unit: e.target.value } : i))}
                 style={{ ...inp, flex: "0 0 70px", fontSize: 13, padding: "10px 6px" }}>
                 {UNITS.map(u => <option key={u} value={u}>{u}</option>)}
               </select>
-              <input type="number" value={item.unitPrice || 0} onChange={e => setItems(prev => prev.map(i => i.id === item.id ? { ...i, unitPrice: Number(e.target.value) || 0 } : i))}
+              <input type="number" inputMode="decimal" value={item.unitPrice || 0} onChange={e => setItems(prev => prev.map(i => i.id === item.id ? { ...i, unitPrice: Number(e.target.value) || 0 } : i))}
                 style={{ ...inp, width: 100, flex: "0 0 100px", fontSize: 15, fontFamily: MONO, fontWeight: 700, textAlign: "right", padding: "10px 10px" }} />
               <div onClick={() => setItems(prev => prev.filter(i => i.id !== item.id))} style={{ width: 48, height: 48, borderRadius: 10, background: C.red + "15", color: C.red, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, cursor: "pointer", flexShrink: 0 }}>×</div>
             </div>
@@ -136,12 +136,12 @@ function PODetail({ po, onBack, onUpdate, onCreateGRN, onDelete, grns, tt }) {
               <input value={addName} onChange={e => setAddName(e.target.value)} placeholder="Item" autoComplete="off"
                 onKeyDown={e => { if (e.key === "Enter") addItem() }}
                 style={{ ...inp, flex: 1, fontSize: 15, fontWeight: 600, padding: "10px 12px" }} />
-              <input type="number" value={addQty} onChange={e => setAddQty(e.target.value)} placeholder="Qty"
+              <input type="number" inputMode="decimal" value={addQty} onChange={e => setAddQty(e.target.value)} placeholder="Qty"
                 style={{ ...inp, width: 80, flex: "0 0 80px", fontSize: 16, fontFamily: MONO, fontWeight: 600, textAlign: "center", padding: "10px 6px" }} />
               <select value={addUnit} onChange={e => setAddUnit(e.target.value)} style={{ ...inp, flex: "0 0 70px", fontSize: 13, padding: "10px 6px" }}>
                 {UNITS.map(u => <option key={u} value={u}>{u}</option>)}
               </select>
-              <input type="number" value={addPrice} onChange={e => setAddPrice(e.target.value)} placeholder="Price"
+              <input type="number" inputMode="decimal" value={addPrice} onChange={e => setAddPrice(e.target.value)} placeholder="Price"
                 onKeyDown={e => { if (e.key === "Enter") addItem() }}
                 style={{ ...inp, width: 100, flex: "0 0 100px", fontSize: 15, fontFamily: MONO, fontWeight: 700, textAlign: "right", padding: "10px 10px" }} />
               <div onClick={addItem} style={{ width: 48, height: 48, borderRadius: 10, background: C.green, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, fontWeight: 700, cursor: "pointer", flexShrink: 0 }}>+</div>
@@ -359,12 +359,12 @@ function GRNDetail({ grn, onBack, pos, onUpdate, cashBook, setCashBook, tt }) {
           <div key={item.id || idx} style={{ padding: "8px 0", borderBottom: idx < items.length - 1 ? `1px solid ${C.border}` : "none" }}>
             <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 6 }}>{item.name}</div>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <input type="number" value={item.qty} onFocus={e => { e.target._orig = item.qty; e.target.value = ""; setItems(prev => prev.map(i => i.id === item.id ? { ...i, qty: "" } : i)) }}
+              <input type="number" inputMode="decimal" value={item.qty} onFocus={e => { e.target._orig = item.qty; e.target.value = ""; setItems(prev => prev.map(i => i.id === item.id ? { ...i, qty: "" } : i)) }}
                 onBlur={e => { if (e.target.value === "") setItems(prev => prev.map(i => i.id === item.id ? { ...i, qty: e.target._orig } : i)) }}
                 onChange={e => setItems(prev => prev.map(i => i.id === item.id ? { ...i, qty: e.target.value === "" ? "" : Number(e.target.value) } : i))}
                 style={{ ...inp, width: 80, flex: "0 0 80px", fontSize: 16, fontFamily: MONO, fontWeight: 700, textAlign: "center", padding: "10px 6px" }} />
               <span style={{ fontSize: 13, color: C.muted }}>{item.unit || "pcs"} ×</span>
-              <input type="number" value={item.unitPrice} onFocus={e => { e.target._orig = item.unitPrice; e.target.value = ""; setItems(prev => prev.map(i => i.id === item.id ? { ...i, unitPrice: "" } : i)) }}
+              <input type="number" inputMode="decimal" value={item.unitPrice} onFocus={e => { e.target._orig = item.unitPrice; e.target.value = ""; setItems(prev => prev.map(i => i.id === item.id ? { ...i, unitPrice: "" } : i)) }}
                 onBlur={e => { if (e.target.value === "") setItems(prev => prev.map(i => i.id === item.id ? { ...i, unitPrice: e.target._orig } : i)) }}
                 onChange={e => setItems(prev => prev.map(i => i.id === item.id ? { ...i, unitPrice: e.target.value === "" ? "" : Number(e.target.value) } : i))}
                 style={{ ...inp, flex: 1, fontSize: 15, fontFamily: MONO, fontWeight: 700, textAlign: "right", padding: "10px 10px" }} />
@@ -641,13 +641,13 @@ function NewPOForm({ onSave, onCancel, suppliers, supplierRegistry, tt, nextPONu
           <div key={item.id} style={{ display: "flex", gap: 6, alignItems: "center", padding: "6px 0", borderBottom: `1px solid ${C.border}` }}>
             <input value={item.name} onChange={e => setItems(prev => prev.map(i => i.id === item.id ? { ...i, name: e.target.value } : i))}
               style={{ ...inp, flex: 1, fontSize: 15, fontWeight: 600, padding: "10px 12px" }} />
-            <input type="number" value={item.qty} onChange={e => setItems(prev => prev.map(i => i.id === item.id ? { ...i, qty: Number(e.target.value) || 0 } : i))}
+            <input type="number" inputMode="decimal" value={item.qty} onChange={e => setItems(prev => prev.map(i => i.id === item.id ? { ...i, qty: Number(e.target.value) || 0 } : i))}
               style={{ ...inp, width: 80, flex: "0 0 80px", fontSize: 16, fontFamily: MONO, fontWeight: 600, textAlign: "center", padding: "10px 6px" }} />
             <select value={item.unit} onChange={e => setItems(prev => prev.map(i => i.id === item.id ? { ...i, unit: e.target.value } : i))}
               style={{ ...inp, flex: "0 0 70px", fontSize: 13, padding: "10px 6px" }}>
               {UNITS.map(u => <option key={u} value={u}>{u}</option>)}
             </select>
-            <input type="number" value={item.unitPrice} onChange={e => setItems(prev => prev.map(i => i.id === item.id ? { ...i, unitPrice: Number(e.target.value) || 0 } : i))}
+            <input type="number" inputMode="decimal" value={item.unitPrice} onChange={e => setItems(prev => prev.map(i => i.id === item.id ? { ...i, unitPrice: Number(e.target.value) || 0 } : i))}
               style={{ ...inp, width: 100, flex: "0 0 100px", fontSize: 15, fontFamily: MONO, fontWeight: 700, textAlign: "right", padding: "10px 10px" }} />
             <div onClick={() => setItems(prev => prev.filter(i => i.id !== item.id))} style={{ width: 48, height: 48, borderRadius: 10, background: C.red + "15", color: C.red, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, cursor: "pointer", flexShrink: 0 }}>×</div>
           </div>
@@ -659,12 +659,12 @@ function NewPOForm({ onSave, onCancel, suppliers, supplierRegistry, tt, nextPONu
             <input value={addName} onChange={e => setAddName(e.target.value)} placeholder="Item" autoComplete="off"
               onKeyDown={e => { if (e.key === "Enter") addItem() }}
               style={{ ...inp, flex: 1, fontSize: 15, fontWeight: 600, padding: "10px 12px" }} />
-            <input type="number" value={addQty} onChange={e => setAddQty(e.target.value)} placeholder="Qty"
+            <input type="number" inputMode="decimal" value={addQty} onChange={e => setAddQty(e.target.value)} placeholder="Qty"
               style={{ ...inp, width: 80, flex: "0 0 80px", fontSize: 16, fontFamily: MONO, fontWeight: 600, textAlign: "center", padding: "10px 6px" }} />
             <select value={addUnit} onChange={e => setAddUnit(e.target.value)} style={{ ...inp, flex: "0 0 70px", fontSize: 13, padding: "10px 6px" }}>
               {UNITS.map(u => <option key={u} value={u}>{u}</option>)}
             </select>
-            <input type="number" value={addPrice} onChange={e => setAddPrice(e.target.value)} placeholder="Price"
+            <input type="number" inputMode="decimal" value={addPrice} onChange={e => setAddPrice(e.target.value)} placeholder="Price"
               onKeyDown={e => { if (e.key === "Enter") addItem() }}
               style={{ ...inp, width: 100, flex: "0 0 100px", fontSize: 15, fontFamily: MONO, fontWeight: 700, textAlign: "right", padding: "10px 10px" }} />
             <div onClick={addItem} style={{ width: 48, height: 48, borderRadius: 10, background: C.green, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, fontWeight: 700, cursor: "pointer", flexShrink: 0 }}>+</div>
@@ -763,13 +763,13 @@ function ReceiveGoodsForm({ po, onSave, onCancel, suppliers, tt }) {
           <div key={item.id} style={{ padding: "10px 0", borderBottom: idx < items.length - 1 ? `1px solid ${C.border}` : "none" }}>
             <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 6 }}>{item.name}</div>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <input type="number" defaultValue={item.qty}
+              <input type="number" inputMode="decimal" defaultValue={item.qty}
                 onFocus={e => { e.target.dataset.prev = e.target.value; e.target.value = "" }}
                 onBlur={e => { if (e.target.value === "") e.target.value = e.target.dataset.prev; setItems(prev => prev.map(i => i.id === item.id ? { ...i, qty: Number(e.target.value) || 0 } : i)) }}
                 onChange={e => setItems(prev => prev.map(i => i.id === item.id ? { ...i, qty: Number(e.target.value) || 0 } : i))}
                 style={{ ...inp, width: 80, flex: "0 0 80px", fontSize: 16, fontFamily: MONO, fontWeight: 700, textAlign: "center", padding: "10px 6px" }} />
               <span style={{ fontSize: 13, color: C.muted }}>{item.unit || "pcs"} ×</span>
-              <input type="number" defaultValue={item.unitPrice || 0}
+              <input type="number" inputMode="decimal" defaultValue={item.unitPrice || 0}
                 onFocus={e => { e.target.dataset.prev = e.target.value; e.target.value = "" }}
                 onBlur={e => { if (e.target.value === "") e.target.value = e.target.dataset.prev; setItems(prev => prev.map(i => i.id === item.id ? { ...i, unitPrice: Number(e.target.value) || 0 } : i)) }}
                 onChange={e => setItems(prev => prev.map(i => i.id === item.id ? { ...i, unitPrice: Number(e.target.value) || 0 } : i))}
@@ -787,12 +787,12 @@ function ReceiveGoodsForm({ po, onSave, onCancel, suppliers, tt }) {
               onKeyDown={e => { if (e.key === "Enter") addItem() }}
               style={{ ...inp, fontSize: 15, fontWeight: 600, marginBottom: 6 }} />
             <div style={{ display: "flex", gap: 6 }}>
-              <input type="number" value={addQty} onChange={e => setAddQty(e.target.value)} placeholder="Qty"
+              <input type="number" inputMode="decimal" value={addQty} onChange={e => setAddQty(e.target.value)} placeholder="Qty"
                 style={{ ...inp, width: 55, flex: "0 0 55px", fontSize: 14, textAlign: "center" }} />
               <select value={addUnit} onChange={e => setAddUnit(e.target.value)} style={{ ...inp, flex: "0 0 80px", fontSize: 14 }}>
                 {UNITS.map(u => <option key={u} value={u}>{u}</option>)}
               </select>
-              <input type="number" value={addPrice} onChange={e => setAddPrice(e.target.value)} placeholder="Price"
+              <input type="number" inputMode="decimal" value={addPrice} onChange={e => setAddPrice(e.target.value)} placeholder="Price"
                 onKeyDown={e => { if (e.key === "Enter") addItem() }}
                 style={{ ...inp, flex: 1, fontSize: 15, fontFamily: MONO, fontWeight: 700, textAlign: "right" }} />
               <div onClick={addItem} style={{ width: 48, height: 48, borderRadius: 10, background: C.green, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, fontWeight: 700, cursor: "pointer", flexShrink: 0 }}>+</div>
@@ -815,7 +815,7 @@ function ReceiveGoodsForm({ po, onSave, onCancel, suppliers, tt }) {
         </div>
         <div style={{ marginBottom: 10 }}>
           <div style={{ fontSize: 12, color: C.muted, marginBottom: 4 }}>Invoice Amount</div>
-          <input type="number" value={invoiceAmount} onChange={e => setInvoiceAmount(e.target.value)} placeholder="Total from invoice"
+          <input type="number" inputMode="decimal" value={invoiceAmount} onChange={e => setInvoiceAmount(e.target.value)} placeholder="Total from invoice"
             style={{ ...inp, fontSize: 16, fontFamily: MONO, fontWeight: 700 }} autoComplete="off" />
         </div>
         <div>
