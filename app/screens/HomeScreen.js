@@ -1,7 +1,10 @@
 "use client"
 import { useState } from "react"
 import { useWorkshop } from "../WorkshopContext"
-import { C, FONT, MONO, inp, btn, card, SP, ALL_STAGES, regSearchKey, phoneSearchKey, fmt } from "../WorkshopContext"
+import { C, FONT, MONO, inp, btn, card, SP, ALL_STAGES, regSearchKey, phoneSearchKey, fmt, Icon, IconBadge } from "../WorkshopContext"
+
+// Small colored status dot — replaces emoji in stage pills
+const Dot = ({ color, size = 7 }) => <span style={{ width: size, height: size, borderRadius: size / 2, background: color, display: "inline-block", flexShrink: 0 }} />
 
 // Shared job card renderer
 function JobCard({ j, isTablet, isSelected, openJob, setHoverJobId, setHoverY }) {
@@ -11,31 +14,31 @@ function JobCard({ j, isTablet, isSelected, openJob, setHoverJobId, setHoverY })
   const jobArrivedCnt = Object.values(j.partsArrived || {}).filter(Boolean).length
   const thumb = (j.jobDocs || [])[0]?.dataUrl
   return <div onClick={() => openJob(j)} onMouseEnter={e => { if (isTablet) { setHoverJobId(j.id); setHoverY(e.clientY) } }} onMouseLeave={() => setHoverJobId(null)} style={{ ...card, cursor: "pointer", padding: isTablet ? "10px 12px" : "12px 14px", background: isSelected ? C.accent + "08" : C.card, border: isSelected ? `1px solid ${C.accent}40` : `1px solid ${C.border}`, borderLeft: `4px solid ${stage.color}`, display: "flex", gap: 10, alignItems: "center" }}>
-    {thumb ? <img src={thumb} style={{ width: isTablet ? 48 : 56, height: isTablet ? 48 : 56, borderRadius: 12, objectFit: "cover", flexShrink: 0 }} alt="" /> : <div style={{ width: isTablet ? 48 : 56, height: isTablet ? 48 : 56, borderRadius: 12, background: C.bg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 20 }}>🚗</div>}
+    {thumb ? <img src={thumb} style={{ width: isTablet ? 48 : 56, height: isTablet ? 48 : 56, borderRadius: 12, objectFit: "cover", flexShrink: 0 }} alt="" /> : <div style={{ width: isTablet ? 48 : 56, height: isTablet ? 48 : 56, borderRadius: 12, background: C.bg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><Icon name="car" size={24} color={C.muted} /></div>}
     <div style={{ flex: 1, minWidth: 0 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 }}>
-        <span style={{ fontFamily: MONO, fontSize: isTablet ? 16 : 18, fontWeight: 700 }}>{j.jobInfo.vehicle_reg || "New Job"}</span>
+        <span style={{ fontFamily: MONO, fontSize: isTablet ? 16 : 18, fontWeight: 700, letterSpacing: "-0.3px" }}>{j.jobInfo.vehicle_reg || "New Job"}</span>
         <div style={{ display: "flex", gap: 4, alignItems: "center", flexShrink: 0 }}>
-          {j.paused && <span style={{ fontSize: 11, fontWeight: 700, color: C.orange, background: C.orange + "15", padding: "5px 8px", borderRadius: 6, whiteSpace: "nowrap" }}>⏸ Paused</span>}
-          {j.onHold && <span style={{ fontSize: 11, fontWeight: 700, color: C.orange, background: C.orange + "15", padding: "5px 8px", borderRadius: 6, whiteSpace: "nowrap" }}>📌 Hold</span>}
-          <span style={{ fontSize: isTablet ? 11 : 12, fontWeight: 700, color: stage.color, background: stage.color + "12", padding: "5px 10px", borderRadius: 8, whiteSpace: "nowrap" }}>{stage.icon} {stage.label}</span>
+          {j.paused && <span style={{ fontSize: 11, fontWeight: 600, color: C.orange, background: C.orange + "12", padding: "4px 8px", borderRadius: 6, whiteSpace: "nowrap" }}>Paused</span>}
+          {j.onHold && <span style={{ fontSize: 11, fontWeight: 600, color: C.orange, background: C.orange + "12", padding: "4px 8px", borderRadius: 6, whiteSpace: "nowrap" }}>On Hold</span>}
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: isTablet ? 11 : 12, fontWeight: 600, color: C.text, background: C.bg, padding: "4px 10px", borderRadius: 7, whiteSpace: "nowrap", border: `1px solid ${C.border}` }}><Dot color={stage.color} /> {stage.label}</span>
         </div>
       </div>
       <div style={{ fontSize: 14, color: C.sub, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{j.jobInfo.customer_name || "--"}{j.jobInfo.vehicle_make ? ` · ${j.jobInfo.vehicle_make} ${j.jobInfo.vehicle_model || ""}` : ""}</div>
-      <div style={{ display: "flex", gap: 6, marginTop: 6, alignItems: "center", flexWrap: "wrap" }}>
-        {j.jobInfo.insurance_name ? <span style={{ fontSize: 12, color: C.accent }}>🛡️ {j.jobInfo.insurance_name}</span> : j.jobInfo.job_type === "quick" ? <span style={{ fontSize: 12, color: C.orange, fontWeight: 600 }}>⚡ Quick</span> : <span style={{ fontSize: 12, color: C.green }}>💰 Direct</span>}
-        {jobReplaceCnt > 0 && <span style={{ fontSize: 12, color: jobArrivedCnt >= jobReplaceCnt ? C.green : C.orange }}>📦 {jobArrivedCnt}/{jobReplaceCnt}</span>}
+      <div style={{ display: "flex", gap: 10, marginTop: 6, alignItems: "center", flexWrap: "wrap" }}>
+        {j.jobInfo.insurance_name ? <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12, color: C.accent, fontWeight: 500 }}><Icon name="shield" size={12} /> {j.jobInfo.insurance_name}</span> : j.jobInfo.job_type === "quick" ? <span style={{ fontSize: 12, color: C.orange, fontWeight: 600 }}>Quick</span> : <span style={{ fontSize: 12, color: C.green, fontWeight: 600 }}>Direct</span>}
+        {jobReplaceCnt > 0 && <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12, fontWeight: 500, color: jobArrivedCnt >= jobReplaceCnt ? C.green : C.orange }}><Icon name="package" size={12} /> {jobArrivedCnt}/{jobReplaceCnt}</span>}
         {estTotal > 0 && <span style={{ fontSize: 12, fontFamily: MONO, color: C.sub }}>Rs.{Number(estTotal).toLocaleString()}</span>}
       </div>
       {j.onHold && j.holdUntil && (() => {
         const ms = new Date(j.holdUntil) - new Date()
         const hours = Math.ceil(ms / (1000 * 60 * 60))
         const days = Math.ceil(ms / (1000 * 60 * 60 * 24))
-        if (ms <= 0) return j.stage === "delivered" ? <div style={{ fontSize: 12, color: C.red, fontWeight: 700, marginTop: 3 }}>🔔 Follow-up due!</div> : <div style={{ fontSize: 12, color: C.red, fontWeight: 700, marginTop: 3 }}>🔔 Retry call now!</div>
-        if (j.stage === "follow_up") return <div style={{ fontSize: 12, color: C.orange, fontWeight: 600, marginTop: 3 }}>📵 No answer ({j.followUpAttempts}/3) · retry in {hours}h</div>
-        return <div style={{ fontSize: 12, color: C.orange, fontWeight: 600, marginTop: 3 }}>⏰ Follow-up in {days} day{days !== 1 ? "s" : ""}</div>
+        if (ms <= 0) return <div style={{ fontSize: 12, color: C.red, fontWeight: 600, marginTop: 4 }}>{j.stage === "delivered" ? "Follow-up due" : "Retry call now"}</div>
+        if (j.stage === "follow_up") return <div style={{ fontSize: 12, color: C.orange, fontWeight: 500, marginTop: 4 }}>No answer ({j.followUpAttempts}/3) · retry in {hours}h</div>
+        return <div style={{ fontSize: 12, color: C.orange, fontWeight: 500, marginTop: 4 }}>Follow-up in {days} day{days !== 1 ? "s" : ""}</div>
       })()}
-      {(j.stage === "closed" || j.stage === "cancelled") && j.followUpNote && <div style={{ fontSize: 12, color: C.sub, marginTop: 3, fontStyle: "italic", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>💬 {j.followUpNote}</div>}
+      {(j.stage === "closed" || j.stage === "cancelled") && j.followUpNote && <div style={{ fontSize: 12, color: C.sub, marginTop: 4, fontStyle: "italic", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{j.followUpNote}</div>}
     </div>
   </div>
 }
@@ -107,7 +110,7 @@ export function ClosedJobDetail({ job: j, openJob, startWarrantyJob }) {
             <span style={{ fontSize: 16, color: C.sub, marginLeft: SP.md }}>{j.jobInfo.vehicle_make} {j.jobInfo.vehicle_model}</span>
           </div>
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
-            {j.is_warranty && <span style={{ fontSize: 12, fontWeight: 600, padding: "4px 12px", borderRadius: 8, background: C.red + "15", color: C.red }}>🔧 Warranty</span>}
+            {j.is_warranty && <span style={{ fontSize: 12, fontWeight: 600, padding: "4px 12px", borderRadius: 8, background: C.red + "15", color: C.red }}>Warranty</span>}
             {j.stage === "cancelled" && <span style={{ fontSize: 12, fontWeight: 600, padding: "4px 12px", borderRadius: 8, background: C.red + "15", color: C.red }}>✕ Cancelled</span>}
             <span style={{ fontSize: 12, fontWeight: 600, padding: "4px 12px", borderRadius: 8, background: isIns ? C.accent + "15" : isQuick ? C.green + "15" : C.orange + "15", color: isIns ? C.accent : isQuick ? C.green : C.orange }}>
               {isIns ? "Insurance" : isQuick ? "Quick" : "Direct"}
@@ -125,14 +128,14 @@ export function ClosedJobDetail({ job: j, openJob, startWarrantyJob }) {
         )}
         {/* Start Warranty button on closed jobs (not already warranty) */}
         {j.stage === "closed" && !j.is_warranty && startWarrantyJob && (
-          <button onClick={() => startWarrantyJob(j)} style={{ marginTop: 12, padding: "8px 14px", borderRadius: 8, border: `1px solid ${C.red}40`, background: C.red + "08", color: C.red, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: FONT }}>🔧 Start Warranty Job</button>
+          <button onClick={() => startWarrantyJob(j)} style={{ marginTop: 12, padding: "8px 14px", borderRadius: 8, border: `1px solid ${C.red}40`, background: C.red + "08", color: C.red, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: FONT }}>Start Warranty Job</button>
         )}
       </div>
 
       {/* Photos */}
       {photos.length > 0 && (
         <div style={{ ...card, marginBottom: SP.lg }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: C.sub, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: SP.md }}>📷 Photos ({photos.length})</div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: C.sub, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: SP.md }}>Photos ({photos.length})</div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(100px, 1fr))", gap: SP.sm }}>
             {photos.map(d => (
               <div key={d.id} style={{ position: "relative", aspectRatio: "1", borderRadius: 12, overflow: "hidden" }}>
@@ -147,7 +150,7 @@ export function ClosedJobDetail({ job: j, openJob, startWarrantyJob }) {
       {/* Repair Work */}
       {repairWork.length > 0 && (
         <div style={{ ...card, marginBottom: SP.lg }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: C.sub, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: SP.md }}>🔧 Repair Work</div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: C.sub, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: SP.md }}>Repair Work</div>
           {repairWork.map((e, i) => (
             <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: `${SP.sm}px 0`, borderBottom: i < repairWork.length - 1 ? `1px solid ${C.border}` : "none" }}>
               <div style={{ display: "flex", alignItems: "center", gap: SP.sm }}>
@@ -164,7 +167,7 @@ export function ClosedJobDetail({ job: j, openJob, startWarrantyJob }) {
       {/* Parts Replaced */}
       {replaceParts.length > 0 && (
         <div style={{ ...card, marginBottom: SP.lg }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: C.sub, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: SP.md }}>📦 Parts Replaced</div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: C.sub, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: SP.md }}>Parts Replaced</div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: SP.sm }}>
             {replaceParts.map((e, i) => (
               <div key={i} style={{ padding: "8px 14px", borderRadius: 10, background: C.green + "10", border: `1px solid ${C.green}20`, fontSize: 14, color: C.text }}>
@@ -201,7 +204,7 @@ export function ClosedJobDetail({ job: j, openJob, startWarrantyJob }) {
       {/* Follow-up note */}
       {j.followUpNote && (
         <div style={{ ...card, background: C.green + "08", border: `1px solid ${C.green}20`, marginBottom: SP.lg }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: C.sub, marginBottom: SP.xs }}>💬 Follow-up Note</div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: C.sub, marginBottom: SP.xs }}>Follow-up Note</div>
           <div style={{ fontSize: 14, color: C.text, fontStyle: "italic" }}>{j.followUpNote}</div>
         </div>
       )}
@@ -265,7 +268,7 @@ export function ClosedHistory({ jobs, searchQuery, openJob, isTablet, activeJobI
 
   if (!vehicles.length) return (
     <div style={{ textAlign: "center", padding: 40, color: C.muted }}>
-      <div style={{ fontSize: 40, marginBottom: 12 }}>🏁</div>
+      <div style={{ display: "flex", justifyContent: "center", marginBottom: 14 }}><IconBadge name="flag" color={C.muted} size={56} /></div>
       <div style={{ fontSize: 18, fontWeight: 600 }}>No closed jobs</div>
       <div style={{ fontSize: 14, marginTop: 6 }}>Completed jobs will appear here grouped by vehicle</div>
     </div>
@@ -302,15 +305,15 @@ export function ClosedHistory({ jobs, searchQuery, openJob, isTablet, activeJobI
 
           {v.partsRepaired.length > 0 && (
             <div style={{ fontSize: 13, color: C.sub, marginBottom: SP.sm, lineHeight: 1.5 }}>
-              <span style={{ color: C.accent, fontWeight: 600 }}>🔧</span>{" "}
+              
               {partsShown.join(", ")}
               {partsMore > 0 && <span style={{ color: C.muted }}> +{partsMore} more</span>}
             </div>
           )}
 
           <div style={{ display: "flex", gap: SP.lg, fontSize: 13 }}>
-            <span style={{ fontWeight: 600, color: C.green }}>💰 Rs.{Number(v.totalValue).toLocaleString()}</span>
-            <span style={{ color: C.muted }}>📅 {fmtDate(v.lastVisit)}</span>
+            <span style={{ fontWeight: 600, color: C.green }}>Rs.{Number(v.totalValue).toLocaleString()}</span>
+            <span style={{ color: C.muted }}>{fmtDate(v.lastVisit)}</span>
           </div>
         </div>
 
@@ -435,7 +438,7 @@ export function ClosedHistory({ jobs, searchQuery, openJob, isTablet, activeJobI
                       {/* Replaced Parts */}
                       {replaceParts.length > 0 && (
                         <div style={{ marginBottom: SP.lg }}>
-                          <div style={{ fontSize: 12, fontWeight: 600, color: C.muted, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: SP.sm }}>📦 Parts Replaced</div>
+                          <div style={{ fontSize: 12, fontWeight: 600, color: C.muted, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: SP.sm }}>Parts Replaced</div>
                           <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                             {replaceParts.map((e, i) => (
                               <div key={i} style={{ padding: "6px 12px", borderRadius: 10, background: C.green + "10", border: `1px solid ${C.green}25`, fontSize: 13, color: C.text }}>
@@ -522,21 +525,21 @@ export default function HomeScreen() {
         </div>
 
         <div style={{ position: "relative", marginBottom: 12 }}>
-          <span style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", fontSize: 16, pointerEvents: "none" }}>🔍</span>
+          <span style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", pointerEvents: "none", display: "flex" }}><Icon name="search" size={17} color={C.muted} /></span>
           <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search reg, customer, phone, job no…" style={{ ...inp, background: C.card, fontSize: isTablet ? 15 : 17, paddingLeft: 42, boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }} />
-          {searchQuery && <span onClick={() => setSearchQuery("")} style={{ position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)", fontSize: 18, cursor: "pointer", color: C.muted, padding: 4 }}>✕</span>}
+          {searchQuery && <span onClick={() => setSearchQuery("")} style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", cursor: "pointer", color: C.muted, padding: 10, display: "flex" }}><Icon name="x" size={16} /></span>}
         </div>
 
         {homeTab === "active" && <DashboardCards jobs={jobs} setFilterStage={setFilterStage} setHomeTab={setHomeTab} clearSearch={() => setSearchQuery("")} />}
 
         <div style={{ display: "flex", gap: 0, marginBottom: 12, background: C.card, borderRadius: 14, padding: 4, boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
-          {[["active", "Active", jobs.filter(j => !j.onHold && j.stage !== "closed" && j.stage !== "cancelled").length], ["on_hold", "📌 On Hold", jobs.filter(j => j.onHold).length], ["closed", "🏁 Closed", jobs.filter(j => (j.stage === "closed" || j.stage === "cancelled")).length || closedCount || 0]].map(([k, l, cnt]) => <div key={k} onClick={() => { setHomeTab(k); setFilterStage("all") }} style={{ flex: 1, textAlign: "center", padding: "12px 0", borderRadius: 12, minHeight: 44, cursor: "pointer", background: homeTab === k ? (k === "on_hold" ? C.orange + "12" : k === "closed" ? C.sub + "12" : C.accent + "12") : "transparent", color: homeTab === k ? (k === "on_hold" ? C.orange : k === "closed" ? C.sub : C.accent) : C.muted, fontSize: 14, fontWeight: 600, transition: "all 0.2s" }}>{l} ({cnt})</div>)}
+          {[["active", "Active", jobs.filter(j => !j.onHold && j.stage !== "closed" && j.stage !== "cancelled").length], ["on_hold", "On Hold", jobs.filter(j => j.onHold).length], ["closed", "Closed", jobs.filter(j => (j.stage === "closed" || j.stage === "cancelled")).length || closedCount || 0]].map(([k, l, cnt]) => <div key={k} onClick={() => { setHomeTab(k); setFilterStage("all") }} style={{ flex: 1, textAlign: "center", padding: "12px 0", borderRadius: 12, minHeight: 44, cursor: "pointer", background: homeTab === k ? (k === "on_hold" ? C.orange + "12" : k === "closed" ? C.sub + "12" : C.accent + "12") : "transparent", color: homeTab === k ? (k === "on_hold" ? C.orange : k === "closed" ? C.sub : C.accent) : C.muted, fontSize: 14, fontWeight: 600, transition: "all 0.2s" }}>{l} ({cnt})</div>)}
         </div>
 
         {homeTab === "active" && <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 12, marginBottom: 4 }}>
-          {filterStage === "parts_waiting" && <div onClick={() => setFilterStage("all")} style={{ padding: "12px 18px", borderRadius: 20, minHeight: 44, fontSize: isTablet ? 13 : 14, fontWeight: 600, cursor: "pointer", flexShrink: 0, whiteSpace: "nowrap", background: C.purple + "15", color: C.purple, border: `1px solid ${C.purple}50` }}>{"\uD83D\uDCE6"} Parts Waiting ×</div>}
+          {filterStage === "parts_waiting" && <div onClick={() => setFilterStage("all")} style={{ padding: "12px 18px", borderRadius: 20, minHeight: 44, fontSize: isTablet ? 13 : 14, fontWeight: 600, cursor: "pointer", flexShrink: 0, whiteSpace: "nowrap", display: "inline-flex", alignItems: "center", gap: 7, background: C.purple + "15", color: C.purple, border: `1px solid ${C.purple}50` }}><Dot color={C.purple} /> Parts Waiting ×</div>}
           <div onClick={() => setFilterStage("all")} style={{ padding: "12px 18px", borderRadius: 20, minHeight: 44, fontSize: isTablet ? 13 : 14, fontWeight: 600, cursor: "pointer", flexShrink: 0, background: filterStage === "all" ? C.accent : C.card, color: filterStage === "all" ? "#fff" : C.sub, border: `1px solid ${filterStage === "all" ? C.accent : C.border}` }}>All ({jobs.filter(j => !j.onHold && j.stage !== "closed" && j.stage !== "cancelled").length})</div>
-          {Object.entries(ALL_STAGES).filter(([, s]) => s.label !== "Closed").map(([key, s]) => { const cnt = jobs.filter(j => j.stage === key && !j.onHold).length; return cnt > 0 ? <div key={key} onClick={() => setFilterStage(filterStage === key ? "all" : key)} style={{ padding: "12px 18px", borderRadius: 20, minHeight: 44, fontSize: isTablet ? 13 : 14, fontWeight: 600, cursor: "pointer", flexShrink: 0, whiteSpace: "nowrap", background: filterStage === key ? s.color + "15" : C.card, color: filterStage === key ? s.color : C.sub, border: `1px solid ${filterStage === key ? s.color + "50" : C.border}` }}>{s.icon} {s.label} ({cnt})</div> : null })}
+          {Object.entries(ALL_STAGES).filter(([, s]) => s.label !== "Closed").map(([key, s]) => { const cnt = jobs.filter(j => j.stage === key && !j.onHold).length; return cnt > 0 ? <div key={key} onClick={() => setFilterStage(filterStage === key ? "all" : key)} style={{ padding: "12px 18px", borderRadius: 20, minHeight: 44, fontSize: isTablet ? 13 : 14, fontWeight: 600, cursor: "pointer", flexShrink: 0, whiteSpace: "nowrap", background: filterStage === key ? s.color + "15" : C.card, color: filterStage === key ? s.color : C.sub, border: `1px solid ${filterStage === key ? s.color + "50" : C.border}`, display: "inline-flex", alignItems: "center", gap: 7 }}><Dot color={s.color} /> {s.label} ({cnt})</div> : null })}
         </div>}
 
         {homeTab === "closed"
@@ -563,7 +566,7 @@ export default function HomeScreen() {
           filtered = sortJobs(filtered, sortBy)
           return filtered.length ? filtered.map(j => <JobCard key={j.id} j={j} isTablet={isTablet} isSelected={isTablet && activeJobId === j.id} openJob={openJob} setHoverJobId={setHoverJobId} setHoverY={setHoverY} />)
             : <div className="screen-fade" style={{ textAlign: "center", padding: "48px 20px", color: C.muted }}>
-              <div style={{ fontSize: 56, marginBottom: 16 }}>{homeTab === "on_hold" ? "📌" : homeTab === "closed" ? "🏁" : "🔧"}</div>
+              <div style={{ display: "flex", justifyContent: "center", marginBottom: 16 }}><IconBadge name={homeTab === "on_hold" ? "bookmark" : homeTab === "closed" ? "flag" : "wrench"} color={C.muted} size={64} /></div>
               <div style={{ fontSize: 19, fontWeight: 700, color: C.text, marginBottom: 6 }}>{homeTab === "on_hold" ? "Nothing on hold" : homeTab === "closed" ? "No closed jobs yet" : filterStage !== "all" ? "Nothing in this stage" : "Ready for your first job!"}</div>
               <div style={{ fontSize: 15, marginBottom: 20 }}>{homeTab === "on_hold" ? "Delivered jobs wait here for 2-week follow-up" : homeTab === "closed" ? "Completed jobs will appear here" : "Tap + New Job below to get started"}</div>
               {homeTab === "active" && filterStage === "all" && <div className="desktop-only" style={{ fontSize: 12, color: C.muted, display: "inline-flex", alignItems: "center", gap: 6, padding: "6px 12px", background: C.bg, borderRadius: 20 }}>💡 Press <kbd style={{ padding: "2px 6px", background: "#fff", border: `1px solid ${C.border}`, borderRadius: 4, fontFamily: MONO, fontSize: 11 }}>N</kbd> anywhere to create a new job</div>}
@@ -578,7 +581,7 @@ export default function HomeScreen() {
   function emptyDetail() {
     return (
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "80vh", color: C.muted }}>
-        <div style={{ fontSize: 60, marginBottom: 16, opacity: 0.3 }}>🔧</div>
+        <div style={{ marginBottom: 16 }}><IconBadge name="car" color={C.muted} size={72} /></div>
         <div style={{ fontSize: 22, fontWeight: 600, marginBottom: 6 }}>Select a job</div>
         <div style={{ fontSize: 16 }}>Tap a job from the list to see details</div>
       </div>

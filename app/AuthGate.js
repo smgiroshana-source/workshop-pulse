@@ -4,6 +4,15 @@ import { supabase } from "./supabase"
 
 const FONT = "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', sans-serif"
 
+// Brand mark — wrench in a blue rounded square (no emoji)
+const LogoMark = ({ size = 56 }) => (
+  <div style={{ width: size, height: size, borderRadius: size * 0.28, background: "linear-gradient(135deg, #007AFF, #0a5fd4)", display: "inline-flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 14px rgba(0,122,255,0.35)" }}>
+    <svg width={size * 0.5} height={size * 0.5} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
+    </svg>
+  </div>
+)
+
 // ═══ ROLE DEFINITIONS ═══
 // super_admin: full access + user management
 // admin: full access to jobs, estimates, invoices
@@ -171,8 +180,8 @@ export default function AuthGate({ children }) {
     return (
       <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", background: "#F2F2F7", fontFamily: FONT }}>
         <div style={{ textAlign: "center", color: "#6C6C70" }}>
-          <div style={{ fontSize: 32, marginBottom: 12 }}>🔧</div>
-          <div style={{ fontSize: 15, fontWeight: 500 }}>Loading...</div>
+          <div style={{ marginBottom: 14 }}><LogoMark size={48} /></div>
+          <div style={{ fontSize: 15, fontWeight: 500 }}>Loading…</div>
         </div>
       </div>
     )
@@ -182,10 +191,10 @@ export default function AuthGate({ children }) {
   if (!session) {
     return (
       <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", background: "#F2F2F7", fontFamily: FONT }}>
-        <div style={{ background: "#fff", borderRadius: 20, padding: "40px 32px", textAlign: "center", maxWidth: 360, width: "90%", boxShadow: "0 2px 12px rgba(0,0,0,0.08)" }}>
-          <div style={{ fontSize: 44, marginBottom: 8 }}>🔧</div>
-          <div style={{ fontSize: 22, fontWeight: 700, color: "#007AFF", letterSpacing: "-0.5px" }}>WORKSHOP PULSE</div>
-          <div style={{ fontSize: 13, color: "#6C6C70", marginTop: 4, marginBottom: 28 }}>MacForce Auto Engineering</div>
+        <div style={{ background: "#fff", borderRadius: 20, padding: "44px 32px 36px", textAlign: "center", maxWidth: 360, width: "90%", boxShadow: "0 8px 32px rgba(0,0,0,0.08)", border: "1px solid #E5E5EA80" }}>
+          <div style={{ marginBottom: 18 }}><LogoMark /></div>
+          <div style={{ fontSize: 24, fontWeight: 700, color: "#1D1D1F", letterSpacing: "-0.6px" }}>Workshop Pulse</div>
+          <div style={{ fontSize: 14, color: "#6E6E73", marginTop: 4, marginBottom: 30 }}>MacForce Auto Engineering</div>
           <button
             onClick={signIn}
             style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10, width: "100%", padding: "14px 20px", background: "#fff", border: "1px solid #E5E5EA", borderRadius: 12, fontSize: 16, fontWeight: 600, color: "#1a1a1a", cursor: "pointer", fontFamily: FONT, transition: "background 0.15s" }}
@@ -206,7 +215,9 @@ export default function AuthGate({ children }) {
     return (
       <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", background: "#F2F2F7", fontFamily: FONT }}>
         <div style={{ background: "#fff", borderRadius: 20, padding: "40px 32px", textAlign: "center", maxWidth: 400, width: "90%", boxShadow: "0 2px 12px rgba(0,0,0,0.08)" }}>
-          <div style={{ fontSize: 44, marginBottom: 8 }}>🚫</div>
+          <div style={{ width: 56, height: 56, borderRadius: 16, background: "#FF3B3014", display: "inline-flex", alignItems: "center", justifyContent: "center", marginBottom: 12 }}>
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#FF3B30" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="10" /><line x1="4.93" y1="4.93" x2="19.07" y2="19.07" /></svg>
+          </div>
           <div style={{ fontSize: 20, fontWeight: 700, color: "#FF3B30", marginBottom: 8 }}>Access Denied</div>
           <div style={{ fontSize: 15, color: "#6C6C70", marginBottom: 8, lineHeight: 1.5 }}>
             Your account <strong>{session.user.email}</strong> doesn't have access to Workshop Pulse.

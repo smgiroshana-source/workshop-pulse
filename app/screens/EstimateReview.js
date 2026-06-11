@@ -1,6 +1,6 @@
 "use client"
 import { useWorkshop } from "../WorkshopContext"
-import { C, FONT, MONO, inp, btn, btnSm, card, NavBar, fmt, genId } from "../WorkshopContext"
+import { C, FONT, MONO, inp, btn, btnSm, card, NavBar, fmt, genId, Icon } from "../WorkshopContext"
 
 export default function EstimateReview() {
   const {
@@ -28,7 +28,7 @@ export default function EstimateReview() {
       />
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8, marginBottom: 16 }}>
         {jobCats.map((c, i) => { const ct = catTotal(c.key); const entries = estEntries.filter(e => e.category === c.key); const hasRemarks = entries.filter(e => !e.rate && e.remarks); const hasEntries = entries.length > 0; return <div key={c.key} onClick={() => { setActiveCat(i); setScreen("est_cat") }} style={{ ...card, textAlign: "center", padding: "12px 4px", marginBottom: 0, cursor: "pointer", border: (ct > 0 || hasEntries) ? `2px solid ${c.color}20` : `1px solid ${C.border}` }}>
-          <div style={{ fontSize: 22 }}>{c.icon}</div>
+          <div style={{ display: "flex", justifyContent: "center" }}><Icon name={c.ic} size={20} color={c.color} /></div>
           {ct > 0 ? <div style={{ fontFamily: MONO, fontSize: 17, fontWeight: 700, color: c.color, marginTop: 4 }}>{ct.toLocaleString()}</div>
             : hasRemarks.length > 0 ? <div style={{ fontSize: 14, fontWeight: 700, color: C.accent, marginTop: 4 }}>{hasRemarks.map(e => e.remarks).join(", ")}</div>
               : <div style={{ fontFamily: MONO, fontSize: 17, fontWeight: 700, color: c.color, marginTop: 4 }}>0</div>}
@@ -38,7 +38,7 @@ export default function EstimateReview() {
       </div>
       <div style={{ ...card, overflowX: "auto" }}>
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 16 }}>
-          <thead><tr style={{ borderBottom: `2px solid ${C.border}` }}><th style={{ textAlign: "left", padding: "10px 6px", color: C.sub, fontSize: 14 }}>Part</th>{jobCats.map(c => <th key={c.key} style={{ textAlign: "right", padding: "10px 6px", color: c.color, fontSize: 15 }}>{c.icon}</th>)}</tr></thead>
+          <thead><tr style={{ borderBottom: `2px solid ${C.border}` }}><th style={{ textAlign: "left", padding: "10px 6px", color: C.sub, fontSize: 14 }}>Part</th>{jobCats.map(c => <th key={c.key} style={{ textAlign: "right", padding: "10px 6px", color: c.color, fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.3 }}>{c.short}</th>)}</tr></thead>
           <tbody>
             {estParts.map(p => <tr key={p.id} style={{ borderBottom: `1px solid ${C.border}` }}><td style={{ padding: "8px 6px", fontSize: 16 }}>{p.name}</td>{jobCats.map(c => { const e = getEntry(p.id, c.key); return <td key={c.key} style={{ textAlign: "right", padding: "8px 6px", fontFamily: MONO, fontSize: 15, color: e ? (e.rate > 0 ? c.color : (e.remarks ? C.accent : C.muted)) : C.muted, fontWeight: e && e.remarks && !e.rate ? 600 : 400 }}>{e ? (e.rate > 0 ? e.rate.toLocaleString() : (e.remarks || "0")) : "--"}</td> })}</tr>)}
             <tr style={{ borderTop: `2px solid ${C.border}` }}><td style={{ padding: "10px 6px", fontWeight: 700, color: C.sub, fontSize: 14 }}>TOTAL</td>{jobCats.map(c => <td key={c.key} style={{ textAlign: "right", padding: "10px 6px", fontFamily: MONO, fontWeight: 700, fontSize: 16, color: c.color }}>{catTotal(c.key).toLocaleString()}</td>)}</tr>
@@ -48,7 +48,7 @@ export default function EstimateReview() {
 
       {/* Sundries */}
       <div style={{ ...card, padding: "14px 16px" }}>
-        <div style={{ fontSize: 14, fontWeight: 600, color: C.sub, marginBottom: 10 }}>🧴 OTHER ITEMS / SUNDRIES</div>
+        <div style={{ fontSize: 14, fontWeight: 600, color: C.sub, marginBottom: 10, textTransform: "uppercase", letterSpacing: 0.5 }}>Other Items / Sundries</div>
         <div style={{ display: "flex", gap: 8, marginBottom: sundryItems.length ? 10 : 0 }}>
           <input value={sundryInput} onChange={e => setSundryInput(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && sundryInput.trim()) { setSundryItems(p => [...p, { id: genId("sun"), name: sundryInput.trim(), rate: 0, qty: 1, remarks: "" }]); setSundryInput("") } }} placeholder="Type item name..." style={{ ...inp, flex: 1, padding: "12px 14px" }} />
           {sundryInput.trim() && <button onClick={() => { setSundryItems(p => [...p, { id: genId("sun"), name: sundryInput.trim(), rate: 0, qty: 1, remarks: "" }]); setSundryInput("") }} style={{ ...btnSm(C.accent, "#fff"), width: "auto", padding: "10px 16px" }}>Add</button>}
@@ -70,7 +70,8 @@ export default function EstimateReview() {
         </div>
         <span style={{ fontFamily: MONO, fontSize: 28, fontWeight: 700 }}>Rs. {fmt(grandTotal)}</span>
       </div>
-      <button onClick={() => { setSelEst(null); setEstParts([]); setEstEntries([]); setScreen("est_parts") }} style={{ ...btn(C.bg, C.accent), marginBottom: 8 }}>✏️ Edit Parts List</button>
+      {/* Keep selEst and current parts/entries — clearing them here used to wipe the estimate being edited */}
+      <button onClick={() => setScreen("est_parts")} style={{ ...btn(C.bg, C.accent), marginBottom: 8 }}>Edit Parts List</button>
       <button onClick={saveEstimate} style={{ ...btn(C.accent, "#fff"), marginTop: 4 }}>{selEst ? "Update Estimate" : "Save Estimate"}</button>
     </>
   )

@@ -1,7 +1,7 @@
 "use client"
 import React, { useState } from "react"
 import { useWorkshop } from "../WorkshopContext"
-import { C, FONT, MONO, inp, btn, btnSm, btnOutline, btnText, card, pill, Sheet, NavBar, ALL_STAGES, VEHICLE_MAKES, INSURANCE_COMPANIES, INV_STATUS, fmt, SP, genId, phoneIntl } from "../WorkshopContext"
+import { C, FONT, MONO, inp, btn, btnSm, btnOutline, btnText, card, pill, Sheet, NavBar, ALL_STAGES, VEHICLE_MAKES, INSURANCE_COMPANIES, INV_STATUS, fmt, SP, genId, phoneIntl, Icon, IconBadge } from "../WorkshopContext"
 import { uploadPhoto } from "../supabase"
 
 // ═══ QUICK JOB COSTS — One-Line Entry with Category Dropdown ═══
@@ -66,7 +66,7 @@ function QuickJobCosts({ jobCosts, setJobCosts, invoices, generateMinorInvoice, 
   return (
     <div style={{ ...card, padding: SP.lg, border: `2px solid ${C.orange}30` }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: SP.md }}>
-        <span style={{ fontSize: 15, fontWeight: 700, color: C.text }}>⚡ Quick Job Costs</span>
+        <span style={{ fontSize: 15, fontWeight: 700, color: C.text, display: "inline-flex", alignItems: "center", gap: 8 }}><Icon name="zap" size={16} color={C.orange} /> Quick Job Costs</span>
         {jobCosts.length > 0 && <span style={{ fontSize: 12, fontWeight: 700, color: pendingCost > 0 ? C.orange : C.green }}>
           {pendingCost > 0 ? `${pendingCost} pending cost` : "✓ All set"}
         </span>}
@@ -193,14 +193,14 @@ function QuickJobCosts({ jobCosts, setJobCosts, invoices, generateMinorInvoice, 
 
         {/* Actions */}
         {!invoices.length && <button onClick={generateMinorInvoice} style={{ ...btn(pendingCost === 0 ? C.accent : C.muted, "#fff"), marginTop: SP.sm, opacity: pendingCost === 0 ? 1 : 0.6 }}>
-          {pendingCost > 0 ? `${pendingCost} items need cost` : "📄 Create Invoice"}
+          {pendingCost > 0 ? `${pendingCost} items need cost` : "Create Invoice"}
         </button>}
-        {invoices.length > 0 && <button onClick={() => { setSelInv(invoices[0]); setScreen("inv_detail") }} style={{ ...btn(C.accent + "15", C.accent), marginTop: SP.sm }}>📄 View Invoice</button>}
+        {invoices.length > 0 && <button onClick={() => { setSelInv(invoices[0]); setScreen("inv_detail") }} style={{ ...btn(C.accent + "15", C.accent), marginTop: SP.sm }}>View Invoice</button>}
         {invoices.length > 0 && invoices[0].payments?.length > 0 && <button onClick={() => {
           saveCurrentJob()
           setJobs(prev => prev.map(j => j.id === activeJobId ? { ...j, stage: "closed", onHold: false, jobCosts: [...jobCosts] } : j))
-          tt("🎉 Job done! 🚗✨"); setActiveJobId(null); setScreen("home"); setHomeTab("closed")
-        }} style={{ ...btn(C.green, "#fff"), marginTop: SP.sm }}>🏁 Close Job</button>}
+          tt("🎉 Job closed"); setActiveJobId(null); setScreen("home"); setHomeTab("closed")
+        }} style={{ ...btn(C.green, "#fff"), marginTop: SP.sm }}>Close Job</button>}
       </>}
     </div>
   )
@@ -334,8 +334,8 @@ export default function JobScreen() {
       borderRadius: 12, minHeight: 52,
       boxShadow: open ? "none" : "0 1px 2px rgba(0,0,0,0.04)",
     }}>
-      <span style={{ fontSize: 16, fontWeight: 700, color: C.text, letterSpacing: "-0.2px", display: "flex", alignItems: "center", gap: 8 }}>
-        <span style={{ fontSize: 20 }}>{icon}</span> {title}
+      <span style={{ fontSize: 16, fontWeight: 700, color: C.text, letterSpacing: "-0.2px", display: "flex", alignItems: "center", gap: 10 }}>
+        <Icon name={icon} size={18} color={C.sub} /> {title}
       </span>
       <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
         {badge}
@@ -353,20 +353,20 @@ export default function JobScreen() {
             <div style={{ fontSize: 28, fontWeight: 700, color: C.text, letterSpacing: "-0.7px" }}>{jobInfo.vehicle_reg || "New Job"}</div>
             <div style={{ fontSize: 14, color: C.sub }}>{activeJob?.jobNumber}</div>
           </div>
-          {isInsurance && <span style={pill(C.accent)}>🛡️ {jobInfo.insurance_name}</span>}
-          {isDirectJob && !isMinorJob && <span style={pill(C.green)}>💰 Direct</span>}
-          {isMinorJob && <span style={pill(C.orange)}>⚡ Quick Job</span>}
-          {workType === "paint" && <span style={pill(C.orange)}>🎨 Paint</span>}
-          {workType === "mechanical" && <span style={pill(C.accent)}>🔧 Mech</span>}
-          {workType === "both" && <span style={pill(C.purple)}>🎨+🔧</span>}
-          {activeJob?.onHold && <span style={pill(C.orange)}>📌 On Hold</span>}
+          {isInsurance && <span style={{ ...pill(C.accent), display: "inline-flex", alignItems: "center", gap: 5 }}><Icon name="shield" size={12} /> {jobInfo.insurance_name}</span>}
+          {isDirectJob && !isMinorJob && <span style={pill(C.green)}>Direct</span>}
+          {isMinorJob && <span style={pill(C.orange)}>Quick Job</span>}
+          {workType === "paint" && <span style={pill(C.orange)}>Paint</span>}
+          {workType === "mechanical" && <span style={pill(C.accent)}>Mechanical</span>}
+          {workType === "both" && <span style={pill(C.purple)}>Paint + Mech</span>}
+          {activeJob?.onHold && <span style={pill(C.orange)}>On Hold</span>}
           {activeJob?.onHold && activeJob?.holdUntil && (() => {
             const ms = new Date(activeJob.holdUntil) - new Date()
             const hours = Math.ceil(ms / (1000 * 60 * 60))
             const days = Math.ceil(ms / (1000 * 60 * 60 * 24))
-            if (ms <= 0) return <span style={pill(C.red)}>🔔 Due!</span>
-            if (activeJob.stage === "follow_up") return <span style={pill(C.orange)}>📵 {hours}h</span>
-            return <span style={pill(C.orange)}>⏰ {days}d</span>
+            if (ms <= 0) return <span style={pill(C.red)}>Due now</span>
+            if (activeJob.stage === "follow_up") return <span style={pill(C.orange)}>Retry in {hours}h</span>
+            return <span style={pill(C.orange)}>{days}d to follow-up</span>
           })()}
         </div>
       </div>
@@ -374,14 +374,14 @@ export default function JobScreen() {
       {/* ═══ STAGE PIPELINE ═══ */}
       {!isMinorJob && <div style={{ ...card, padding: "12px 10px", marginBottom: 12 }}>
         {jobPaused && <div style={{ background: C.orange + "15", border: `1px solid ${C.orange}40`, borderRadius: 12, padding: "10px 14px", marginBottom: 10, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <span style={{ fontSize: 15, fontWeight: 600, color: C.orange }}>⏸ Main job paused</span>
-          <span onClick={() => { setJobPaused(false); tt("▶ Resumed") }} style={{ fontSize: 14, fontWeight: 600, color: C.accent, cursor: "pointer" }}>▶ Resume</span>
+          <span style={{ fontSize: 15, fontWeight: 600, color: C.orange, display: "inline-flex", alignItems: "center", gap: 7 }}><Icon name="pause" size={15} /> Main job paused</span>
+          <span onClick={() => { setJobPaused(false); tt("Resumed") }} style={{ fontSize: 14, fontWeight: 600, color: C.accent, cursor: "pointer", padding: "6px 10px" }}>Resume</span>
         </div>}
         <div style={{ display: "flex", alignItems: "center", overflowX: "auto", padding: "8px 4px" }}>
           {pipeline.map((key, i) => { const s = ALL_STAGES[key]; const active = key === jobStage; const past = i < stageIdx; const showLabel = active || i === stageIdx - 1 || i === stageIdx + 1; return <React.Fragment key={key}>
             {i > 0 && <div style={{ height: 2, flex: "1 1 8px", minWidth: 8, maxWidth: 24, background: past ? C.green : C.border }} />}
             <div style={{ display: "flex", flexDirection: "column", alignItems: "center", flexShrink: 0 }}>
-              {active ? <div style={{ width: 36, height: 36, borderRadius: 18, background: s.color + "15", border: `3px solid ${s.color}`, boxShadow: `0 2px 8px ${s.color}30`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16 }}>{s.icon}</div>
+              {active ? <div style={{ width: 36, height: 36, borderRadius: 18, background: s.color + "15", border: `3px solid ${s.color}`, boxShadow: `0 2px 8px ${s.color}30`, display: "flex", alignItems: "center", justifyContent: "center" }}><Icon name={s.ic} size={15} color={s.color} /></div>
                 : past ? <div style={{ width: 20, height: 20, borderRadius: 10, background: C.green, display: "flex", alignItems: "center", justifyContent: "center" }}><span style={{ color: "#fff", fontSize: 11, fontWeight: 700 }}>✓</span></div>
                 : <div style={{ width: 16, height: 16, borderRadius: 8, background: C.border }} />}
               {showLabel && <div style={{ fontSize: 10, fontWeight: active ? 700 : 500, color: active ? s.color : past ? C.green : C.muted, marginTop: 3, whiteSpace: "nowrap", textAlign: "center" }}>{s.label}</div>}
@@ -442,7 +442,7 @@ export default function JobScreen() {
       {/* ═══ FOLLOW UP ═══ */}
       {(jobStage === "follow_up" || jobStage === "closed") && <div style={{ ...card, padding: "14px 16px", border: `2px solid ${jobStage === "follow_up" ? C.orange : C.green}40` }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-          <span style={{ fontSize: 14, fontWeight: 600, color: C.sub, textTransform: "uppercase", letterSpacing: 0.8 }}>📞 Follow Up</span>
+          <span style={{ fontSize: 14, fontWeight: 600, color: C.sub, textTransform: "uppercase", letterSpacing: 0.8, display: "inline-flex", alignItems: "center", gap: 7 }}><Icon name="phone" size={14} /> Follow Up</span>
           {jobStage === "closed" && <span style={{ fontSize: 12, color: C.green, fontWeight: 700 }}>✓ Closed</span>}
         </div>
 
@@ -459,8 +459,8 @@ export default function JobScreen() {
         {jobStage === "follow_up" && <>
           <div style={{ fontSize: 14, color: C.sub, marginBottom: 10 }}>Call customer and record feedback before closing the job.</div>
           <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
-            <a href={`tel:+${phoneIntl(jobInfo.customer_phone)}`} style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "12px 0", background: C.green + "10", borderRadius: 12, color: C.green, fontWeight: 600, fontSize: 15, textDecoration: "none", border: `1px solid ${C.green}30` }}>📞 Call {jobInfo.customer_name?.split(" ")[0] || "Customer"}</a>
-            <a href={`https://wa.me/${phoneIntl(jobInfo.customer_phone)}`} target="_blank" style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "12px 0", background: "#25d366" + "10", borderRadius: 12, color: "#25d366", fontWeight: 600, fontSize: 15, textDecoration: "none", border: "1px solid #25d36630" }}>💬 WhatsApp</a>
+            <a href={`tel:+${phoneIntl(jobInfo.customer_phone)}`} style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "12px 0", background: C.green + "10", borderRadius: 12, color: C.green, fontWeight: 600, fontSize: 15, textDecoration: "none", border: `1px solid ${C.green}30` }}><Icon name="phone" size={16} /> Call {jobInfo.customer_name?.split(" ")[0] || "Customer"}</a>
+            <a href={`https://wa.me/${phoneIntl(jobInfo.customer_phone)}`} target="_blank" style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "12px 0", background: "#25d366" + "10", borderRadius: 12, color: "#25d366", fontWeight: 600, fontSize: 15, textDecoration: "none", border: "1px solid #25d36630" }}><Icon name="message" size={16} /> WhatsApp</a>
           </div>
         </>}
 
@@ -515,7 +515,7 @@ export default function JobScreen() {
                 tt(`📵 No answer (${newAttempts}/3) -- retry in 4 hours`)
                 setActiveJobId(null); setScreen("home"); setHomeTab("on_hold")
               }
-            }} style={{ ...btn(C.orange + "15", C.orange), flex: 1, border: `1px solid ${C.orange}40`, fontSize: 15 }}>📵 No Answer {followUpAttempts > 0 ? `(${followUpAttempts}/3)` : ""}</button>
+            }} style={{ ...btn(C.orange + "15", C.orange), flex: 1, border: `1px solid ${C.orange}40`, fontSize: 15 }}>No Answer {followUpAttempts > 0 ? `(${followUpAttempts}/3)` : ""}</button>
 
             {/* Close Job */}
             <button onClick={() => {
@@ -530,16 +530,16 @@ export default function JobScreen() {
               setJobStage("closed")
               tt("🎉 Job closed! Well done 👏")
               setActiveJobId(null); setScreen("home"); setHomeTab("closed")
-            }} style={{ ...btn(C.green, "#fff"), flex: 1, fontSize: 15 }}>🏁 Close & Complete</button>
+            }} style={{ ...btn(C.green, "#fff"), flex: 1, fontSize: 15 }}>Close &amp; Complete</button>
           </div>
         </>}
       </div>}
 
       {/* Vehicle & Customer */}
       <div style={card}>
-        <SectionHead title="Vehicle & Customer" icon="🚗" sectionKey="vehicle" badge={
+        <SectionHead title="Vehicle & Customer" icon="car" sectionKey="vehicle" badge={
           !editingDetails
-            ? <div onClick={(e) => { e.stopPropagation(); startEditDetails() }} style={{ fontSize: 13, fontWeight: 600, color: C.accent, cursor: "pointer", padding: "4px 12px", borderRadius: 8, background: C.accent + "08" }}>✏️ Edit</div>
+            ? <div onClick={(e) => { e.stopPropagation(); startEditDetails() }} style={{ fontSize: 13, fontWeight: 600, color: C.accent, cursor: "pointer", padding: "4px 12px", borderRadius: 8, background: C.accent + "08" }}>Edit</div>
             : null
         } />
         {isSectionOpen("vehicle") && <>
@@ -557,7 +557,7 @@ export default function JobScreen() {
             <div><div style={{ fontSize: 12, color: C.muted, marginBottom: 3, fontWeight: 500 }}>Insurance</div><div style={{ fontSize: 16, color: jobInfo.insurance_name ? C.accent : C.muted, fontWeight: jobInfo.insurance_name ? 600 : 400 }}>{jobInfo.insurance_name || "No insurance"}</div></div>
             {isInsurance && <div><div style={{ fontSize: 12, color: C.muted, marginBottom: 3, fontWeight: 500 }}>Assessor</div>
               {jobInfo.assessor_name
-                ? <div style={{ fontSize: 15, color: C.text, fontWeight: 600 }}>{jobInfo.assessor_name}{jobInfo.assessor_phone && <> · <a href={`tel:+${phoneIntl(jobInfo.assessor_phone)}`} style={{ color: C.accent, textDecoration: "none", fontWeight: 500 }}>📞</a> <a href={`https://wa.me/${phoneIntl(jobInfo.assessor_phone)}`} target="_blank" rel="noreferrer" style={{ color: "#25d366", textDecoration: "none" }}>💬</a></>}</div>
+                ? <div style={{ fontSize: 15, color: C.text, fontWeight: 600 }}>{jobInfo.assessor_name}{jobInfo.assessor_phone && <> · <a href={`tel:+${phoneIntl(jobInfo.assessor_phone)}`} style={{ color: C.accent, textDecoration: "none", fontWeight: 500, display: "inline-flex", verticalAlign: "middle" }}><Icon name="phone" size={14} /></a> <a href={`https://wa.me/${phoneIntl(jobInfo.assessor_phone)}`} target="_blank" rel="noreferrer" style={{ color: "#25d366", textDecoration: "none", display: "inline-flex", verticalAlign: "middle" }}><Icon name="message" size={14} /></a></>}</div>
                 : <div style={{ fontSize: 15, color: C.muted }}>Not assigned</div>}
             </div>}
             {jobInfo.paint_code && <div><div style={{ fontSize: 12, color: C.muted, marginBottom: 3, fontWeight: 500 }}>Paint Code</div><div style={{ fontSize: 16, fontFamily: MONO, fontWeight: 700, color: C.purple }}>{jobInfo.paint_code}</div></div>}
@@ -631,7 +631,7 @@ export default function JobScreen() {
 
       {/* Photos */}
       <div style={card}>
-        <SectionHead title={`Photos (${jobDocs.length})`} icon="📷" sectionKey="photos" badge={<div onClick={(e) => { e.stopPropagation(); setShowUploadMenu("job") }} style={{ fontSize: 15, fontWeight: 500, color: C.accent, cursor: "pointer" }}>+ Add</div>} />
+        <SectionHead title={`Photos (${jobDocs.length})`} icon="camera" sectionKey="photos" badge={<div onClick={(e) => { e.stopPropagation(); setShowUploadMenu("job") }} style={{ fontSize: 15, fontWeight: 500, color: C.accent, cursor: "pointer" }}>+ Add</div>} />
         {isSectionOpen("photos") && <>
         {isUploading && <div style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "6px 12px", background: C.accent + "10", borderRadius: 10, marginBottom: 8, fontSize: 13, color: C.accent, fontWeight: 600 }}>⏳ Uploading...</div>}
         {jobDocs.length > 0 && <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(90px, 1fr))", gap: 8 }}>
@@ -643,12 +643,12 @@ export default function JobScreen() {
           </div>})}
         </div>}
         {jobStage === "qc" && !jobDocs.some(d => d.label === "After") && <div style={{ background: C.orange + "08", border: `2px dashed ${C.orange}40`, borderRadius: 12, padding: "14px 16px", marginTop: 10, textAlign: "center" }}>
-          <div style={{ fontSize: 15, fontWeight: 600, color: C.orange, marginBottom: 6 }}>📸 After photos required</div>
+          <div style={{ fontSize: 15, fontWeight: 600, color: C.orange, marginBottom: 6 }}>After photos required</div>
           <div style={{ fontSize: 13, color: C.sub, marginBottom: 10 }}>Take photos of completed work before marking ready</div>
-          <div onClick={() => { setPhotoTag("After"); setShowUploadMenu("job") }} style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "10px 20px", background: C.green, color: "#fff", borderRadius: 12, cursor: "pointer", fontWeight: 600, fontSize: 15 }}>📷 Add After Photos</div>
+          <div onClick={() => { setPhotoTag("After"); setShowUploadMenu("job") }} style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "10px 20px", background: C.green, color: "#fff", borderRadius: 12, cursor: "pointer", fontWeight: 600, fontSize: 15 }}>Add After Photos</div>
         </div>}
         {!jobDocs.length && <div onClick={() => setShowUploadMenu("job")} style={{ padding: "24px 0", textAlign: "center", color: C.muted, cursor: "pointer" }}>
-          <div style={{ fontSize: 36, marginBottom: 6 }}>📷</div>
+          <div style={{ display: "flex", justifyContent: "center", marginBottom: 8 }}><IconBadge name="camera" color={C.muted} size={48} /></div>
           <div style={{ fontSize: 16, fontWeight: 500 }}>Take a vehicle photo first</div>
           <div style={{ fontSize: 13, marginTop: 2 }}>Helps identify the correct vehicle</div>
         </div>}
@@ -660,14 +660,14 @@ export default function JobScreen() {
 
       {/* Parts Tracker */}
       {hasReplaceParts && <div style={{ ...card, padding: "14px 16px", border: allPartsArrived ? `2px solid ${C.green}30` : `1px solid ${C.border}` }}>
-        <SectionHead title="Parts Tracker" icon="📦" sectionKey="parts_tracker" badge={<span style={{ fontFamily: MONO, fontSize: 14, fontWeight: 700, color: allPartsArrived ? C.green : C.orange }}>{arrivedCount}/{replaceParts.length}</span>} />
+        <SectionHead title="Parts Tracker" icon="package" sectionKey="parts_tracker" badge={<span style={{ fontFamily: MONO, fontSize: 14, fontWeight: 700, color: allPartsArrived ? C.green : C.orange }}>{arrivedCount}/{replaceParts.length}</span>} />
         {isSectionOpen("parts_tracker") && <>
         {!partsOrdered ? <button onClick={() => {
           if (isInsurance && pqStatus !== "approved") {
             if (!confirm("⚠️ Parts prices not yet approved by insurance. Order anyway?")) return
           }
           setPartsOrdered(true); tt("🛒 Parts ordered")
-        }} style={{ ...btnSm(C.purple, "#fff"), marginBottom: 10 }}>🛒 Mark Parts Ordered</button>
+        }} style={{ ...btnSm(C.purple, "#fff"), marginBottom: 10 }}>Mark Parts Ordered</button>
           : <div style={{ fontSize: 13, color: C.green, fontWeight: 600, marginBottom: 10 }}>✓ Parts ordered</div>}
         {replaceParts.map(p => {
           const arrived = !!partsArrived[p.id]
@@ -695,7 +695,7 @@ export default function JobScreen() {
       {/* Parts Quotation (insurance) / PO (direct) */}
       {partsQuotation.length > 0 && <div style={{ ...card, padding: "14px 16px", border: `1px solid ${pqStatus === "approved" ? C.green : isInsurance ? C.purple : C.accent}30` }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-          <span style={{ fontSize: 14, fontWeight: 600, color: C.sub, textTransform: "uppercase", letterSpacing: 0.8 }}>{isInsurance ? "📄 Parts Quotation" : "📋 Purchase Order"}</span>
+          <span style={{ fontSize: 14, fontWeight: 600, color: C.sub, textTransform: "uppercase", letterSpacing: 0.8 }}>{isInsurance ? "Parts Quotation" : "Purchase Order"}</span>
           <span style={pill(pqStatus === "approved" ? C.green : pqStatus === "submitted" ? C.orange : C.muted)}>{pqStatus === "approved" ? "✓ Approved" : pqStatus === "submitted" ? "Submitted" : "Draft"}</span>
         </div>
         {isInsurance && pqStatus === "draft" && !pqAllFilled && <div style={{ background: C.orange + "10", borderRadius: 10, padding: "8px 12px", marginBottom: 10, fontSize: 13, color: C.orange, fontWeight: 500 }}>⚠️ Fill supplier names & prices before submitting</div>}
@@ -707,16 +707,16 @@ export default function JobScreen() {
         {partsQuotation.length > 3 && <div style={{ fontSize: 13, color: C.muted, marginTop: 4 }}>+{partsQuotation.length - 3} more</div>}
         <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
           <button onClick={() => { setShowPQScreen(true); setPqTab(pqStatus === "submitted" || pqStatus === "approved" ? "approve" : "quote") }} style={{ ...btnSm(isInsurance ? C.purple : C.accent, "#fff"), flex: 1 }}>{pqStatus === "approved" ? "View" : isInsurance ? (pqStatus === "submitted" ? "Record Approval" : "Edit Prices") : "View PO"}</button>
-          {isInsurance && pqStatus === "approved" && <button onClick={() => { setShowPQScreen(true); setPqTab("cost") }} style={{ ...btnText(C.accent), flex: 1 }}>💰 Costs</button>}
+          {isInsurance && pqStatus === "approved" && <button onClick={() => { setShowPQScreen(true); setPqTab("cost") }} style={{ ...btnText(C.accent), flex: 1 }}>Costs</button>}
           <button onClick={() => sharePQ("whatsapp")} style={{ ...btnText(C.green), flex: 1 }}>WhatsApp</button>
-          <button onClick={() => sharePQ("copy")} style={{ ...btnText(C.sub), flex: 0 }}>📋</button>
+          <button onClick={() => sharePQ("copy")} style={{ ...btnText(C.sub), flex: 0 }}>Copy</button>
         </div>
         {pqStatus === "approved" && (() => {
           const filled = partsQuotation.filter(p => p.suppliedBy)
           const supplierP = partsQuotation.filter(p => p.suppliedBy === "supplier" && p.actualCost > 0)
           const totalMargin = supplierP.reduce((s, p) => s + ((p.approvedPrice || 0) - (p.actualCost || 0)), 0)
           return <div style={{ marginTop: 8, textAlign: "center" }}>
-            <div style={{ fontSize: 14, color: C.green, fontWeight: 600 }}>✓ Approved -- Rs.{pqApprovedTotal.toLocaleString()}{pqApprovalPhoto ? " · 📷" : ""}</div>
+            <div style={{ fontSize: 14, color: C.green, fontWeight: 600 }}>✓ Approved -- Rs.{pqApprovedTotal.toLocaleString()}{pqApprovalPhoto ? " · photo attached" : ""}</div>
             {filled.length === partsQuotation.length && supplierP.length > 0 && <div style={{ fontSize: 13, color: totalMargin > 0 ? C.green : C.red, fontWeight: 600, marginTop: 2 }}>Parts margin: Rs.{totalMargin.toLocaleString()}</div>}
             {filled.length < partsQuotation.length && <div style={{ fontSize: 13, color: C.orange, marginTop: 2 }}>⚠️ {partsQuotation.length - filled.length} parts need cost info</div>}
             {supplierP.length > 0 && supplierInvoices.length === 0 && <div style={{ fontSize: 13, color: C.orange, marginTop: 2 }}>⚠️ No supplier invoice attached</div>}
@@ -728,7 +728,7 @@ export default function JobScreen() {
       {isDirectJob && estimates.length > 0 && !customerConfirmed && <div style={{ ...card, padding: "14px 16px", border: `2px dashed ${C.orange}40`, background: C.orange + "04" }}>
         <div style={{ fontSize: 15, color: C.sub, marginBottom: 8 }}>Customer hasn't confirmed yet. Share quotation then mark confirmed to create PO.</div>
         <div style={{ display: "flex", gap: 8 }}>
-          <button onClick={() => sharePQ("whatsapp")} style={{ ...btnSm(C.green + "12", C.green), flex: 1 }}>📱 Send Quotation</button>
+          <button onClick={() => sharePQ("whatsapp")} style={{ ...btnSm(C.green + "12", C.green), flex: 1 }}>Send Quotation</button>
           <button onClick={confirmCustomer} style={{ ...btnSm(C.accent, "#fff"), flex: 1 }}>✓ Customer Confirmed</button>
         </div>
       </div>}
@@ -736,7 +736,7 @@ export default function JobScreen() {
 
       {/* Estimates */}
       {!isMinorJob && <>
-      <SectionHead title="Estimates" icon="📝" sectionKey="estimates" badge={estimates.filter(e => e.status !== "archived").length > 0 ? <span style={{ fontSize: 12, fontWeight: 700, color: C.sub }}>{estimates.filter(e => e.status !== "archived").length}</span> : null} />
+      <SectionHead title="Estimates" icon="clipboard" sectionKey="estimates" badge={estimates.filter(e => e.status !== "archived").length > 0 ? <span style={{ fontSize: 12, fontWeight: 700, color: C.sub }}>{estimates.filter(e => e.status !== "archived").length}</span> : null} />
       {isSectionOpen("estimates") && <>
       {estimates.filter(e => e.status !== "archived").map(est => (
         <div key={est.id} style={{ ...card, position: "relative", padding: "14px 16px" }}>
@@ -751,7 +751,7 @@ export default function JobScreen() {
                 <span onClick={() => { setSelEst(est); setEstParts([...est.parts]); setEstEntries([...est.entries]); setSundryItems([...(est.sundries || [])]); setActiveCat(0); setScreen("est_review") }} style={{ fontSize: 16, fontWeight: 500, color: C.accent, cursor: "pointer" }}>View →</span>
                 {est.status === "draft" && isInsurance && <span onClick={() => startApproval(est)} style={{ fontSize: 16, fontWeight: 500, color: C.green, cursor: "pointer" }}>Approve →</span>}
                 {est.status === "approved" && isInsurance && <span onClick={() => startApproval(est)} style={{ fontSize: 14, fontWeight: 500, color: C.orange, cursor: "pointer" }}>↻ Amend Approval</span>}
-                <span onClick={() => generateEstimatePDF(est)} style={{ fontSize: 15, fontWeight: 500, color: C.purple, cursor: "pointer" }}>📄 PDF</span>
+                <span onClick={() => generateEstimatePDF(est)} style={{ fontSize: 15, fontWeight: 500, color: C.purple, cursor: "pointer" }}>PDF</span>
               </div>
             </div>
             <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8 }}>
@@ -789,13 +789,13 @@ export default function JobScreen() {
       {/* ═══ ADVANCE PAYMENTS — money taken before/while invoicing ═══ */}
       {jobStage !== "closed" && jobStage !== "cancelled" && <div style={{ ...card, padding: "14px 16px", border: `1px solid ${advances.length ? C.green + "30" : C.border}` }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: advances.length || showAdvForm ? 10 : 0 }}>
-          <span style={{ fontSize: 14, fontWeight: 600, color: C.sub, textTransform: "uppercase", letterSpacing: 0.8 }}>💵 Advances{advanceTotal > 0 ? ` · Rs.${fmt(advanceTotal)}` : ""}</span>
+          <span style={{ fontSize: 14, fontWeight: 600, color: C.sub, textTransform: "uppercase", letterSpacing: 0.8 }}>Advances{advanceTotal > 0 ? ` · Rs.${fmt(advanceTotal)}` : ""}</span>
           {!showAdvForm && <span onClick={() => setShowAdvForm(true)} style={{ fontSize: 14, fontWeight: 600, color: C.green, cursor: "pointer", padding: "6px 12px", background: C.green + "10", borderRadius: 8 }}>+ Record Advance</span>}
         </div>
         {advances.map(a => <div key={a.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: `1px solid ${C.border}` }}>
           <div>
             <span style={{ fontFamily: MONO, fontSize: 16, fontWeight: 700, color: C.green }}>Rs.{fmt(a.amount)}</span>
-            <span style={{ fontSize: 13, color: C.sub, marginLeft: 8 }}>{a.method === "bank" ? "🏦 Bank" : a.method === "cheque" ? "📝 Cheque" : "💵 Cash"}{a.note ? ` · ${a.note}` : ""}</span>
+            <span style={{ fontSize: 13, color: C.sub, marginLeft: 8 }}>{a.method === "bank" ? "Bank" : a.method === "cheque" ? "Cheque" : "Cash"}{a.note ? ` · ${a.note}` : ""}</span>
             <div style={{ fontSize: 12, color: C.muted }}>{new Date(a.date).toLocaleDateString("en-LK", { month: "short", day: "numeric" })}{a.appliedTo ? " · ✓ applied to invoice" : ""}</div>
           </div>
           {!a.appliedTo && <span onClick={() => deleteAdvance(a.id)} style={{ fontSize: 16, color: C.red, opacity: 0.5, cursor: "pointer", padding: "8px 10px" }}>✕</span>}
@@ -803,7 +803,7 @@ export default function JobScreen() {
         {showAdvForm && <div style={{ marginTop: 10 }}>
           <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
             <input type="number" inputMode="decimal" inputMode="decimal" min="0" value={advAmt} onChange={e => setAdvAmt(e.target.value)} placeholder="Amount" autoFocus style={{ ...inp, flex: 1, fontFamily: MONO, fontWeight: 700, fontSize: 18, textAlign: "right" }} />
-            {[["cash", "💵"], ["bank", "🏦"], ["cheque", "📝"]].map(([k, ic]) => <div key={k} onClick={() => setAdvMethod(k)} style={{ width: 52, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 12, cursor: "pointer", background: advMethod === k ? C.green + "15" : C.bg, border: `1.5px solid ${advMethod === k ? C.green : C.border}`, fontSize: 18 }}>{ic}</div>)}
+            {[["cash", "Cash"], ["bank", "Bank"], ["cheque", "Cheque"]].map(([k, ic]) => <div key={k} onClick={() => setAdvMethod(k)} style={{ width: 52, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 12, cursor: "pointer", background: advMethod === k ? C.green + "15" : C.bg, border: `1.5px solid ${advMethod === k ? C.green : C.border}`, fontSize: 18 }}>{ic}</div>)}
           </div>
           <input value={advNote} onChange={e => setAdvNote(e.target.value)} placeholder="Note (e.g. 50% advance to start work)" style={{ ...inp, marginBottom: 8, fontSize: 14 }} />
           <div style={{ display: "flex", gap: 8 }}>
@@ -817,8 +817,8 @@ export default function JobScreen() {
       {/* On Hold / Reactivate / Delete / Cancel / Convert */}
       <div style={{ marginTop: 20, borderTop: `1px solid ${C.border}`, paddingTop: 16 }}>
         {activeJob?.onHold
-          ? <button onClick={toggleHold} style={{ ...btn(C.green + "12", C.green) }}>▶ Reactivate Job</button>
-          : <button onClick={toggleHold} style={{ ...btn(C.bg, C.orange), border: `1px solid ${C.orange}30` }}>📌 Put On Hold</button>}
+          ? <button onClick={toggleHold} style={{ ...btn(C.green + "12", C.green) }}>Reactivate Job</button>
+          : <button onClick={toggleHold} style={{ ...btn(C.bg, C.orange), border: `1px solid ${C.orange}30` }}>Put On Hold</button>}
 
         {/* Convert Insurance → Direct (when insurance rejected) */}
         {jobInfo.job_type === "insurance" && activeJob?.stage !== "closed" && activeJob?.stage !== "cancelled" && (
@@ -836,7 +836,7 @@ export default function JobScreen() {
             } : j))
             setJobInfo(prev => ({ ...prev, job_type: "direct", insurance_name: null }))
             tt("✓ Converted to Direct job")
-          }} style={{ ...btn(C.bg, C.accent), border: `1px solid ${C.accent}30`, marginTop: 8, fontSize: 15 }}>🔄 Convert to Direct (Insurance Rejected)</button>
+          }} style={{ ...btn(C.bg, C.accent), border: `1px solid ${C.accent}30`, marginTop: 8, fontSize: 15 }}>Convert to Direct (Insurance Rejected)</button>
         )}
 
         {/* Cancel Job — for jobs with invoices that can't be deleted */}
@@ -846,10 +846,10 @@ export default function JobScreen() {
             setJobs(prev => prev.map(j => j.id === activeJobId ? { ...j, stage: "cancelled", onHold: false, cancelledAt: new Date().toISOString() } : j))
             tt("Job cancelled")
             setScreen("home")
-          }} style={{ ...btn("transparent", C.orange), border: `1px solid ${C.orange}30`, marginTop: 8, fontSize: 15, padding: "12px 20px" }}>✕ Cancel Job</button>
+          }} style={{ ...btn("transparent", C.orange), border: `1px solid ${C.orange}30`, marginTop: 8, fontSize: 15, padding: "12px 20px" }}>Cancel Job</button>
         )}
 
-        {estimates.length === 0 && <button onClick={deleteJob} style={{ ...btn(confirmDelJob ? C.red : "transparent", confirmDelJob ? "#fff" : C.red), marginTop: 8, fontSize: 15, padding: "12px 20px", border: confirmDelJob ? "none" : `1px solid ${C.red}30` }}>{confirmDelJob ? "Tap again to confirm delete" : "🗑 Delete Job"}</button>}
+        {estimates.length === 0 && <button onClick={deleteJob} style={{ ...btn(confirmDelJob ? C.red : "transparent", confirmDelJob ? "#fff" : C.red), marginTop: 8, fontSize: 15, padding: "12px 20px", border: confirmDelJob ? "none" : `1px solid ${C.red}30` }}>{confirmDelJob ? "Tap again to confirm delete" : "Delete Job"}</button>}
       </div>
     </>
   )

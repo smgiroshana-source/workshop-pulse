@@ -1,6 +1,6 @@
 "use client"
 import { useWorkshop } from "../WorkshopContext"
-import { C, FONT, MONO, inp, btn, card, NavBar, fmt } from "../WorkshopContext"
+import { C, FONT, MONO, inp, btn, card, NavBar, fmt, Icon } from "../WorkshopContext"
 
 export default function ApprovalEntry() {
   const {
@@ -19,13 +19,13 @@ export default function ApprovalEntry() {
   return (
     <>
       <NavBar
-        title={`${aCat.icon} ${aCat.label}`}
+        title={aCat.label}
         subtitle="Your price vs Approved price"
         onBack={() => setScreen("approve")}
       />
       <div style={{ display: "flex", gap: 4, marginBottom: 16, background: C.card, borderRadius: 14, padding: 5, boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
         {jobCats.map((c, i) => { const ci = approvalItems.filter(x => x.category === c.key); const done = ci.filter(x => x.approved_rate !== null || x.approval_status === "use_same").length; return ci.length ? <div key={c.key} onClick={() => setApprovalCat(i)} style={{ flex: 1, textAlign: "center", padding: "10px 0", borderRadius: 12, cursor: "pointer", background: i === approvalCat ? c.color + "12" : "transparent" }}>
-          <div style={{ fontSize: 22 }}>{c.icon}</div>
+          <div style={{ display: "flex", justifyContent: "center" }}><Icon name={c.ic} size={20} color={c.color} /></div>
           <div style={{ fontSize: 12, fontWeight: 600, color: i === approvalCat ? c.color : C.muted }}>{done}/{ci.length}</div>
         </div> : null })}
       </div>
@@ -52,7 +52,7 @@ export default function ApprovalEntry() {
         </div>
       })}
       <div style={{ marginTop: 16 }}>
-        {approvalCat < jobCats.length - 1 && approvalItems.some(i => i.category === jobCats[approvalCat + 1]?.key) ? <button onClick={() => setApprovalCat(approvalCat + 1)} style={{ ...btn(jobCats[approvalCat + 1].color, "#fff") }}>Next → {jobCats[approvalCat + 1].icon} {jobCats[approvalCat + 1].label}</button>
+        {approvalCat < jobCats.length - 1 && approvalItems.some(i => i.category === jobCats[approvalCat + 1]?.key) ? <button onClick={() => setApprovalCat(approvalCat + 1)} style={{ ...btn(jobCats[approvalCat + 1].color, "#fff") }}>Next: {jobCats[approvalCat + 1].label}</button>
           : <button onClick={() => setScreen("approve_summary")} style={{ ...btn(C.accent, "#fff") }}>View Summary</button>}
       </div>
       <div style={{ position: "fixed", bottom: 0, left: isTablet ? 380 : 0, right: 0, background: C.card, borderTop: `1px solid ${C.border}`, padding: "14px 24px", maxWidth: isTablet ? undefined : 480, margin: isTablet ? undefined : "0 auto", zIndex: 50, display: "flex", justifyContent: "space-between", alignItems: "center" }}>

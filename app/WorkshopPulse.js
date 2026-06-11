@@ -1,6 +1,6 @@
 "use client"
 import { useState, useRef, useEffect } from "react"
-import { WorkshopProvider, useWorkshop, C, FONT, MONO, btn, btnSm, inp, card, pill, Sheet, NavBar, ALL_STAGES, fmt, regSearchKey, phoneSearchKey, phoneIntl, SP } from "./WorkshopContext"
+import { WorkshopProvider, useWorkshop, C, FONT, MONO, btn, btnSm, inp, card, pill, Sheet, NavBar, ALL_STAGES, fmt, regSearchKey, phoneSearchKey, phoneIntl, SP, Icon, IconBadge } from "./WorkshopContext"
 import { useAuth } from "./AuthGate"
 import { uploadPhoto, deletePhoto, compressForPreview } from "./supabase"
 import UserManagement from "./screens/UserManagement"
@@ -416,7 +416,7 @@ function CashBookScreen({ cashBook, setCashBook, grns, setGrns, jobs, loadClosed
 
           {/* Add Petty Cash / Misc Expense */}
           <div style={{ ...card, border: `2px solid ${C.red}20`, background: C.red + "04" }}>
-            <div style={{ fontSize: 15, fontWeight: 700, color: C.red, marginBottom: 2 }}>➕ Add Petty Cash Expense</div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: C.red, marginBottom: 2 }}>Add Petty Cash Expense</div>
             <div style={{ fontSize: 12, color: C.muted, marginBottom: 10 }}>Food, fuel, utility bills, stationery, tea, etc. {!isToday && <span style={{ color: C.orange, fontWeight: 600 }}>— for {dateLabel}</span>}</div>
             <input value={addExpDesc} onChange={e => setAddExpDesc(e.target.value)} placeholder="What did you spend on?"
               onKeyDown={e => { if (e.key === "Enter") addMiscExpense() }}
@@ -715,7 +715,7 @@ function PayableScreen({ unpaidPOs, setPurchaseOrders, setGrns, cashBook, setCas
       )}
       {unpaidPOs.length === 0 ? (
         <div style={{ textAlign: "center", padding: 40, color: C.muted }}>
-          <div style={{ fontSize: 40, marginBottom: 12 }}>✅</div>
+          <div style={{ display: "flex", justifyContent: "center", marginBottom: 12 }}><IconBadge name="checkCircle" color={C.green} size={56} /></div>
           <div style={{ fontSize: 16, fontWeight: 600 }}>All purchases paid</div>
         </div>
       ) : unpaidPOs.map(item => {
@@ -1013,7 +1013,7 @@ function AppInner() {
             const thumb = (j.jobDocs || [])[0]?.dataUrl
             return (
               <div key={j.id} onClick={() => openJob(j)} onMouseEnter={e => { if (isTablet) { setHoverJobId(j.id); setHoverY(e.clientY) } }} onMouseLeave={() => setHoverJobId(null)} style={{ ...card, cursor: "pointer", padding: isTablet ? "10px 12px" : "12px 14px", background: isSelected ? C.accent + "08" : C.card, border: isSelected ? `1px solid ${C.accent}40` : `1px solid ${C.border}`, borderLeft: `4px solid ${stage.color}`, display: "flex", gap: 10, alignItems: "center" }}>
-                {thumb ? <img src={thumb} style={{ width: isTablet ? 48 : 52, height: isTablet ? 48 : 52, borderRadius: 12, objectFit: "cover", flexShrink: 0 }} alt="" /> : <div style={{ width: isTablet ? 48 : 52, height: isTablet ? 48 : 52, borderRadius: 12, background: C.bg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 20 }}>🚗</div>}
+                {thumb ? <img src={thumb} style={{ width: isTablet ? 48 : 52, height: isTablet ? 48 : 52, borderRadius: 12, objectFit: "cover", flexShrink: 0 }} alt="" /> : <div style={{ width: isTablet ? 48 : 52, height: isTablet ? 48 : 52, borderRadius: 12, background: C.bg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><Icon name="car" size={22} color={C.muted} /></div>}
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 3 }}>
                     <div style={{ minWidth: 0 }}>
@@ -1039,13 +1039,13 @@ function AppInner() {
                     if (j.stage === "follow_up") return <div style={{ fontSize: 12, color: C.orange, fontWeight: 600, marginTop: 4 }}>📵 No answer ({j.followUpAttempts}/3) · retry in {hours}h</div>
                     return <div style={{ fontSize: 12, color: C.orange, fontWeight: 600, marginTop: 4 }}>⏰ Follow-up in {days} day{days !== 1 ? "s" : ""}</div>
                   })()}
-                  {j.stage === "closed" && j.followUpNote && <div style={{ fontSize: 12, color: C.sub, marginTop: 4, fontStyle: "italic", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>💬 {j.followUpNote}</div>}
+                  {j.stage === "closed" && j.followUpNote && <div style={{ fontSize: 12, color: C.sub, marginTop: 4, fontStyle: "italic", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{j.followUpNote}</div>}
                 </div>
               </div>
             )
           }) : (
             <div style={{ textAlign: "center", padding: 40, color: C.muted }}>
-              <div style={{ fontSize: 40, marginBottom: 12 }}>{homeTab === "on_hold" ? "📌" : homeTab === "closed" ? "🏁" : "🔧"}</div>
+              <div style={{ display: "flex", justifyContent: "center", marginBottom: 12 }}><IconBadge name={homeTab === "on_hold" ? "bookmark" : homeTab === "closed" ? "flag" : "wrench"} color={C.muted} size={56} /></div>
               <div style={{ fontSize: 18, fontWeight: 600 }}>{homeTab === "on_hold" ? "No jobs on hold" : homeTab === "closed" ? "No closed jobs" : `No jobs${filterStage !== "all" ? " in this stage" : ""}`}</div>
               <div style={{ fontSize: 16, marginTop: 6 }}>{homeTab === "on_hold" ? "Delivered jobs wait here for 2-week follow-up" : homeTab === "closed" ? "Completed jobs will appear here" : "Tap + to create a new job"}</div>
             </div>
@@ -1145,7 +1145,7 @@ function AppInner() {
         <div style={{ fontSize: 13, color: C.muted, marginBottom: 12 }}>{filteredEntries.length} vehicle{filteredEntries.length !== 1 ? "s" : ""}{q ? " found" : " registered"}</div>
         {filteredEntries.length === 0 ? (
           <div style={{ textAlign: "center", padding: 40, color: C.muted }}>
-            <div style={{ fontSize: 40, marginBottom: 12 }}>{q ? "🔍" : "📋"}</div>
+            <div style={{ display: "flex", justifyContent: "center", marginBottom: 12 }}><IconBadge name={q ? "search" : "users"} color={C.muted} size={56} /></div>
             <div style={{ fontSize: 16, fontWeight: 600 }}>{q ? "No matching vehicles" : "No vehicles registered yet"}</div>
             <div style={{ fontSize: 14, marginTop: 6 }}>{q ? "Try a different search term" : "Vehicles are registered when jobs are created"}</div>
           </div>
@@ -1208,7 +1208,7 @@ function AppInner() {
         )}
         {pendingPaymentJobs.length === 0 ? (
           <div style={{ textAlign: "center", padding: 40, color: C.muted }}>
-            <div style={{ fontSize: 40, marginBottom: 12 }}>✅</div>
+            <div style={{ display: "flex", justifyContent: "center", marginBottom: 12 }}><IconBadge name="checkCircle" color={C.green} size={56} /></div>
             <div style={{ fontSize: 16, fontWeight: 600 }}>All payments received</div>
           </div>
         ) : pendingPaymentJobs.map(j => {
@@ -1263,7 +1263,7 @@ function AppInner() {
         <div style={{ fontSize: 13, color: C.muted, marginBottom: 12 }}>Reference list — assessors are added automatically when you record them on a job.</div>
         {assessors.length === 0 ? (
           <div style={{ textAlign: "center", padding: 40, color: C.muted }}>
-            <div style={{ fontSize: 40, marginBottom: 12 }}>🕵️</div>
+            <div style={{ display: "flex", justifyContent: "center", marginBottom: 12 }}><IconBadge name="userCheck" color={C.muted} size={56} /></div>
             <div style={{ fontSize: 16, fontWeight: 600 }}>No assessors recorded yet</div>
             <div style={{ fontSize: 14, marginTop: 6 }}>Add an assessor name on an insurance job — it will appear here.</div>
           </div>
@@ -1274,8 +1274,8 @@ function AppInner() {
               <div style={{ fontSize: 13, color: C.sub }}>{a.phone || "No phone"}{a.insurance ? ` · ${a.insurance}` : ""}</div>
             </div>
             {a.phone && <div style={{ display: "flex", gap: 8 }}>
-              <a href={`tel:+${phoneIntl(a.phone)}`} style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 44, height: 44, borderRadius: 12, background: C.green + "10", border: `1px solid ${C.green}30`, textDecoration: "none", fontSize: 18 }}>📞</a>
-              <a href={`https://wa.me/${phoneIntl(a.phone)}`} target="_blank" rel="noreferrer" style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 44, height: 44, borderRadius: 12, background: "#25d36610", border: "1px solid #25d36630", textDecoration: "none", fontSize: 18 }}>💬</a>
+              <a href={`tel:+${phoneIntl(a.phone)}`} style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 44, height: 44, borderRadius: 12, background: C.green + "10", border: `1px solid ${C.green}30`, textDecoration: "none" }}><Icon name="phone" size={18} color={C.green} /></a>
+              <a href={`https://wa.me/${phoneIntl(a.phone)}`} target="_blank" rel="noreferrer" style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 44, height: 44, borderRadius: 12, background: "#25d36610", border: "1px solid #25d36630", textDecoration: "none" }}><Icon name="message" size={18} color="#25d366" /></a>
             </div>}
           </div>
         ))}
@@ -1303,17 +1303,17 @@ function AppInner() {
     return (
       <div className="screen-fade">
         <div style={{ marginBottom: 18 }}>
-          <div style={{ fontSize: 14, color: C.muted, fontWeight: 500 }}>{greeting} 👋</div>
+          <div style={{ fontSize: 14, color: C.muted, fontWeight: 500 }}>{greeting}</div>
           <div style={{ fontSize: 26, fontWeight: 700, color: C.text, letterSpacing: "-0.5px", marginTop: 2 }}>Workshop Hub</div>
         </div>
 
         {/* Quick action bar */}
         <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
           <button onClick={() => setRightTab("cashbook")} style={{ flex: 1, padding: "12px 8px", borderRadius: 12, border: `1.5px solid ${C.red}30`, background: C.red + "08", color: C.red, fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: FONT, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
-            ➕ Petty Cash
+            <Icon name="plus" size={15} /> Petty Cash
           </button>
           <button onClick={startNewJob} style={{ flex: 1, padding: "12px 8px", borderRadius: 12, border: "none", background: C.accent, color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: FONT, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
-            ➕ New Job
+            <Icon name="plus" size={15} /> New Job
           </button>
         </div>
 
@@ -1329,12 +1329,12 @@ function AppInner() {
           </div>
           <div onClick={() => setRightTab("cashbook")} style={{ flex: 1, minWidth: 110, ...card, padding: "10px 12px", background: C.orange + "08", border: `1px solid ${C.orange}20`, cursor: "pointer" }}>
             <div style={{ fontSize: 11, color: C.muted, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5 }}>Petty Cash</div>
-            <div style={{ fontSize: 18, fontWeight: 700, fontFamily: MONO, color: C.orange, marginTop: 2 }}>➕ Add</div>
+            <div style={{ fontSize: 18, fontWeight: 700, fontFamily: MONO, color: C.orange, marginTop: 2 }}>Add</div>
           </div>
           {dueTodayCheques > 0 && (
             <div onClick={() => setRightTab("cashbook")} style={{ flex: 1, minWidth: 110, ...card, padding: "10px 12px", background: C.red + "08", border: `1px solid ${C.red}30`, cursor: "pointer" }}>
               <div style={{ fontSize: 11, color: C.muted, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5 }}>Cheques Due</div>
-              <div style={{ fontSize: 18, fontWeight: 700, fontFamily: MONO, color: C.red, marginTop: 2 }} className="pulse">⚠️ {dueTodayCheques}</div>
+              <div style={{ fontSize: 18, fontWeight: 700, fontFamily: MONO, color: C.red, marginTop: 2 }} className="pulse">{dueTodayCheques} due</div>
             </div>
           )}
         </div>
@@ -1354,25 +1354,25 @@ function AppInner() {
           const goToOnHold = () => { setSearchQuery(""); setHomeTab("on_hold") }
 
           const items = [
-            { count: newJobsNoEst,    icon: "📝", label: "Estimates to create",      color: C.accent, onClick: () => goToStage("job_received") },
-            { count: estToSubmit,     icon: "📤", label: "Estimates to submit",      color: C.orange, onClick: () => goToStage("est_pending") },
-            { count: partsToOrder,    icon: "🔩", label: "Parts to order",           color: C.orange, onClick: () => goToStage("approved_dismantle") },
-            { count: partsWaiting,    icon: "📦", label: "Parts not yet arrived",    color: C.purple, onClick: () => goToStage("parts_waiting") },
-            { count: inQc,            icon: "🔍", label: "Jobs in QC",               color: C.green,  onClick: () => goToStage("qc") },
-            { count: readyForDelivery,icon: "🚗", label: "Ready for delivery",       color: C.green,  onClick: () => goToStage("ready") },
-            { count: followUpsDue,    icon: "📞", label: "Follow-ups due",           color: C.red,    onClick: goToOnHold },
+            { count: newJobsNoEst,    icon: "edit",      label: "Estimates to create",      color: C.accent, onClick: () => goToStage("job_received") },
+            { count: estToSubmit,     icon: "send",      label: "Estimates to submit",      color: C.orange, onClick: () => goToStage("est_pending") },
+            { count: partsToOrder,    icon: "package",   label: "Parts to order",           color: C.orange, onClick: () => goToStage("approved_dismantle") },
+            { count: partsWaiting,    icon: "clock",     label: "Parts not yet arrived",    color: C.purple, onClick: () => goToStage("parts_waiting") },
+            { count: inQc,            icon: "search",    label: "Jobs in QC",               color: C.green,  onClick: () => goToStage("qc") },
+            { count: readyForDelivery,icon: "car",       label: "Ready for delivery",       color: C.green,  onClick: () => goToStage("ready") },
+            { count: followUpsDue,    icon: "phone",     label: "Follow-ups due",           color: C.red,    onClick: goToOnHold },
           ].filter(i => i.count > 0)
 
           if (items.length === 0) return null
           return (
             <div style={{ ...card, padding: "12px 14px", marginBottom: 16, border: `1px solid ${C.accent}25` }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: C.accent, textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 10, display: "flex", alignItems: "center", gap: 6 }}>
-                <span>👋</span> Needs Your Attention
+              <div style={{ fontSize: 12, fontWeight: 700, color: C.accent, textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 10 }}>
+                Needs Your Attention
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                 {items.map(it => (
                   <div key={it.label} onClick={it.onClick} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 12px", borderRadius: 10, cursor: "pointer", background: it.color + "08", border: `1px solid ${it.color}20`, transition: "all 0.15s" }}>
-                    <span style={{ fontSize: 20, flexShrink: 0 }}>{it.icon}</span>
+                    <Icon name={it.icon} size={18} color={it.color} />
                     <span style={{ fontSize: 14, fontWeight: 600, color: C.text, flex: 1 }}>{it.label}</span>
                     <span style={{ fontFamily: MONO, fontSize: 15, fontWeight: 700, color: it.color, minWidth: 28, textAlign: "right" }}>{it.count}</span>
                     <span style={{ fontSize: 16, color: it.color, opacity: 0.6 }}>›</span>
@@ -1389,14 +1389,14 @@ function AppInner() {
             <div style={{ fontSize: 13, fontWeight: 600, color: C.muted, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 10 }}>Store</div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
               {[
-                { tab: "pos", screen: "list", icon: "📋", label: "POs", color: C.accent, count: purchaseOrders.filter(p => p.status !== "received").length },
-                { tab: "grns", screen: "list", icon: "📥", label: "GRNs", color: C.green, count: grns.length },
-                { tab: "grns", screen: "direct_grn", icon: "🛒", label: "Direct Purchase", color: C.orange },
-                { tab: "suppliers", screen: "list", icon: "📇", label: "Suppliers", color: C.purple, count: [...new Set([...purchaseOrders.map(p=>p.supplier),...grns.map(g=>g.supplier)].filter(Boolean))].length },
+                { tab: "pos", screen: "list", icon: "fileText", label: "POs", color: C.accent, count: purchaseOrders.filter(p => p.status !== "received").length },
+                { tab: "grns", screen: "list", icon: "inbox", label: "GRNs", color: C.green, count: grns.length },
+                { tab: "grns", screen: "direct_grn", icon: "bag", label: "Direct Purchase", color: C.orange },
+                { tab: "suppliers", screen: "list", icon: "users", label: "Suppliers", color: C.purple, count: [...new Set([...purchaseOrders.map(p=>p.supplier),...grns.map(g=>g.supplier)].filter(Boolean))].length },
               ].map(s => (
                 <div key={s.label} onClick={() => { setStoreInitial(prev => ({ tab: s.tab, screen: s.screen, key: prev.key + 1 })); setRightTab("store") }}
                   style={{ textAlign: "center", padding: "10px 4px", borderRadius: 10, cursor: "pointer", background: s.color + "08", border: `1px solid ${s.color}15`, transition: "all 0.2s" }}>
-                  <div style={{ fontSize: 22, marginBottom: 4 }}>{s.icon}</div>
+                  <div style={{ display: "flex", justifyContent: "center", marginBottom: 5 }}><Icon name={s.icon} size={20} color={s.color} /></div>
                   <div style={{ fontSize: 12, fontWeight: 600, color: C.text }}>{s.label}</div>
                   {s.count != null && <div style={{ fontFamily: MONO, fontSize: 11, fontWeight: 700, color: s.color, marginTop: 2 }}>{s.count}</div>}
                 </div>
@@ -1408,12 +1408,12 @@ function AppInner() {
           <div style={{ ...card, padding: "16px", border: `1px solid ${C.accent}20`, display: "flex", flexDirection: "column", gap: 8 }}>
             <div style={{ fontSize: 13, fontWeight: 600, color: C.muted, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 }}>New Job</div>
             {[
-              { key: "insurance", label: "Insurance", icon: "🛡️", color: C.accent, count: insCount },
-              { key: "direct", label: "Non-Insurance", icon: "💰", color: C.green, count: directCount },
-              { key: "quick", label: "Quick Job", icon: "⚡", color: C.orange, count: quickCount },
+              { key: "insurance", label: "Insurance", icon: "shield", color: C.accent, count: insCount },
+              { key: "direct", label: "Non-Insurance", icon: "banknote", color: C.green, count: directCount },
+              { key: "quick", label: "Quick Job", icon: "zap", color: C.orange, count: quickCount },
             ].map(t => (
               <div key={t.key} onClick={() => { startNewJob(); setNewJobInfo(prev => ({ ...prev, job_type: t.key })) }} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 10, cursor: "pointer", background: t.color + "08", border: `1px solid ${t.color}20`, transition: "all 0.2s" }}>
-                <span style={{ fontSize: 20 }}>{t.icon}</span>
+                <Icon name={t.icon} size={18} color={t.color} />
                 <span style={{ fontSize: 14, fontWeight: 600, color: C.text, flex: 1 }}>{t.label}</span>
                 <span style={{ fontSize: 12, fontFamily: MONO, fontWeight: 700, color: t.color }}>{t.count}</span>
               </div>
@@ -1422,7 +1422,7 @@ function AppInner() {
 
           {/* Customer Registry */}
           <div data-card-hover onClick={() => setRightTab("registry")} style={{ ...card, cursor: "pointer", padding: "20px 16px", textAlign: "center", border: `1px solid ${C.green}20` }}>
-            <div style={{ fontSize: 36, marginBottom: 8 }}>👥</div>
+            <div style={{ display: "flex", justifyContent: "center", marginBottom: 10 }}><IconBadge name="users" color={C.green} size={44} /></div>
             <div style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 4 }}>Customers</div>
             <div style={{ fontSize: 13, color: C.muted }}>Registry</div>
             <div style={{ fontFamily: MONO, fontSize: 14, fontWeight: 700, color: C.green, marginTop: 8 }}>{regEntries.length} vehicles</div>
@@ -1430,7 +1430,7 @@ function AppInner() {
 
           {/* Assessor reference list */}
           <div data-card-hover onClick={() => setRightTab("assessors")} style={{ ...card, cursor: "pointer", padding: "20px 16px", textAlign: "center", border: `1px solid ${C.purple}20` }}>
-            <div style={{ fontSize: 36, marginBottom: 8 }}>🕵️</div>
+            <div style={{ display: "flex", justifyContent: "center", marginBottom: 10 }}><IconBadge name="userCheck" color={C.purple} size={44} /></div>
             <div style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 4 }}>Assessors</div>
             <div style={{ fontSize: 13, color: C.muted }}>Insurance contacts</div>
             <div style={{ fontFamily: MONO, fontSize: 14, fontWeight: 700, color: C.purple, marginTop: 8 }}>{assessors.length} saved</div>
@@ -1438,7 +1438,7 @@ function AppInner() {
 
           {/* Receivable — pending insurance / credit payments */}
           <div data-card-hover onClick={() => { loadClosedJobs(); setRightTab("receivable") }} style={{ ...card, cursor: "pointer", padding: "20px 16px", textAlign: "center", border: `1px solid ${pendingPaymentJobs.length > 0 ? C.orange : C.border}20` }}>
-            <div style={{ fontSize: 36, marginBottom: 8 }}>💰</div>
+            <div style={{ display: "flex", justifyContent: "center", marginBottom: 10 }}><IconBadge name="banknote" color={C.orange} size={44} /></div>
             <div style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 4 }}>Receivable</div>
             <div style={{ fontSize: 13, color: C.muted }}>Credit & Insurance</div>
             <div style={{ fontFamily: MONO, fontSize: 14, fontWeight: 700, color: pendingPaymentJobs.length > 0 ? C.orange : C.green, marginTop: 8 }}>
@@ -1448,7 +1448,7 @@ function AppInner() {
 
           {/* Payable — unpaid purchases */}
           <div data-card-hover onClick={() => setRightTab("payable")} style={{ ...card, cursor: "pointer", padding: "20px 16px", textAlign: "center", border: `1px solid ${unpaidPOs.length > 0 ? C.red : C.border}20` }}>
-            <div style={{ fontSize: 36, marginBottom: 8 }}>🧾</div>
+            <div style={{ display: "flex", justifyContent: "center", marginBottom: 10 }}><IconBadge name="creditCard" color={C.red} size={44} /></div>
             <div style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 4 }}>Payable</div>
             <div style={{ fontSize: 13, color: C.muted }}>Unpaid Purchases</div>
             <div style={{ fontFamily: MONO, fontSize: 14, fontWeight: 700, color: unpaidPOs.length > 0 ? C.red : C.green, marginTop: 8 }}>
@@ -1458,7 +1458,7 @@ function AppInner() {
 
           {/* Cash Book */}
           <div data-card-hover onClick={() => setRightTab("cashbook")} style={{ ...card, cursor: "pointer", padding: "20px 16px", textAlign: "center", border: `1px solid ${C.accent}20` }}>
-            <div style={{ fontSize: 36, marginBottom: 8 }}>💵</div>
+            <div style={{ display: "flex", justifyContent: "center", marginBottom: 10 }}><IconBadge name="bookOpen" color={C.accent} size={44} /></div>
             <div style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 4 }}>Cash Book</div>
             <div style={{ fontSize: 13, color: C.muted }}>Petty Cash · Expenses · Bank</div>
             <div style={{ fontFamily: MONO, fontSize: 13, fontWeight: 700, color: C.accent, marginTop: 8 }}>
@@ -1497,7 +1497,7 @@ function AppInner() {
                   const isSel = activeJobId === j.id
                   return (
                     <div key={j.id} onClick={e => { e.stopPropagation(); setHoverJobId(null); openJob(j); setSidebarExpanded(false) }} onMouseEnter={e => { setHoverJobId(j.id); setHoverY(e.clientY) }} onMouseLeave={() => setHoverJobId(null)} style={{ marginBottom: 6, cursor: "pointer", borderRadius: 12, overflow: "hidden", border: isSel ? `2px solid ${C.accent}` : `2px solid transparent`, background: isSel ? C.accent + "08" : C.card, transition: "all 0.2s" }}>
-                      {thumb ? <img src={thumb} style={{ width: "100%", height: 52, objectFit: "cover", display: "block" }} alt="" /> : <div style={{ width: "100%", height: 52, background: C.bg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20 }}>🚗</div>}
+                      {thumb ? <img src={thumb} style={{ width: "100%", height: 52, objectFit: "cover", display: "block" }} alt="" /> : <div style={{ width: "100%", height: 52, background: C.bg, display: "flex", alignItems: "center", justifyContent: "center" }}><Icon name="car" size={20} color={C.muted} /></div>}
                       <div style={{ padding: "4px 4px 5px", textAlign: "center" }}>
                         <div style={{ fontFamily: MONO, fontSize: 11, fontWeight: 700, lineHeight: 1.2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{j.jobInfo.vehicle_reg || "--"}</div>
                         <div style={{ width: 8, height: 8, borderRadius: 4, background: stage.color, margin: "3px auto 0" }} />

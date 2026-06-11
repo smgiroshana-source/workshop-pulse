@@ -7,7 +7,7 @@ export const genId = (prefix = "id") => `${prefix}_${Date.now().toString(36)}_${
 
 // ═══ CONSTANTS ═══
 export const C = {
-  bg: "#F2F2F7", card: "#FFFFFF", text: "#000000", sub: "#6C6C70", muted: "#AEAEB2",
+  bg: "#F2F2F7", card: "#FFFFFF", text: "#1D1D1F", sub: "#6C6C70", muted: "#AEAEB2",
   accent: "#007AFF", green: "#34C759", orange: "#FF9500", red: "#FF3B30", purple: "#AF52DE",
   border: "#E5E5EA", sheetBg: "rgba(0,0,0,0.4)",
   // Semantic tokens
@@ -25,6 +25,59 @@ export const fmt = n => {
 }
 
 export const card = { background: C.card, borderRadius: 16, padding: SP.lg, marginBottom: SP.md, border: `1px solid ${"#E5E5EA"}60`, boxShadow: "0 1px 2px rgba(0,0,0,0.04), 0 2px 8px rgba(0,0,0,0.03)" }
+
+// ═══ ICON SYSTEM — consistent 24px-grid stroke icons (replaces emoji) ═══
+const ICON_PATHS = {
+  search: <><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></>,
+  plus: <><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></>,
+  check: <polyline points="20 6 9 17 4 12" />,
+  checkCircle: <><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><polyline points="22 4 12 14.01 9 11.01" /></>,
+  x: <><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></>,
+  chevronDown: <polyline points="6 9 12 15 18 9" />,
+  chevronRight: <polyline points="9 18 15 12 9 6" />,
+  chevronLeft: <polyline points="15 18 9 12 15 6" />,
+  phone: <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />,
+  message: <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />,
+  camera: <><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" /><circle cx="12" cy="13" r="4" /></>,
+  image: <><rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" /><path d="M21 15l-5-5L5 21" /></>,
+  package: <><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" /><polyline points="3.27 6.96 12 12.01 20.73 6.96" /><line x1="12" y1="22.08" x2="12" y2="12" /></>,
+  clipboard: <><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" /><rect x="8" y="2" width="8" height="4" rx="1" /></>,
+  edit: <><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" /></>,
+  fileText: <><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="16" y1="13" x2="8" y2="13" /><line x1="16" y1="17" x2="8" y2="17" /></>,
+  wrench: <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />,
+  hammer: <><path d="m15 12-8.5 8.5a2.12 2.12 0 1 1-3-3L12 9" /><path d="M17.64 15 22 10.64" /><path d="m20.91 11.7-1.25-1.25c-.6-.6-.93-1.4-.93-2.25v-.86L16.01 4.6a5.56 5.56 0 0 0-3.94-1.64H9l.92.82A6.18 6.18 0 0 1 12 8.4v1.56l2 2h2.47l2.26 1.91" /></>,
+  shield: <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />,
+  zap: <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />,
+  banknote: <><rect x="2" y="6" width="20" height="12" rx="2" /><circle cx="12" cy="12" r="2" /><path d="M6 12h.01M18 12h.01" /></>,
+  users: <><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></>,
+  userCheck: <><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="8.5" cy="7" r="4" /><polyline points="17 11 19 13 23 9" /></>,
+  truck: <><rect x="1" y="3" width="15" height="13" rx="1" /><path d="M16 8h4l3 3v5h-7V8z" /><circle cx="5.5" cy="18.5" r="2.5" /><circle cx="18.5" cy="18.5" r="2.5" /></>,
+  clock: <><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></>,
+  pause: <><rect x="6" y="4" width="4" height="16" rx="1" /><rect x="14" y="4" width="4" height="16" rx="1" /></>,
+  bookmark: <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />,
+  flag: <><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" /><line x1="4" y1="22" x2="4" y2="15" /></>,
+  alert: <><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" /></>,
+  droplet: <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z" />,
+  bag: <><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" /><line x1="3" y1="6" x2="21" y2="6" /><path d="M16 10a4 4 0 0 1-8 0" /></>,
+  bookOpen: <><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" /><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" /></>,
+  creditCard: <><rect x="1" y="4" width="22" height="16" rx="2" /><line x1="1" y1="10" x2="23" y2="10" /></>,
+  car: <><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2" /><circle cx="7" cy="17" r="2" /><path d="M9 17h6" /><circle cx="17" cy="17" r="2" /></>,
+  inbox: <><polyline points="22 12 16 12 14 15 10 15 8 12 2 12" /><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" /></>,
+  send: <><line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" /></>,
+  logOut: <><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" /></>,
+  trash: <><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></>,
+}
+export const Icon = ({ name, size = 18, color = "currentColor", strokeWidth = 2, style }) => {
+  const p = ICON_PATHS[name]
+  if (!p) return null
+  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, verticalAlign: "middle", ...style }} aria-hidden="true">{p}</svg>
+}
+// Icon in a soft tinted rounded square — the standard "list row leading icon" treatment
+export const IconBadge = ({ name, color = C.accent, size = 40, iconSize }) => (
+  <div style={{ width: size, height: size, borderRadius: size * 0.3, background: color + "14", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+    <Icon name={name} size={iconSize || Math.round(size * 0.5)} color={color} />
+  </div>
+)
 export const pill = (color) => ({ fontSize: 13, fontWeight: 600, color, background: color + "15", padding: "5px 12px", borderRadius: 20 })
 export const btn = (bg, color) => ({ border: "none", borderRadius: 12, padding: "16px 24px", fontSize: 17, fontWeight: 600, cursor: "pointer", color: color || "#fff", background: bg || C.accent, fontFamily: FONT, width: "100%", textAlign: "center", letterSpacing: "-0.3px", minHeight: 52, transition: "all 0.15s ease", boxShadow: "0 1px 2px rgba(0,0,0,0.04)" })
 export const btnSm = (bg, color) => ({ ...btn(bg, color), padding: "12px 18px", fontSize: 15, borderRadius: 10, minHeight: 44 })
@@ -33,21 +86,21 @@ export const btnText = (color) => ({ border: "none", borderRadius: 8, padding: "
 export const inp = { width: "100%", boxSizing: "border-box", padding: "14px 16px", background: "#fff", border: `1.5px solid ${C.border}`, borderRadius: 12, color: C.text, fontSize: 17, fontFamily: FONT, outline: "none", letterSpacing: "-0.2px", transition: "border-color 0.15s, box-shadow 0.15s" }
 
 export const CATS_PAINT = [
-  { key: "remove_refix", label: "Remove-Refix", short: "R/R", icon: "🔩", color: C.accent },
-  { key: "reshaping", label: "Reshaping", short: "Reshape", icon: "🔨", color: C.orange },
-  { key: "booth_painting", label: "Booth Painting", short: "Paint", icon: "🎨", color: C.purple },
-  { key: "replace", label: "Replace", short: "Replace", icon: "📦", color: C.green },
+  { key: "remove_refix", label: "Remove-Refix", short: "R/R", icon: "🔩", ic: "wrench", color: C.accent },
+  { key: "reshaping", label: "Reshaping", short: "Reshape", icon: "🔨", ic: "hammer", color: C.orange },
+  { key: "booth_painting", label: "Booth Painting", short: "Paint", icon: "🎨", ic: "droplet", color: C.purple },
+  { key: "replace", label: "Replace", short: "Replace", icon: "📦", ic: "package", color: C.green },
 ]
 export const CATS_MECH = [
-  { key: "replace", label: "Replace", short: "Replace", icon: "📦", color: C.green },
-  { key: "labour", label: "Labour", short: "Labour", icon: "👷", color: C.accent },
+  { key: "replace", label: "Replace", short: "Replace", icon: "📦", ic: "package", color: C.green },
+  { key: "labour", label: "Labour", short: "Labour", icon: "👷", ic: "users", color: C.accent },
 ]
 export const CATS_ALL = [
-  { key: "remove_refix", label: "Remove-Refix", short: "R/R", icon: "🔩", color: C.accent },
-  { key: "reshaping", label: "Reshaping", short: "Reshape", icon: "🔨", color: C.orange },
-  { key: "booth_painting", label: "Booth Painting", short: "Paint", icon: "🎨", color: C.purple },
-  { key: "replace", label: "Replace", short: "Replace", icon: "📦", color: C.green },
-  { key: "labour", label: "Labour", short: "Labour", icon: "👷", color: C.accent },
+  { key: "remove_refix", label: "Remove-Refix", short: "R/R", icon: "🔩", ic: "wrench", color: C.accent },
+  { key: "reshaping", label: "Reshaping", short: "Reshape", icon: "🔨", ic: "hammer", color: C.orange },
+  { key: "booth_painting", label: "Booth Painting", short: "Paint", icon: "🎨", ic: "droplet", color: C.purple },
+  { key: "replace", label: "Replace", short: "Replace", icon: "📦", ic: "package", color: C.green },
+  { key: "labour", label: "Labour", short: "Labour", icon: "👷", ic: "users", color: C.accent },
 ]
 export const getCats = (wt) => wt === "mechanical" ? CATS_MECH : wt === "both" ? CATS_ALL : CATS_PAINT
 // Backward compat -- default to paint cats
@@ -60,19 +113,20 @@ export const INSURANCE_COMPANIES = ["SLIC","Ceylinco General","Continental Insur
 export const INV_STATUS = { draft:{l:"Draft",c:C.sub}, finalized:{l:"Finalized",c:C.accent}, sent:{l:"Sent",c:C.orange}, partially_paid:{l:"Partial",c:C.orange}, paid:{l:"Paid",c:C.green}, cancelled:{l:"Cancelled",c:C.red} }
 
 // ═══ ALL POSSIBLE STAGES ═══
+// `icon` (emoji) kept for plain-text contexts (toasts); `ic` is the SVG icon name for UI
 export const ALL_STAGES = {
-  job_received:     {label:"Job Received",    icon:"📥",color:C.accent,    auto:true},
-  est_pending:      {label:"Estimate Pending", icon:"📝",color:C.orange,   auto:true},
-  est_ready:        {label:"Estimate Ready",   icon:"📋",color:C.accent,   auto:true},
-  approved_dismantle:{label:"Approved & Dismantle",icon:"🔧",color:C.orange, auto:false, cond:"insurance"},
-  in_progress:      {label:"In Progress",      icon:"🛠️",color:C.accent,   auto:false},
-  paint_stage:      {label:"Paint Stage",      icon:"🎨",color:C.purple,   auto:false, cond:"has_paint"},
-  qc:               {label:"QC",               icon:"✅",color:C.green,    auto:false},
-  ready:            {label:"Ready",            icon:"🚗",color:C.green,    auto:false},
-  delivered:        {label:"Delivered",        icon:"📦",color:C.sub,      auto:false},
-  follow_up:        {label:"Follow Up",        icon:"📞",color:C.orange,   auto:false},
-  closed:           {label:"Closed",           icon:"🏁",color:C.sub,      auto:false},
-  cancelled:        {label:"Cancelled",        icon:"✕", color:C.red,      auto:false},
+  job_received:     {label:"Job Received",    icon:"📥", ic:"inbox",      color:C.accent,    auto:true},
+  est_pending:      {label:"Estimate Pending", icon:"📝", ic:"edit",       color:C.orange,   auto:true},
+  est_ready:        {label:"Estimate Ready",   icon:"📋", ic:"clipboard",  color:C.accent,   auto:true},
+  approved_dismantle:{label:"Approved & Dismantle",icon:"🔧", ic:"checkCircle", color:C.orange, auto:false, cond:"insurance"},
+  in_progress:      {label:"In Progress",      icon:"🛠️", ic:"wrench",     color:C.accent,   auto:false},
+  paint_stage:      {label:"Paint Stage",      icon:"🎨", ic:"droplet",    color:C.purple,   auto:false, cond:"has_paint"},
+  qc:               {label:"QC",               icon:"✅", ic:"search",     color:C.green,    auto:false},
+  ready:            {label:"Ready",            icon:"🚗", ic:"car",        color:C.green,    auto:false},
+  delivered:        {label:"Delivered",        icon:"📦", ic:"truck",      color:C.sub,      auto:false},
+  follow_up:        {label:"Follow Up",        icon:"📞", ic:"phone",      color:C.orange,   auto:false},
+  closed:           {label:"Closed",           icon:"🏁", ic:"flag",       color:C.sub,      auto:false},
+  cancelled:        {label:"Cancelled",        icon:"✕",  ic:"x",          color:C.red,      auto:false},
 }
 
 // ═══ Components OUTSIDE App (prevents remount) ═══
@@ -83,8 +137,8 @@ export const NavBar = ({title,subtitle,onBack,right}) => (
         {onBack&&<div onClick={onBack} style={{fontSize:17,color:C.accent,cursor:"pointer",fontWeight:500,marginBottom:4,display:"inline-flex",alignItems:"center",gap:4,padding:"8px 12px 8px 0",minHeight:44,marginLeft:-8,paddingLeft:8,borderRadius:10}}>
           <span style={{fontSize:22}}>‹</span> Back
         </div>}
-        <div style={{fontSize:34,fontWeight:700,color:C.text,letterSpacing:"-0.7px",lineHeight:1.1}}>{title}</div>
-        {subtitle&&<div style={{fontSize:17,color:C.sub,marginTop:4,letterSpacing:"-0.2px"}}>{subtitle}</div>}
+        <div style={{fontSize:28,fontWeight:700,color:C.text,letterSpacing:"-0.6px",lineHeight:1.15}}>{title}</div>
+        {subtitle&&<div style={{fontSize:15,color:C.sub,marginTop:4,letterSpacing:"-0.1px"}}>{subtitle}</div>}
       </div>
       {right&&<div style={{flexShrink:0,paddingTop:onBack?28:4}}>{right}</div>}
     </div>
@@ -787,7 +841,7 @@ export function WorkshopProvider({ children }) {
     cats.forEach(cat => {
       const catEntries = entries.filter(e => e.category === cat.key)
       if (!catEntries.length) return
-      tableRows += "<tr><td colspan=\"5\" style=\"background:#f8f8f8;font-weight:700;font-size:14px;color:#333;padding:8px 12px\">" + cat.icon + " " + cat.label + "</td></tr>"
+      tableRows += "<tr><td colspan=\"5\" style=\"background:#f8f8f8;font-weight:700;font-size:14px;color:#333;padding:8px 12px\">" + cat.label + "</td></tr>"
       catEntries.forEach((e, i) => {
         const part = est.parts.find(p => p.id === e.part_id)
         const name = part ? part.name : (e.part_name || "Item")
@@ -1054,23 +1108,23 @@ export function WorkshopProvider({ children }) {
     // not completing the next stage. Verb-first, emoji-led so users always
     // know what tapping the button will do.
     // Keyed by (currentStage -> nextStage) where ambiguous; otherwise by nextStage.
-    if (jobStage === "est_ready" && nextStage === "approved_dismantle") return "✅ Insurance Approved — Start Dismantle"
-    if (jobStage === "est_ready" && nextStage === "in_progress")        return "🛠️ Customer Approved — Start Work"
-    if (nextStage === "approved_dismantle")                              return "✅ Mark Estimate Approved"
-    if (nextStage === "in_progress")                                     return "🛠️ Start Repair Work"
-    if (nextStage === "paint_stage")                                     return "🎨 Send to Paint Booth"
-    if (nextStage === "qc")                                              return "🔍 Send for QC Check"
-    if (nextStage === "ready")                                           return "🚗 Mark Ready for Delivery"
-    if (nextStage === "delivered")                                       return "📦 Mark as Delivered"
-    if (nextStage === "closed")                                          return "🏁 Close Job"
-    return `Next → ${ns.label}`
+    if (jobStage === "est_ready" && nextStage === "approved_dismantle") return "Insurance Approved — Start Dismantle"
+    if (jobStage === "est_ready" && nextStage === "in_progress")        return "Customer Approved — Start Work"
+    if (nextStage === "approved_dismantle")                              return "Mark Estimate Approved"
+    if (nextStage === "in_progress")                                     return "Start Repair Work"
+    if (nextStage === "paint_stage")                                     return "Send to Paint Booth"
+    if (nextStage === "qc")                                              return "Send for QC Check"
+    if (nextStage === "ready")                                           return "Mark Ready for Delivery"
+    if (nextStage === "delivered")                                       return "Mark as Delivered"
+    if (nextStage === "closed")                                          return "Close Job"
+    return `Next: ${ns.label}`
   }
-  // Short hint shown under the pipeline strip, e.g. "👉 Next: QC Check"
+  // Short hint shown under the pipeline strip, e.g. "Next: QC Check"
   const getNextStepHint = () => {
-    if (jobPaused) return "⏸ Resume to continue"
+    if (jobPaused) return "Resume to continue"
     if (!nextStage) return null
     const ns = ALL_STAGES[nextStage]
-    return `👉 Next: ${ns.label}`
+    return `Next: ${ns.label}`
   }
   const canAdvance = () => {
     if (jobPaused) return false

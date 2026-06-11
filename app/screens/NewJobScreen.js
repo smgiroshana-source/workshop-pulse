@@ -1,7 +1,7 @@
 "use client"
 import { useWorkshop } from "../WorkshopContext"
 import { useEffect, useState } from "react"
-import { C, FONT, MONO, inp, btn, btnSm, card, NavBar, VEHICLE_MAKES, INSURANCE_COMPANIES, normalizeReg, normalizePhone, regSearchKey, phoneSearchKey } from "../WorkshopContext"
+import { C, FONT, MONO, inp, btn, btnSm, card, NavBar, VEHICLE_MAKES, INSURANCE_COMPANIES, normalizeReg, normalizePhone, regSearchKey, phoneSearchKey, Icon } from "../WorkshopContext"
 import { uploadPhoto } from "../supabase"
 
 export default function NewJobScreen() {
@@ -135,13 +135,13 @@ export default function NewJobScreen() {
         <div style={{ fontSize: 14, fontWeight: 600, color: er.job_type ? C.red : C.sub, textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 14 }}>Job Type <span style={{ color: C.red }}>*</span></div>
         {/* Toggle: Insurance / Non-Insurance / Quick */}
         <div style={{ display: "flex", gap: 0, marginBottom: 14, background: C.bg, borderRadius: 14, padding: 4 }}>
-          {[{k:"insurance",l:"🛡️ Insurance",c:C.accent},{k:"direct",l:"💰 Non-Insurance",c:C.green},{k:"quick",l:"⚡ Quick",c:C.orange}].map(jt => <div key={jt.k} onClick={() => { setNewJobInfo(p => ({...p, job_type: jt.k, insurance_name: jt.k === "insurance" ? p.insurance_name || null : ""})); setNewJobErrors(p => { const n = { ...p }; delete n.job_type; delete n.insurance; if (jt.k === "quick") delete n.photo; return n }) }} style={{ flex: 1, textAlign: "center", padding: "12px 4px", borderRadius: 12, cursor: "pointer", background: nj.job_type === jt.k ? jt.c + "12" : "transparent", color: nj.job_type === jt.k ? jt.c : C.muted, fontSize: 15, fontWeight: 600, transition: "all 0.15s" }}>{jt.l}</div>)}
+          {[{k:"insurance",l:"Insurance",ic:"shield",c:C.accent},{k:"direct",l:"Non-Insurance",ic:"banknote",c:C.green},{k:"quick",l:"Quick",ic:"zap",c:C.orange}].map(jt => <div key={jt.k} onClick={() => { setNewJobInfo(p => ({...p, job_type: jt.k, insurance_name: jt.k === "insurance" ? p.insurance_name || null : ""})); setNewJobErrors(p => { const n = { ...p }; delete n.job_type; delete n.insurance; if (jt.k === "quick") delete n.photo; return n }) }} style={{ flex: 1, textAlign: "center", padding: "12px 4px", borderRadius: 12, cursor: "pointer", background: nj.job_type === jt.k ? jt.c + "12" : "transparent", color: nj.job_type === jt.k ? jt.c : C.muted, fontSize: 15, fontWeight: 600, transition: "all 0.15s", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}><Icon name={jt.ic} size={15} /> {jt.l}</div>)}
         </div>
         {/* Insurance company dropdown */}
         {nj.job_type === "insurance" && <div>
           <div style={{ fontSize: 14, color: er.insurance ? C.red : C.sub, marginBottom: 5, fontWeight: 500 }}>Insurance Company <span style={{ color: C.red }}>*</span></div>
           {nj.insurance_name && !newJobInsDD ? <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <div style={{ flex: 1, ...inp, display: "flex", justifyContent: "space-between", alignItems: "center", fontWeight: 600, color: C.accent }}>🛡️ {nj.insurance_name}</div>
+            <div style={{ flex: 1, ...inp, display: "flex", justifyContent: "space-between", alignItems: "center", fontWeight: 600, color: C.accent }}><Icon name="shield" size={15} /> {nj.insurance_name}</div>
             <button onClick={() => { setNewJobInsDD(true); setInsSearch("") }} style={{ ...btnSm(C.bg, C.accent), width: "auto", padding: "14px 16px" }}>Change</button>
           </div> : <div>
             <input value={insSearch} onChange={e => { setInsSearch(e.target.value); setNewJobInsDD(true) }} onFocus={() => setNewJobInsDD(true)} placeholder="Type to search... (e.g. Cey, SL)" style={{ ...inp, border: er.insurance ? `2px solid ${C.red}` : `2px solid ${C.accent}40`, background: C.card, fontSize: 18 }} autoFocus />
@@ -169,10 +169,10 @@ export default function NewJobScreen() {
           </div>
         </div>}
         {nj.job_type === "direct" && <div style={{ padding: "12px 16px", background: C.green + "08", borderRadius: 12, border: `1px solid ${C.green}30` }}>
-          <span style={{ fontSize: 15, color: C.green, fontWeight: 600 }}>💰 Non-insurance — estimate + full pipeline</span>
+          <span style={{ fontSize: 15, color: C.green, fontWeight: 600 }}>Non-insurance — estimate + full pipeline</span>
         </div>}
         {nj.job_type === "quick" && <div style={{ padding: "12px 16px", background: C.orange + "08", borderRadius: 12, border: `1px solid ${C.orange}30` }}>
-          <span style={{ fontSize: 15, color: C.orange, fontWeight: 600 }}>⚡ Quick job — no estimate, no pipeline, no photo needed</span>
+          <span style={{ fontSize: 15, color: C.orange, fontWeight: 600 }}>Quick job — no estimate, no pipeline, no photo needed</span>
         </div>}
       </div>
 
@@ -180,14 +180,14 @@ export default function NewJobScreen() {
       <div style={card}>
         <div style={{ fontSize: 14, fontWeight: 600, color: C.sub, textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 12 }}>Work Type</div>
         <div style={{ display: "flex", gap: 8 }}>
-          {[{k:"paint",l:"🎨 Paint & Body",c:C.orange},{k:"mechanical",l:"🔧 Mechanical",c:C.accent},{k:"both",l:"🎨+🔧 Both",c:C.purple}].map(w => <div key={w.k} onClick={() => setNewJobInfo(p => ({...p, work_type: w.k}))} style={{ flex: 1, padding: "14px 8px", textAlign: "center", borderRadius: 12, cursor: "pointer", background: nj.work_type === w.k ? w.c + "15" : C.bg, border: `2px solid ${nj.work_type === w.k ? w.c : C.border}`, color: nj.work_type === w.k ? w.c : C.muted, fontWeight: nj.work_type === w.k ? 700 : 500, fontSize: 14, transition: "all 0.15s" }}>{w.l}</div>)}
+          {[{k:"paint",l:"Paint & Body",ic:"droplet",c:C.orange},{k:"mechanical",l:"Mechanical",ic:"wrench",c:C.accent},{k:"both",l:"Both",ic:"car",c:C.purple}].map(w => <div key={w.k} onClick={() => setNewJobInfo(p => ({...p, work_type: w.k}))} style={{ flex: 1, padding: "14px 8px", textAlign: "center", borderRadius: 12, cursor: "pointer", background: nj.work_type === w.k ? w.c + "15" : C.bg, border: `2px solid ${nj.work_type === w.k ? w.c : C.border}`, color: nj.work_type === w.k ? w.c : C.muted, fontWeight: nj.work_type === w.k ? 700 : 500, fontSize: 14, transition: "all 0.15s", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}><Icon name={w.ic} size={15} /> {w.l}</div>)}
         </div>
       </div>
 
       {/* Vehicle Condition at intake — optional but protects the workshop at delivery */}
       <div style={card}>
         <div onClick={() => setShowCondition(!showCondition)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", minHeight: 32 }}>
-          <span style={{ fontSize: 14, fontWeight: 600, color: C.sub, textTransform: "uppercase", letterSpacing: 0.8 }}>📋 Vehicle Condition <span style={{ color: C.muted, fontWeight: 400, textTransform: "none" }}>(optional)</span></span>
+          <span style={{ fontSize: 14, fontWeight: 600, color: C.sub, textTransform: "uppercase", letterSpacing: 0.8 }}>Vehicle Condition <span style={{ color: C.muted, fontWeight: 400, textTransform: "none" }}>(optional)</span></span>
           <span style={{ fontSize: 16, color: C.muted, transform: showCondition ? "rotate(0deg)" : "rotate(-90deg)", transition: "transform 0.2s", fontWeight: 700 }}>▾</span>
         </div>
         {showCondition && <div style={{ marginTop: 12 }}>
@@ -212,18 +212,20 @@ export default function NewJobScreen() {
 
       {/* Vehicle Photo (mandatory for insurance + direct, optional for quick) */}
       {nj.job_type !== "quick" && <div style={{ ...card, border: er.photo ? `2px solid ${C.red}` : `1px solid ${C.border}` }}>
-        <div style={{ fontSize: 14, fontWeight: 600, color: C.sub, marginBottom: 10 }}>📷 Vehicle Photo <span style={{ color: C.red }}>*</span></div>
+        <div style={{ fontSize: 14, fontWeight: 600, color: C.sub, marginBottom: 10 }}
+
+>Vehicle Photo <span style={{ color: C.red }}>*</span></div>
         {newJobPhoto ? <div style={{ position: "relative" }}>
           <img src={newJobPhoto} style={{ width: "100%", height: 180, objectFit: "cover", borderRadius: 14 }} alt="Vehicle" />
           <span onClick={() => setNewJobPhoto(null)} style={{ position: "absolute", top: 8, right: 8, background: "rgba(0,0,0,0.6)", color: "#fff", borderRadius: 20, width: 32, height: 32, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontSize: 18 }}>×</span>
           <div style={{ textAlign: "center", marginTop: 6, fontSize: 13, color: C.green, fontWeight: 600 }}>✓ Photo added</div>
         </div> : <div style={{ display: "flex", gap: 10 }}>
-          <div onClick={() => { const inp = document.createElement("input"); inp.type = "file"; inp.accept = "image/*"; inp.capture = "environment"; inp.onchange = async e => { const f = e.target.files?.[0]; if (f) { tt("⏳ Uploading…"); try { const url = await uploadPhoto(f, `new-job/${Date.now()}/vehicle.jpg`); setNewJobPhoto(url); setNewJobErrors(p => { const n = {...p}; delete n.photo; return n }); tt("📸 Photo added") } catch { tt("❌ Upload failed") } } }; inp.click() }} style={{ flex: 1, padding: "28px 0", textAlign: "center", border: `2px dashed ${er.photo ? C.red : C.border}`, borderRadius: 14, cursor: "pointer", color: er.photo ? C.red : C.muted }}>
-            <div style={{ fontSize: 32, marginBottom: 4 }}>📷</div>
+          <div onClick={() => { const inp = document.createElement("input"); inp.type = "file"; inp.accept = "image/*"; inp.capture = "environment"; inp.onchange = async e => { const f = e.target.files?.[0]; if (f) { tt("⏳ Uploading…"); try { const url = await uploadPhoto(f, `new-job/${Date.now()}/vehicle.jpg`); setNewJobPhoto(url); setNewJobErrors(p => { const n = {...p}; delete n.photo; return n }); tt("Photo added") } catch { tt("❌ Upload failed") } } }; inp.click() }} style={{ flex: 1, padding: "28px 0", textAlign: "center", border: `2px dashed ${er.photo ? C.red : C.border}`, borderRadius: 14, cursor: "pointer", color: er.photo ? C.red : C.muted }}>
+            <div style={{ display: "flex", justifyContent: "center", marginBottom: 6 }}><Icon name="camera" size={26} color={C.muted} /></div>
             <div style={{ fontSize: 15, fontWeight: 500 }}>Camera</div>
           </div>
-          <div onClick={() => { const inp = document.createElement("input"); inp.type = "file"; inp.accept = "image/*"; inp.onchange = async e => { const f = e.target.files?.[0]; if (f) { tt("⏳ Uploading…"); try { const url = await uploadPhoto(f, `new-job/${Date.now()}/vehicle.jpg`); setNewJobPhoto(url); setNewJobErrors(p => { const n = {...p}; delete n.photo; return n }); tt("📸 Photo added") } catch { tt("❌ Upload failed") } } }; inp.click() }} style={{ flex: 1, padding: "28px 0", textAlign: "center", border: `2px dashed ${er.photo ? C.red : C.border}`, borderRadius: 14, cursor: "pointer", color: er.photo ? C.red : C.muted }}>
-            <div style={{ fontSize: 32, marginBottom: 4 }}>🖼️</div>
+          <div onClick={() => { const inp = document.createElement("input"); inp.type = "file"; inp.accept = "image/*"; inp.onchange = async e => { const f = e.target.files?.[0]; if (f) { tt("⏳ Uploading…"); try { const url = await uploadPhoto(f, `new-job/${Date.now()}/vehicle.jpg`); setNewJobPhoto(url); setNewJobErrors(p => { const n = {...p}; delete n.photo; return n }); tt("Photo added") } catch { tt("❌ Upload failed") } } }; inp.click() }} style={{ flex: 1, padding: "28px 0", textAlign: "center", border: `2px dashed ${er.photo ? C.red : C.border}`, borderRadius: 14, cursor: "pointer", color: er.photo ? C.red : C.muted }}>
+            <div style={{ display: "flex", justifyContent: "center", marginBottom: 6 }}><Icon name="image" size={26} color={C.muted} /></div>
             <div style={{ fontSize: 15, fontWeight: 500 }}>Gallery</div>
           </div>
         </div>}

@@ -46,7 +46,7 @@ export default function InvoiceDetail() {
 
   return (
     <>
-      <NavBar title={selInv.invoice_number} subtitle={`From ${selInv.source_estimates?.join(" + ")}`} onBack={() => setScreen("job")} right={<button onClick={() => generateInvoicePDF(selInv)} style={{ ...btnSm(C.purple, "#fff"), padding: "8px 14px" }}>📄 PDF</button>} />
+      <NavBar title={selInv.invoice_number} subtitle={`From ${selInv.source_estimates?.join(" + ")}`} onBack={() => setScreen("job")} right={<button onClick={() => generateInvoicePDF(selInv)} style={{ ...btnSm(C.purple, "#fff"), padding: "8px 14px" }}>PDF</button>} />
       <div style={{ display: "flex", gap: 4, marginBottom: 16, background: C.card, borderRadius: 14, padding: 5, boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
         {["draft", "finalized", "sent", "paid"].map(k => { const s = INV_STATUS[k]; const active = selInv.status === k || (k === "paid" && selInv.status === "partially_paid"); return <div key={k} style={{ flex: 1, textAlign: "center", padding: "8px 0", borderRadius: 12, fontSize: 14, fontWeight: 600, background: active ? s.c + "12" : "transparent", color: active ? s.c : C.muted }}>{selInv.status === "partially_paid" && k === "paid" ? "Partial" : s.l}</div> })}
       </div>
@@ -61,7 +61,7 @@ export default function InvoiceDetail() {
           <div style={{ textAlign: "right" }}><div style={{ fontSize: 13, color: C.muted, textTransform: "uppercase", letterSpacing: 0.5 }}>Vehicle</div><div style={{ fontFamily: MONO, fontWeight: 700, fontSize: 18, marginTop: 2 }}>{jobInfo.vehicle_reg || "---"}</div><div style={{ fontSize: 15, color: C.sub }}>{jobInfo.vehicle_make} {jobInfo.vehicle_model}{jobInfo.insurance_name ? ` · ${jobInfo.insurance_name}` : ""}</div></div>
         </div>
         {jobCats.map(c => { const ci = selInv.items.filter(i => i.category === c.key); if (!ci.length) return null; return <div key={c.key}>
-          <div style={{ padding: "10px 18px", background: c.color + "06", display: "flex", justifyContent: "space-between" }}><span style={{ fontSize: 15, fontWeight: 600, color: c.color }}>{c.icon} {c.label}</span><span style={{ fontFamily: MONO, fontSize: 15, color: c.color, fontWeight: 600 }}>Rs.{fmt(ci.reduce((s, i) => s + i.qty * i.unit_price, 0))}</span></div>
+          <div style={{ padding: "10px 18px", background: c.color + "06", display: "flex", justifyContent: "space-between" }}><span style={{ fontSize: 15, fontWeight: 600, color: c.color }}>{c.label}</span><span style={{ fontFamily: MONO, fontSize: 15, color: c.color, fontWeight: 600 }}>Rs.{fmt(ci.reduce((s, i) => s + i.qty * i.unit_price, 0))}</span></div>
           {ci.map(item => <div key={item.id} style={{ padding: "10px 18px", display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: `1px solid ${C.border}` }}>
             {editingItem === item.id && selInv.status === "draft" ? <div style={{ flex: 1 }}>
               <div style={{ display: "flex", gap: 8 }}><input value={item.description} onChange={e => updateInvItem(item.id, { description: e.target.value })} style={{ ...inp, flex: 1, fontSize: 16 }} /><input type="number" inputMode="decimal" value={item.unit_price} onChange={e => updateInvItem(item.id, { unit_price: Number(e.target.value) || 0 })} style={{ ...inp, width: 90, textAlign: "right", fontFamily: MONO }} /></div>
@@ -77,15 +77,15 @@ export default function InvoiceDetail() {
         </div> })}
         {/* Sundry items */}
         {selInv.items.filter(i => i.category === "sundry").length > 0 && <div>
-          <div style={{ padding: "10px 18px", background: C.orange + "06", display: "flex", justifyContent: "space-between" }}><span style={{ fontSize: 15, fontWeight: 600, color: C.orange }}>📎 Sundries</span><span style={{ fontFamily: MONO, fontSize: 15, color: C.orange, fontWeight: 600 }}>Rs.{fmt(selInv.items.filter(i => i.category === "sundry").reduce((s, i) => s + i.qty * i.unit_price, 0))}</span></div>
+          <div style={{ padding: "10px 18px", background: C.orange + "06", display: "flex", justifyContent: "space-between" }}><span style={{ fontSize: 15, fontWeight: 600, color: C.orange }}>Sundries</span><span style={{ fontFamily: MONO, fontSize: 15, color: C.orange, fontWeight: 600 }}>Rs.{fmt(selInv.items.filter(i => i.category === "sundry").reduce((s, i) => s + i.qty * i.unit_price, 0))}</span></div>
           {selInv.items.filter(i => i.category === "sundry").map(item => <div key={item.id} style={{ padding: "10px 18px", display: "flex", justifyContent: "space-between", borderBottom: `1px solid ${C.border}` }}><div><span style={{ fontSize: 16 }}>{item.description}</span>{item.remarks && <span style={{ fontSize: 12, color: C.purple, marginLeft: 6 }}>{item.remarks}</span>}</div><span style={{ fontFamily: MONO, fontSize: 16, fontWeight: 600 }}>Rs.{fmt(item.unit_price)}</span></div>)}
         </div>}
         {selInv.items.filter(i => i.category === "labour").length > 0 && <div>
-          <div style={{ padding: "10px 18px", background: C.accent + "06", display: "flex", justifyContent: "space-between" }}><span style={{ fontSize: 15, fontWeight: 600, color: C.accent }}>👷 Labour</span><span style={{ fontFamily: MONO, fontSize: 15, color: C.accent, fontWeight: 600 }}>Rs.{fmt(selInv.items.filter(i => i.category === "labour").reduce((s, i) => s + i.qty * i.unit_price, 0))}</span></div>
+          <div style={{ padding: "10px 18px", background: C.accent + "06", display: "flex", justifyContent: "space-between" }}><span style={{ fontSize: 15, fontWeight: 600, color: C.accent }}>Labour</span><span style={{ fontFamily: MONO, fontSize: 15, color: C.accent, fontWeight: 600 }}>Rs.{fmt(selInv.items.filter(i => i.category === "labour").reduce((s, i) => s + i.qty * i.unit_price, 0))}</span></div>
           {selInv.items.filter(i => i.category === "labour").map(item => <div key={item.id} style={{ padding: "10px 18px", display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: `1px solid ${C.border}` }}><span style={{ fontSize: 16 }}>{item.description}</span><div style={{ display: "flex", alignItems: "center", gap: 6 }}>{selInv.status === "draft" ? <input type="number" inputMode="decimal" value={item.unit_price || ""} onChange={e => updateInvItem(item.id, { unit_price: Number(e.target.value) || 0 })} style={{ width: 100, padding: "6px 10px", background: C.bg, border: `2px solid ${C.accent}40`, borderRadius: 8, color: C.text, fontSize: 17, fontFamily: MONO, fontWeight: 700, textAlign: "right", outline: "none" }} placeholder="Rate" /> : <span style={{ fontFamily: MONO, fontSize: 16, fontWeight: 600 }}>Rs.{fmt(item.unit_price)}</span>}</div></div>)}
         </div>}
         {selInv.items.filter(i => i.category === "other").length > 0 && <div>
-          <div style={{ padding: "10px 18px", background: C.orange + "06", display: "flex", justifyContent: "space-between" }}><span style={{ fontSize: 15, fontWeight: 600, color: C.orange }}>📦 Outsource</span><span style={{ fontFamily: MONO, fontSize: 15, color: C.orange, fontWeight: 600 }}>Rs.{fmt(selInv.items.filter(i => i.category === "other").reduce((s, i) => s + i.qty * i.unit_price, 0))}</span></div>
+          <div style={{ padding: "10px 18px", background: C.orange + "06", display: "flex", justifyContent: "space-between" }}><span style={{ fontSize: 15, fontWeight: 600, color: C.orange }}>Outsource</span><span style={{ fontFamily: MONO, fontSize: 15, color: C.orange, fontWeight: 600 }}>Rs.{fmt(selInv.items.filter(i => i.category === "other").reduce((s, i) => s + i.qty * i.unit_price, 0))}</span></div>
           {selInv.items.filter(i => i.category === "other").map(item => <div key={item.id} style={{ padding: "10px 18px", display: "flex", justifyContent: "space-between", borderBottom: `1px solid ${C.border}` }}><span style={{ fontSize: 16 }}>{item.description}</span><span style={{ fontFamily: MONO, fontSize: 16, fontWeight: 600 }}>Rs.{fmt(item.unit_price)}</span></div>)}
         </div>}
         {/* Invoice Total */}
@@ -104,7 +104,7 @@ export default function InvoiceDetail() {
 
       {/* Insurance Payments */}
       {isInsurance && <div style={{ marginTop: 14 }}>
-        <div style={{ fontSize: 13, color: C.muted, marginBottom: 6, letterSpacing: 0.5 }}>🛡️ INSURANCE</div>
+        <div style={{ fontSize: 13, color: C.muted, marginBottom: 6, letterSpacing: 0.5 }}>INSURANCE</div>
         {invInsPayments(selInv).map(p => {
           const stC = { recorded: C.orange, pending: C.accent, received: C.green }
           const stL = { recorded: "RECORDED", pending: "PENDING", received: "RECEIVED" }
@@ -133,7 +133,7 @@ export default function InvoiceDetail() {
 
       {/* Customer Settlement */}
       <div style={{ marginTop: 14 }}>
-        <div style={{ fontSize: 13, color: C.muted, marginBottom: 6, letterSpacing: 0.5 }}>{isDirectJob ? "💰 PAYMENT" : "👤 CUSTOMER"}</div>
+        <div style={{ fontSize: 13, color: C.muted, marginBottom: 6, letterSpacing: 0.5 }}>{isDirectJob ? "PAYMENT" : "CUSTOMER"}</div>
         <div style={{ ...card, padding: "14px 16px" }}>
           {/* Excess (deductible) — what the customer pays per the approval letter */}
           {isInsurance && (invExcess(selInv) > 0 && !showExcessInput ? (
@@ -171,12 +171,12 @@ export default function InvoiceDetail() {
         {/* Unapplied advances — apply to this invoice */}
         {unappliedAdvances.length > 0 && <div style={{ ...card, marginTop: 8, padding: "12px 14px", background: C.green + "06", border: `1.5px dashed ${C.green}50`, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
           <div>
-            <div style={{ fontSize: 14, fontWeight: 700, color: C.green }}>💵 Advance Rs.{fmt(unappliedAdvanceTotal)} received</div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: C.green }}>Advance Rs.{fmt(unappliedAdvanceTotal)} received</div>
             <div style={{ fontSize: 12, color: C.sub }}>{unappliedAdvances.length} advance{unappliedAdvances.length > 1 ? "s" : ""} not yet on this invoice</div>
           </div>
           <button onClick={applyAdvancesToInvoice} style={{ ...btnSm(C.green, "#fff"), width: "auto", padding: "10px 16px", flexShrink: 0 }}>Apply</button>
         </div>}
-        {invCustBalance(selInv) > 0 && <button onClick={() => { setPayType("customer"); setPayAmount(invCustBalance(selInv).toString()); setPayRef(""); setShowPayForm(true) }} style={{ ...btn(C.green, "#fff"), marginTop: 8 }}>💰 Record Payment</button>}
+        {invCustBalance(selInv) > 0 && <button onClick={() => { setPayType("customer"); setPayAmount(invCustBalance(selInv).toString()); setPayRef(""); setShowPayForm(true) }} style={{ ...btn(C.green, "#fff"), marginTop: 8 }}>Record Payment</button>}
         {invCustBalance(selInv) <= 0 && invCustPayments(selInv).length > 0 && <div style={{ textAlign: "center", color: C.green, fontSize: 14, fontWeight: 600, marginTop: 8 }}>✓ {isDirectJob ? "Fully Paid" : "Customer settled"}</div>}
       </div>
 
@@ -192,7 +192,7 @@ export default function InvoiceDetail() {
         {selInv.status === "draft" && <><div style={{ fontSize: 15, color: C.sub, marginBottom: 8 }}>Tap any line item to edit</div><button onClick={() => setInvStatus("finalized")} style={{ ...btn(C.accent, "#fff"), marginBottom: 10 }}>Finalize Invoice</button></>}
         {selInv.status === "finalized" && <button onClick={() => setInvStatus("sent")} style={{ ...btn(C.orange, "#fff"), marginBottom: 10 }}>Mark as Sent</button>}
         {selInv.status !== "draft" && (selInv.payments || []).length === 0 && <button onClick={() => { if (!confirm("Revert invoice to draft? This will clear the 'sent' status.")) return; setInvStatus("draft") }} style={{ ...btn(C.bg, C.accent) }}>Edit Invoice</button>}
-        {selInv.status !== "draft" && (selInv.payments || []).length > 0 && <div style={{ ...card, background: C.muted + "08", fontSize: 13, color: C.muted, textAlign: "center", padding: "10px 14px" }}>🔒 Invoice locked — payments recorded. Delete all payments to edit.</div>}
+        {selInv.status !== "draft" && (selInv.payments || []).length > 0 && <div style={{ ...card, background: C.muted + "08", fontSize: 13, color: C.muted, textAlign: "center", padding: "10px 14px" }}>Invoice locked — payments recorded. Delete all payments to edit.</div>}
       </div>
 
       {/* Close Job (for quick jobs that are fully paid) */}
@@ -206,37 +206,37 @@ export default function InvoiceDetail() {
           setActiveJobId(null)
           setScreen("home")
           setHomeTab("closed")
-        }} style={{ ...btn(C.green, "#fff"), marginTop: 12, marginBottom: 8 }}>🏁 Close Job</button>
+        }} style={{ ...btn(C.green, "#fff"), marginTop: 12, marginBottom: 8 }}>Close Job</button>
       )}
 
       {/* Payment Form */}
       <input ref={insPhotoRef} type="file" accept="image/*" style={{ display: "none" }} onChange={async e => { const f = e.target.files[0]; if (f) { tt("⏳ Uploading…"); try { const url = await uploadPhoto(f, `${activeJobId}/ins-pay-${Date.now()}.jpg`); if (!url) throw new Error("No URL returned"); setInsPayPhoto(url); tt("📷 Photo attached") } catch (err) { setInsPayPhoto(null); tt("❌ Upload failed — please retry") } } e.target.value = "" }} />
       {showPayForm && <Sheet onClose={() => { setShowPayForm(false); setInsPayPhoto(null) }}>
         {payType === "insurance" ? <>
-          <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 6 }}>🛡️ Insurance Payment</div>
+          <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 6 }}>Insurance Payment</div>
           <div style={{ fontSize: 15, color: C.sub, marginBottom: 16 }}>Net Total: Rs.{fmt(invNet(selInv))}</div>
           <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6, color: C.sub }}>AMOUNT</div>
           <input type="number" inputMode="decimal" value={payAmount} onChange={e => setPayAmount(e.target.value)} placeholder="0" style={{ ...inp, fontFamily: MONO, fontSize: 28, fontWeight: 700, textAlign: "center", marginBottom: 16 }} />
           <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6, color: C.sub }}>RELEASE LETTER / CHEQUE NUMBER</div>
           <input value={payRef} onChange={e => setPayRef(e.target.value)} placeholder="Optional" style={{ ...inp, marginBottom: 16 }} />
           <div style={{ marginBottom: 16 }}>
-            <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6 }}>📎 Release Letter / Cheque Photo <span style={{ color: C.red }}>*</span></div>
+            <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6 }}>Release Letter / Cheque Photo <span style={{ color: C.red }}>*</span></div>
             {insPayPhoto ? <div style={{ position: "relative", display: "inline-block" }}>
               <img src={insPayPhoto} style={{ height: 80, borderRadius: 8, border: `2px solid ${C.green}` }} alt="" />
               <span onClick={() => setInsPayPhoto(null)} style={{ position: "absolute", top: -6, right: -6, background: C.red, color: "#fff", width: 22, height: 22, borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, cursor: "pointer", fontWeight: 700 }}>✕</span>
             </div> : <div style={{ display: "flex", gap: 8 }}>
-              <button onClick={() => { insPhotoRef.current.setAttribute("capture", "environment"); insPhotoRef.current.click() }} style={{ flex: 1, padding: "14px", borderRadius: 12, border: `2px dashed ${C.accent}40`, background: C.bg, color: C.accent, fontSize: 15, fontWeight: 600, cursor: "pointer" }}>📷 Photo</button>
-              <button onClick={() => { insPhotoRef.current.removeAttribute("capture"); insPhotoRef.current.click() }} style={{ flex: 1, padding: "14px", borderRadius: 12, border: `2px dashed ${C.border}`, background: C.bg, color: C.sub, fontSize: 15, fontWeight: 600, cursor: "pointer" }}>🖼️ Gallery</button>
+              <button onClick={() => { insPhotoRef.current.setAttribute("capture", "environment"); insPhotoRef.current.click() }} style={{ flex: 1, padding: "14px", borderRadius: 12, border: `2px dashed ${C.accent}40`, background: C.bg, color: C.accent, fontSize: 15, fontWeight: 600, cursor: "pointer" }}>Camera</button>
+              <button onClick={() => { insPhotoRef.current.removeAttribute("capture"); insPhotoRef.current.click() }} style={{ flex: 1, padding: "14px", borderRadius: 12, border: `2px dashed ${C.border}`, background: C.bg, color: C.sub, fontSize: 15, fontWeight: 600, cursor: "pointer" }}>Gallery</button>
             </div>}
           </div>
         </> : <>
-          <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 6 }}>{isDirectJob ? "💰 Payment" : "👤 Customer Payment"}</div>
+          <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 6 }}>{isDirectJob ? "Payment" : "Customer Payment"}</div>
           <div style={{ fontSize: 15, color: C.sub, marginBottom: 16 }}>{isDirectJob ? "Due" : "Owes"}: Rs.{fmt(invCustOwes(selInv))}</div>
           <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6, color: C.sub }}>AMOUNT</div>
           <input type="number" inputMode="decimal" value={payAmount} onChange={e => setPayAmount(e.target.value)} placeholder="0" style={{ ...inp, fontFamily: MONO, fontSize: 28, fontWeight: 700, textAlign: "center", marginBottom: 16 }} />
           <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6, color: C.sub }}>METHOD</div>
           <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
-            {[["cash", "💵 Cash"], ["bank_transfer", "🏦 Bank"], ["cheque", "📝 Cheque"], ["online", "📱 Online"]].map(([k, l]) => <div key={k} onClick={() => setPayMethod(k)} style={{ flex: 1, textAlign: "center", padding: "12px 4px", borderRadius: 12, cursor: "pointer", background: payMethod === k ? C.green + "15" : C.bg, border: `1px solid ${payMethod === k ? C.green + "50" : C.border}`, fontSize: 14, fontWeight: payMethod === k ? 600 : 400, color: payMethod === k ? C.green : C.sub }}>{l}</div>)}
+            {[["cash", "Cash"], ["bank_transfer", "Bank"], ["cheque", "Cheque"], ["online", "Online"]].map(([k, l]) => <div key={k} onClick={() => setPayMethod(k)} style={{ flex: 1, textAlign: "center", padding: "12px 4px", borderRadius: 12, cursor: "pointer", background: payMethod === k ? C.green + "15" : C.bg, border: `1px solid ${payMethod === k ? C.green + "50" : C.border}`, fontSize: 14, fontWeight: payMethod === k ? 600 : 400, color: payMethod === k ? C.green : C.sub }}>{l}</div>)}
           </div>
           <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6, color: C.sub }}>REFERENCE</div>
           <input value={payRef} onChange={e => setPayRef(e.target.value)} placeholder="Optional" style={{ ...inp, marginBottom: 16 }} />

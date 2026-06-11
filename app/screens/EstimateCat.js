@@ -1,6 +1,6 @@
 "use client"
 import { useWorkshop } from "../WorkshopContext"
-import { C, FONT, MONO, inp, btn, card, NavBar, fmt } from "../WorkshopContext"
+import { C, FONT, MONO, inp, btn, card, NavBar, fmt, Icon } from "../WorkshopContext"
 
 export default function EstimateCat() {
   const {
@@ -19,19 +19,19 @@ export default function EstimateCat() {
   return (
     <>
       <NavBar
-        title={`${cat.icon} ${cat.label}`}
+        title={cat.label}
         subtitle="Check, rate, enter, next"
         onBack={() => { if (activeCat === 0) { if (selEst) setScreen("est_review"); else setScreen("est_parts") } else setActiveCat(activeCat - 1) }}
       />
       <div style={{ display: "flex", gap: 4, marginBottom: 16, background: C.card, borderRadius: 14, padding: 5, boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
         {jobCats.map((c, i) => { const cnt = estEntries.filter(e => e.category === c.key).length; return <div key={c.key} onClick={() => setActiveCat(i)} style={{ flex: 1, textAlign: "center", padding: "10px 0", borderRadius: 12, cursor: "pointer", background: i === activeCat ? c.color + "12" : "transparent" }}>
-          <div style={{ fontSize: 22 }}>{c.icon}</div>
+          <div style={{ display: "flex", justifyContent: "center" }}><Icon name={c.ic} size={20} color={c.color} /></div>
           <div style={{ fontSize: 11, fontWeight: 600, color: i === activeCat ? c.color : C.muted, marginTop: 2 }}>{c.short}</div>
           {cnt > 0 && <div style={{ fontSize: 12, fontFamily: MONO, color: c.color, fontWeight: 700 }}>{cnt}</div>}
         </div> })}
       </div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-        <span style={{ fontSize: 20, fontWeight: 700 }}>{cat.icon} {cat.label}</span>
+        <span style={{ fontSize: 20, fontWeight: 700, display: "inline-flex", alignItems: "center", gap: 8 }}><Icon name={cat.ic} size={18} color={cat.color} /> {cat.label}</span>
         <span style={{ fontFamily: MONO, fontSize: 22, fontWeight: 700, color: cat.color }}>Rs. {fmt(catTotal(cat.key))}</span>
       </div>
       {estParts.map(p => { const entry = getEntry(p.id, cat.key); const checked = !!entry; const isReplace = cat.key === "replace";
@@ -51,7 +51,7 @@ export default function EstimateCat() {
         </div>
       })}
       <div style={{ marginTop: 16 }}>
-        {activeCat < jobCats.length - 1 ? <button onClick={() => setActiveCat(activeCat + 1)} style={{ ...btn(jobCats[activeCat + 1].color, "#fff") }}>Next → {jobCats[activeCat + 1].icon} {jobCats[activeCat + 1].label}</button>
+        {activeCat < jobCats.length - 1 ? <button onClick={() => setActiveCat(activeCat + 1)} style={{ ...btn(jobCats[activeCat + 1].color, "#fff") }}>Next: {jobCats[activeCat + 1].label}</button>
           : <button onClick={() => setScreen("est_review")} style={{ ...btn(C.accent, "#fff") }}>Review Estimate</button>}
       </div>
     </>
