@@ -212,6 +212,9 @@ export default function UserManagement({ onBack }) {
       {showAdd && (
         <Sheet onClose={() => setShowAdd(false)}>
           <div style={{ fontSize: 20, fontWeight: 700, marginBottom: 20, color: C.text }}>Add User</div>
+          <div style={{ fontSize: 12, color: C.orange, background: C.orange + "12", borderRadius: 10, padding: "10px 12px", marginBottom: 14, lineHeight: 1.5 }}>
+            ⚠️ Adding an email here grants access, but the person also needs a <strong>login account</strong>: Supabase dashboard → Authentication → Users → <strong>Add user</strong> (same email + a password you give them).
+          </div>
           <div style={{ marginBottom: 12 }}>
             <label style={{ fontSize: 13, fontWeight: 600, color: C.sub, marginBottom: 4, display: "block" }}>Email *</label>
             <input

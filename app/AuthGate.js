@@ -163,13 +163,20 @@ export default function AuthGate({ children }) {
     })
   }, [session])
 
-  const signIn = async () => {
+  // Email + password sign-in (same Supabase project as kuruma.lk, so the
+  // owner's existing kuruma admin credentials work here). Google OAuth was
+  // dropped when migrating projects — its client config was unrecoverable.
+  const [email, setEmail] = useState("")
+  const [password, setPassword] = useState("")
+  const [signingIn, setSigningIn] = useState(false)
+  const signIn = async (e) => {
+    if (e && e.preventDefault) e.preventDefault()
     setError(null)
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: { redirectTo: window.location.origin },
-    })
-    if (error) setError(error.message)
+    if (!email.trim() || !password) { setError("Enter your email and password"); return }
+    setSigningIn(true)
+    const { error } = await supabase.auth.signInWithPassword({ email: email.trim().toLowerCase(), password })
+    if (error) setError(/invalid login credentials/i.test(error.message) ? "Wrong email or password" : error.message)
+    setSigningIn(false)
   }
 
   const signOut = async () => {
@@ -199,15 +206,18 @@ export default function AuthGate({ children }) {
           <div style={{ marginBottom: 18 }}><LogoMark /></div>
           <div style={{ fontSize: 24, fontWeight: 700, color: "#1D1D1F", letterSpacing: "-0.6px" }}>Workshop Pulse</div>
           <div style={{ fontSize: 14, color: "#6E6E73", marginTop: 4, marginBottom: 30 }}>MacForce Auto Engineering</div>
-          <button
-            onClick={signIn}
-            style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10, width: "100%", padding: "14px 20px", background: "#fff", border: "1px solid #E5E5EA", borderRadius: 12, fontSize: 16, fontWeight: 600, color: "#1a1a1a", cursor: "pointer", fontFamily: FONT, transition: "background 0.15s" }}
-            onMouseOver={e => e.currentTarget.style.background = "#f8f8f8"}
-            onMouseOut={e => e.currentTarget.style.background = "#fff"}
-          >
-            <svg width="20" height="20" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
-            Sign in with Google
-          </button>
+          <form onSubmit={signIn} style={{ textAlign: "left" }}>
+            <label style={{ fontSize: 13, fontWeight: 600, color: "#6E6E73", display: "block", marginBottom: 6 }}>Email</label>
+            <input type="email" value={email} onChange={e => setEmail(e.target.value)} autoComplete="username" autoCapitalize="none" placeholder="you@example.com"
+              style={{ width: "100%", padding: "13px 14px", border: "1px solid #E5E5EA", borderRadius: 12, fontSize: 16, fontFamily: FONT, outline: "none", marginBottom: 14, boxSizing: "border-box" }} />
+            <label style={{ fontSize: 13, fontWeight: 600, color: "#6E6E73", display: "block", marginBottom: 6 }}>Password</label>
+            <input type="password" value={password} onChange={e => setPassword(e.target.value)} autoComplete="current-password" placeholder="••••••••"
+              style={{ width: "100%", padding: "13px 14px", border: "1px solid #E5E5EA", borderRadius: 12, fontSize: 16, fontFamily: FONT, outline: "none", marginBottom: 18, boxSizing: "border-box" }} />
+            <button type="submit" disabled={signingIn}
+              style={{ width: "100%", padding: "14px 20px", background: "#007AFF", border: "none", borderRadius: 12, fontSize: 16, fontWeight: 600, color: "#fff", cursor: signingIn ? "wait" : "pointer", fontFamily: FONT, opacity: signingIn ? 0.7 : 1 }}>
+              {signingIn ? "Signing in…" : "Sign In"}
+            </button>
+          </form>
           {error && <div style={{ color: "#FF3B30", fontSize: 13, marginTop: 12 }}>{error}</div>}
         </div>
       </div>
