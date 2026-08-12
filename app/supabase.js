@@ -1,16 +1,16 @@
 import { createClient } from "@supabase/supabase-js"
 
-// Lazy-init: env vars are inlined at build time by Next.js.
-// If not set during build, defer creation to runtime.
+// The app lives in the KURUMA Supabase project since the Aug 2026 migration.
+// Hardcoded on purpose (overriding any stale Vercel env vars still pointing at
+// the old project): the URL and anon key are public by design — they ship in
+// every browser bundle — and real security is enforced by RLS server-side.
+const SUPABASE_URL = "https://bvuecngtxgjfzfaygdig.supabase.co"
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ2dWVjbmd0eGdqZnpmYXlnZGlnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIyOTYxMzMsImV4cCI6MjA4Nzg3MjEzM30.dO6m-0CUSYTkjcBocYXHRU-H72vmeDAwJFaL4X_7lEc"
+
 let _supabase = null
 export const supabase = new Proxy({}, {
   get(_, prop) {
-    if (!_supabase) {
-      const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-      const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-      if (!url || !key) throw new Error("Supabase env vars not configured. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in Vercel project settings.")
-      _supabase = createClient(url, key)
-    }
+    if (!_supabase) _supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
     return _supabase[prop]
   }
 })
