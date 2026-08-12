@@ -1,5 +1,6 @@
 "use client"
 import { useState } from "react"
+import SecureImg from "../SecureImg"
 import { C, FONT, MONO, SP, inp, btn, btnSm, btnOutline, card, pill, NavBar, fmt, genId } from "../WorkshopContext"
 
 const UNITS = ["pcs", "litre", "kg", "can", "set", "roll", "sheet", "pair", "box"]
@@ -392,7 +393,7 @@ function GRNDetail({ grn, onBack, pos, onUpdate, cashBook, setCashBook, tt }) {
       {grn.invoicePhoto && (
         <div style={card}>
           <div style={{ fontSize: 14, fontWeight: 600, color: C.sub, textTransform: "uppercase", letterSpacing: 0.8, marginBottom: SP.sm }}>Invoice Photo</div>
-          <img src={grn.invoicePhoto} alt="Invoice" style={{ width: "100%", borderRadius: 8 }} />
+          <SecureImg src={grn.invoicePhoto} alt="Invoice" style={{ width: "100%", borderRadius: 8 }} />
         </div>
       )}
 

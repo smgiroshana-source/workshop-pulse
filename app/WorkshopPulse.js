@@ -3,6 +3,7 @@ import { useState, useRef, useEffect } from "react"
 import { WorkshopProvider, useWorkshop, C, FONT, MONO, btn, btnSm, inp, card, pill, Sheet, NavBar, ALL_STAGES, fmt, regSearchKey, phoneSearchKey, phoneIntl, SP, Icon, IconBadge } from "./WorkshopContext"
 import { useAuth } from "./AuthGate"
 import { uploadPhoto, deletePhoto, compressForPreview } from "./supabase"
+import SecureImg from "./SecureImg"
 import UserManagement from "./screens/UserManagement"
 import HomeScreen, { ClosedHistory, ClosedJobDetail } from "./screens/HomeScreen"
 import NewJobScreen from "./screens/NewJobScreen"
@@ -1013,7 +1014,7 @@ function AppInner() {
             const thumb = (j.jobDocs || [])[0]?.dataUrl
             return (
               <div key={j.id} onClick={() => openJob(j)} onMouseEnter={e => { if (isTablet) { setHoverJobId(j.id); setHoverY(e.clientY) } }} onMouseLeave={() => setHoverJobId(null)} style={{ ...card, cursor: "pointer", padding: isTablet ? "10px 12px" : "12px 14px", background: isSelected ? C.accent + "08" : C.card, border: isSelected ? `1px solid ${C.accent}40` : `1px solid ${C.border}`, borderLeft: `4px solid ${stage.color}`, display: "flex", gap: 10, alignItems: "center" }}>
-                {thumb ? <img src={thumb} style={{ width: isTablet ? 48 : 52, height: isTablet ? 48 : 52, borderRadius: 12, objectFit: "cover", flexShrink: 0 }} alt="" /> : <div style={{ width: isTablet ? 48 : 52, height: isTablet ? 48 : 52, borderRadius: 12, background: C.bg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><Icon name="car" size={22} color={C.muted} /></div>}
+                {thumb ? <SecureImg src={thumb} style={{ width: isTablet ? 48 : 52, height: isTablet ? 48 : 52, borderRadius: 12, objectFit: "cover", flexShrink: 0 }} alt="" /> : <div style={{ width: isTablet ? 48 : 52, height: isTablet ? 48 : 52, borderRadius: 12, background: C.bg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><Icon name="car" size={22} color={C.muted} /></div>}
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 3 }}>
                     <div style={{ minWidth: 0 }}>
@@ -1497,7 +1498,7 @@ function AppInner() {
                   const isSel = activeJobId === j.id
                   return (
                     <div key={j.id} onClick={e => { e.stopPropagation(); setHoverJobId(null); openJob(j); setSidebarExpanded(false) }} onMouseEnter={e => { setHoverJobId(j.id); setHoverY(e.clientY) }} onMouseLeave={() => setHoverJobId(null)} style={{ marginBottom: 6, cursor: "pointer", borderRadius: 12, overflow: "hidden", border: isSel ? `2px solid ${C.accent}` : `2px solid transparent`, background: isSel ? C.accent + "08" : C.card, transition: "all 0.2s" }}>
-                      {thumb ? <img src={thumb} style={{ width: "100%", height: 52, objectFit: "cover", display: "block" }} alt="" /> : <div style={{ width: "100%", height: 52, background: C.bg, display: "flex", alignItems: "center", justifyContent: "center" }}><Icon name="car" size={20} color={C.muted} /></div>}
+                      {thumb ? <SecureImg src={thumb} style={{ width: "100%", height: 52, objectFit: "cover", display: "block" }} alt="" /> : <div style={{ width: "100%", height: 52, background: C.bg, display: "flex", alignItems: "center", justifyContent: "center" }}><Icon name="car" size={20} color={C.muted} /></div>}
                       <div style={{ padding: "4px 4px 5px", textAlign: "center" }}>
                         <div style={{ fontFamily: MONO, fontSize: 11, fontWeight: 700, lineHeight: 1.2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{j.jobInfo.vehicle_reg || "--"}</div>
                         <div style={{ width: 8, height: 8, borderRadius: 4, background: stage.color, margin: "3px auto 0" }} />
@@ -1530,7 +1531,7 @@ function AppInner() {
         const photo = (hj?.jobDocs || [])[0]?.dataUrl
         return photo ? (
           <div style={{ position: "fixed", left: 90, top: Math.min(hoverY - 40, window.innerHeight - 240), zIndex: 200, background: C.card, borderRadius: 16, padding: 6, boxShadow: "0 12px 40px rgba(0,0,0,0.22)", border: `1px solid ${C.border}`, pointerEvents: "none" }}>
-            <img src={photo} style={{ width: 240, height: 180, objectFit: "cover", borderRadius: 12 }} alt="" />
+            <SecureImg src={photo} style={{ width: 240, height: 180, objectFit: "cover", borderRadius: 12 }} alt="" />
             <div style={{ padding: "6px 8px", fontSize: 14, fontWeight: 700, color: C.sub, textAlign: "center" }}>{hj.jobInfo.vehicle_reg} · {hj.jobInfo.vehicle_make}</div>
           </div>
         ) : null
@@ -1552,7 +1553,7 @@ function AppInner() {
           return d ? (
             <div onClick={() => setShowImage(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.92)", zIndex: 1000, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 20 }}>
               {d.label && <div style={{ color: "#fff", fontSize: 16, fontWeight: 600, marginBottom: 12, opacity: 0.8 }}>{d.label}</div>}
-              <img src={d.dataUrl} style={{ maxWidth: "100%", maxHeight: "70vh", borderRadius: 16 }} alt="" />
+              <SecureImg src={d.dataUrl} style={{ maxWidth: "100%", maxHeight: "70vh", borderRadius: 16 }} alt="" />
               <div style={{ display: "flex", gap: 12, marginTop: 20 }}>
                 <button onClick={(e) => { e.stopPropagation(); setShowImage(null) }} style={{ ...btnSm("#fff", C.text), width: "auto", padding: "14px 40px" }}>Close</button>
                 <button onClick={async (e) => {
@@ -1694,7 +1695,7 @@ function AppInner() {
                   <div style={{ fontSize: 14, fontWeight: 600, color: C.sub, marginBottom: 8 }}>📷 Approval Photo</div>
                   {pqApprovalPhoto ? (
                     <div style={{ position: "relative" }}>
-                      <img src={pqApprovalPhoto} style={{ width: "100%", borderRadius: 12, maxHeight: 200, objectFit: "cover" }} alt="Approval" />
+                      <SecureImg src={pqApprovalPhoto} style={{ width: "100%", borderRadius: 12, maxHeight: 200, objectFit: "cover" }} alt="Approval" />
                       <span onClick={() => setPqApprovalPhoto(null)} style={{ position: "absolute", top: 8, right: 8, background: "rgba(0,0,0,0.6)", color: "#fff", borderRadius: 20, width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontSize: 16 }}>×</span>
                     </div>
                   ) : (
@@ -1793,7 +1794,7 @@ function AppInner() {
                           <span style={{ fontSize: 15, fontWeight: 600 }}>{inv.supplierName || `Invoice ${idx + 1}`}</span>
                           <span onClick={() => setSupplierInvoices(prev => prev.filter(x => x.id !== inv.id))} style={{ fontSize: 13, color: C.red, cursor: "pointer", fontWeight: 600 }}>Remove</span>
                         </div>
-                        {inv.photo && <img src={inv.photo} style={{ width: "100%", height: 140, objectFit: "cover", borderRadius: 10, marginBottom: 6 }} alt="" />}
+                        {inv.photo && <SecureImg src={inv.photo} style={{ width: "100%", height: 140, objectFit: "cover", borderRadius: 10, marginBottom: 6 }} alt="" />}
                       </div>
                     ))}
                     {showSupplierInvForm ? (

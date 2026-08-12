@@ -93,19 +93,23 @@ export default function AuthGate({ children }) {
 
   useEffect(() => {
     let resolved = false
-    const done = (s) => { if (!resolved) { resolved = true; setSession(s || null); setLoading(false) } }
-    // Hard timeout — never stay on loading screen more than 3 seconds
-    const timeout = setTimeout(() => done(null), 3000)
+    // settle() always applies the latest session — auth events after first
+    // resolution (sign-out, token refresh failure, late arrival on a slow
+    // connection) must keep updating state, not be ignored.
+    const settle = (s) => { setSession(s || null); if (!resolved) { resolved = true; setLoading(false) } }
+    // Hard timeout only ends the loading spinner — it must NOT discard a real
+    // session that arrives moments later (slow connections were bounced to login)
+    const timeout = setTimeout(() => { if (!resolved) { resolved = true; setLoading(false) } }, 5000)
     supabase.auth.getSession().then(({ data: { session } }) => {
       clearTimeout(timeout)
-      done(session)
+      settle(session)
     }).catch(() => {
       clearTimeout(timeout)
-      done(null)
+      settle(null)
     })
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       clearTimeout(timeout)
-      done(session)
+      settle(session)
     })
     return () => { clearTimeout(timeout); subscription.unsubscribe() }
   }, [])

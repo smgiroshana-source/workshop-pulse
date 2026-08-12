@@ -1,5 +1,6 @@
 "use client"
 import { useWorkshop } from "../WorkshopContext"
+import SecureImg from "../SecureImg"
 import { C, FONT, MONO, inp, btn, card, NavBar, fmt } from "../WorkshopContext"
 
 export default function ApprovalUpload() {
@@ -31,7 +32,7 @@ export default function ApprovalUpload() {
             <span style={{ fontSize: 16, fontWeight: 600, color: C.green }}>✓ {estDocs.length} photo{estDocs.length > 1 ? "s" : ""} · {selEst.type === "supplementary" ? selEst.label : "Estimate"}</span>
             <span style={{ fontSize: 17, color: C.accent, fontWeight: 500 }}>+ Add</span>
           </div>
-          <div style={{ display: "flex", gap: 10, overflowX: "auto" }}>{estDocs.map(d => <img key={d.id} src={d.dataUrl} onClick={e => { e.stopPropagation(); setShowImage(d.id) }} style={{ width: 90, height: 68, objectFit: "cover", borderRadius: 12, flexShrink: 0 }} alt="" />)}</div>
+          <div style={{ display: "flex", gap: 10, overflowX: "auto" }}>{estDocs.map(d => <SecureImg key={d.id} src={d.dataUrl} onClick={e => { e.stopPropagation(); setShowImage(d.id) }} style={{ width: 90, height: 68, objectFit: "cover", borderRadius: 12, flexShrink: 0 }} alt="" />)}</div>
         </> : <>
           <div style={{ fontSize: 40, marginBottom: 8 }}>📷</div>
           <div style={{ fontSize: 20, fontWeight: 600 }}>Upload Approved Copy</div>

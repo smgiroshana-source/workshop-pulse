@@ -136,6 +136,39 @@ export async function compressForPreview(file) {
   })
 }
 
+// ── Signed URLs for a PRIVATE bucket ─────────────────────────────────────────
+// Photos are stored (inside job/store JSON) as public-style bucket URLs. Once the
+// bucket is made private those URLs 403, so renders go through resolvePhotoUrl():
+// storage URLs are exchanged for a signed URL (cached until near expiry), and
+// data:/blob:/foreign URLs pass through untouched. While the bucket is still
+// public, the signed URL works the same — so this is safe to ship first and
+// flip the bucket after.
+const PUBLIC_MARKER = "/storage/v1/object/public/" + BUCKET + "/"
+const SIGN_TTL = 60 * 60 // 1 hour
+const signedCache = new Map() // path → { url, expiresAt }
+
+export function storagePathFromUrl(url) {
+  if (typeof url !== "string") return null
+  const idx = url.indexOf(PUBLIC_MARKER)
+  if (idx === -1) return null
+  return decodeURIComponent(url.slice(idx + PUBLIC_MARKER.length).split("?")[0])
+}
+
+export async function resolvePhotoUrl(url) {
+  const path = storagePathFromUrl(url)
+  if (!path) return url // data URL, blob, or non-storage URL — use as-is
+  const cached = signedCache.get(path)
+  if (cached && cached.expiresAt > Date.now() + 60_000) return cached.url
+  try {
+    const { data, error } = await supabase.storage.from(BUCKET).createSignedUrl(path, SIGN_TTL)
+    if (error || !data?.signedUrl) return url // fall back (works while bucket is public)
+    signedCache.set(path, { url: data.signedUrl, expiresAt: Date.now() + SIGN_TTL * 1000 })
+    return data.signedUrl
+  } catch {
+    return url
+  }
+}
+
 // Delete a photo by its public URL (no-op if it's not a storage URL)
 export async function deletePhoto(url) {
   if (!url || !url.includes("/storage/v1/object/public/" + BUCKET + "/")) return

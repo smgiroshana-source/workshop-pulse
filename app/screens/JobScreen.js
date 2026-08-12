@@ -1,6 +1,7 @@
 "use client"
 import React, { useState } from "react"
 import { useWorkshop } from "../WorkshopContext"
+import SecureImg from "../SecureImg"
 import { C, FONT, MONO, inp, btn, btnSm, btnOutline, btnText, card, pill, Sheet, NavBar, ALL_STAGES, VEHICLE_MAKES, INSURANCE_COMPANIES, INV_STATUS, fmt, SP, genId, phoneIntl, Icon, IconBadge } from "../WorkshopContext"
 import { uploadPhoto } from "../supabase"
 
@@ -638,7 +639,7 @@ export default function JobScreen() {
           {jobDocs.map((d) => {
             const tagColor = d.label === "Vehicle" ? C.accent : d.label === "Before" ? C.orange : d.label === "After" ? C.green : C.sub
             return <div key={d.id} style={{ position: "relative", overflow: "hidden", borderRadius: 12 }}>
-            <img src={d.dataUrl} onClick={() => setShowImage(d.id)} style={{ width: "100%", aspectRatio: "1", objectFit: "cover", borderRadius: 12, cursor: "pointer", display: "block" }} alt="" />
+            <SecureImg src={d.dataUrl} onClick={() => setShowImage(d.id)} style={{ width: "100%", aspectRatio: "1", objectFit: "cover", borderRadius: 12, cursor: "pointer", display: "block" }} alt="" />
             <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, background: `linear-gradient(transparent, ${tagColor}cc)`, color: "#fff", fontSize: 10, fontWeight: 600, padding: "12px 6px 4px", textAlign: "center", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{d.label || "General"}</div>
           </div>})}
         </div>}

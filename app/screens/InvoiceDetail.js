@@ -1,6 +1,7 @@
 "use client"
 import { useState } from "react"
 import { useWorkshop } from "../WorkshopContext"
+import SecureImg from "../SecureImg"
 import { C, FONT, MONO, inp, btn, btnSm, card, pill, Sheet, NavBar, fmt, INV_STATUS, WORKSHOP } from "../WorkshopContext"
 import { uploadPhoto } from "../supabase"
 
@@ -119,7 +120,7 @@ export default function InvoiceDetail() {
               </div>
               {p.reference && <div style={{ fontSize: 13, color: C.sub, marginTop: 4 }}>Ref: {p.reference}</div>}
               <div style={{ fontSize: 12, color: C.muted, marginTop: 2 }}>{new Date(p.date).toLocaleDateString("en-LK", { year: "numeric", month: "short", day: "numeric" })}</div>
-              {p.photo && <img src={p.photo} onClick={() => { const d = { id: "ins_ph_" + p.id, dataUrl: p.photo, label: "Insurance Release Letter" }; setJobDocs(prev => { const ex = prev.find(x => x.id === d.id); return ex ? prev : [...prev, d] }); setShowImage(d.id) }} style={{ height: 50, marginTop: 6, borderRadius: 6, border: `1px solid ${C.border}`, cursor: "pointer", objectFit: "cover" }} alt="" />}
+              {p.photo && <SecureImg src={p.photo} onClick={() => { const d = { id: "ins_ph_" + p.id, dataUrl: p.photo, label: "Insurance Release Letter" }; setJobDocs(prev => { const ex = prev.find(x => x.id === d.id); return ex ? prev : [...prev, d] }); setShowImage(d.id) }} style={{ height: 50, marginTop: 6, borderRadius: 6, border: `1px solid ${C.border}`, cursor: "pointer", objectFit: "cover" }} alt="" />}
               <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
                 {p.ins_status === "recorded" && <button onClick={() => updateInsStatus(p.id, "pending")} style={{ padding: "6px 14px", borderRadius: 8, border: "none", background: C.accent + "15", color: C.accent, fontWeight: 600, fontSize: 13, cursor: "pointer" }}>→ Mark Pending</button>}
                 {p.ins_status === "pending" && <button onClick={() => updateInsStatus(p.id, "received")} style={{ padding: "6px 14px", borderRadius: 8, border: "none", background: C.green + "15", color: C.green, fontWeight: 600, fontSize: 13, cursor: "pointer" }}>✓ Received</button>}
@@ -222,7 +223,7 @@ export default function InvoiceDetail() {
           <div style={{ marginBottom: 16 }}>
             <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6 }}>Release Letter / Cheque Photo <span style={{ color: C.red }}>*</span></div>
             {insPayPhoto ? <div style={{ position: "relative", display: "inline-block" }}>
-              <img src={insPayPhoto} style={{ height: 80, borderRadius: 8, border: `2px solid ${C.green}` }} alt="" />
+              <SecureImg src={insPayPhoto} style={{ height: 80, borderRadius: 8, border: `2px solid ${C.green}` }} alt="" />
               <span onClick={() => setInsPayPhoto(null)} style={{ position: "absolute", top: -6, right: -6, background: C.red, color: "#fff", width: 22, height: 22, borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, cursor: "pointer", fontWeight: 700 }}>✕</span>
             </div> : <div style={{ display: "flex", gap: 8 }}>
               <button onClick={() => { insPhotoRef.current.setAttribute("capture", "environment"); insPhotoRef.current.click() }} style={{ flex: 1, padding: "14px", borderRadius: 12, border: `2px dashed ${C.accent}40`, background: C.bg, color: C.accent, fontSize: 15, fontWeight: 600, cursor: "pointer" }}>Camera</button>

@@ -304,154 +304,6 @@ export function WorkshopProvider({ children }) {
   // Clear search when switching home tabs (prevents stale query carrying between Jobs/Store)
   useEffect(() => { setSearchQuery("") }, [homeTab])
 
-  // ═══ DEMO DATA: comprehensive QA scenarios ═══
-  // 14 jobs covering: insurance×stages, direct, quick, cancelled, warranty, hold, partial pay
-  const buildDemoJobs = () => {
-    const today = new Date()
-    const daysAgo = (n) => new Date(today.getTime() - n * 86400000).toISOString()
-    const baseJob = (extra) => ({
-      paused: false, onHold: false, partsOrdered: false, partsArrived: {}, partsQuotation: [],
-      pqStatus: "draft", pqApprovalPhoto: null, pqLumpSum: null, pqLumpMode: false,
-      customerConfirmed: false, estimates: [], invoices: [], jobDocs: [], qcChecks: {},
-      supplierInvoices: [], followUpNote: "", followUpAttempts: 0, followUpLog: [], jobCosts: [], advances: [],
-      ...extra,
-    })
-    return [
-      // 1. Insurance — just received
-      baseJob({ id: "demo_j1", jobNumber: "JOB-001", stage: "job_received", created_at: daysAgo(0),
-        jobInfo: { customer_name: "Mr. Kasun Perera", customer_phone: "0771234567", vehicle_reg: "CBB 5949", vehicle_make: "Toyota", vehicle_model: "Aqua", insurance_name: "SLIC", work_type: "paint", job_type: "insurance" } }),
-      // 2. Insurance — estimate pending (in progress)
-      baseJob({ id: "demo_j2", jobNumber: "JOB-002", stage: "est_pending", created_at: daysAgo(1),
-        jobInfo: { customer_name: "Mrs. Niluka Silva", customer_phone: "0712345678", vehicle_reg: "KG 5940", vehicle_make: "Nissan", vehicle_model: "Axio", insurance_name: "Ceylinco General", work_type: "paint", job_type: "insurance" } }),
-      // 3. Insurance — estimate ready, awaiting assessor
-      baseJob({ id: "demo_j3", jobNumber: "JOB-003", stage: "est_ready", created_at: daysAgo(2),
-        jobInfo: { customer_name: "Mr. Sampath Bandara", customer_phone: "0723456789", vehicle_reg: "CAB 1234", vehicle_make: "Honda", vehicle_model: "Vezel", insurance_name: "SLIC", work_type: "paint", job_type: "insurance" },
-        estimates: [{ id: "est_d3", number: "EST-001", type: "insurance_claim", label: "Insurance Claim", status: "draft", parts: [{ id: "p_d3a", name: "Front Bumper" }], entries: [{ id: "e_d3a", part_id: "p_d3a", category: "replace", qty: 1, rate: 35000, remarks: "S/H" }], sundries: [], total: 35000, created_at: daysAgo(2) }] }),
-      // 4. Insurance — approved, awaiting parts
-      baseJob({ id: "demo_j4", jobNumber: "JOB-004", stage: "approved_dismantle", created_at: daysAgo(5),
-        jobInfo: { customer_name: "Ms. Tharushi Fernando", customer_phone: "0773456789", vehicle_reg: "WP CAB 7890", vehicle_make: "Suzuki", vehicle_model: "Wagon R", insurance_name: "Allianz Insurance Lanka", work_type: "paint", job_type: "insurance" },
-        estimates: [{ id: "est_d4", number: "EST-001", type: "insurance_claim", label: "Insurance Claim", status: "approved", parts: [{ id: "p_d4a", name: "Rear Bumper" }, { id: "p_d4b", name: "Boot Lid" }], entries: [{ id: "e_d4a", part_id: "p_d4a", category: "replace", qty: 1, rate: 28000, remarks: "S/H" }, { id: "e_d4b", part_id: "p_d4b", category: "remove_refix", qty: 1, rate: 12000 }], sundries: [], total: 40000, approved_entries: [{ id: "e_d4a", part_id: "p_d4a", category: "replace", qty: 1, rate: 25000, approved_rate: 25000, approval_status: "cut", remarks: "S/H" }, { id: "e_d4b", part_id: "p_d4b", category: "remove_refix", qty: 1, rate: 12000, approved_rate: 12000, approval_status: "approved" }], approved_total: 37000, created_at: daysAgo(5) }],
-        partsQuotation: [{ id: "pq_d4", partId: "p_d4a_est_d4", partName: "Rear Bumper", estLabel: "Insurance Claim", supplier: "Toyota Lanka", quotedPrice: 22000, approvedPrice: 22000, remarks: "S/H" }],
-        pqStatus: "approved", pqApprovalPhoto: "https://placeholder.co/400x300?text=PQ+Approval" }),
-      // 5. Insurance — in progress, paint+mech work
-      baseJob({ id: "demo_j5", jobNumber: "JOB-005", stage: "in_progress", created_at: daysAgo(8),
-        jobInfo: { customer_name: "Mr. Roshan Wickramasinghe", customer_phone: "0759876543", vehicle_reg: "CAR 4567", vehicle_make: "Mitsubishi", vehicle_model: "Lancer", insurance_name: "Continental Insurance", work_type: "both", job_type: "insurance" },
-        estimates: [{ id: "est_d5", number: "EST-001", type: "insurance_claim", label: "Insurance Claim", status: "approved", parts: [{ id: "p_d5a", name: "RHS Front Door" }], entries: [{ id: "e_d5a", part_id: "p_d5a", category: "replace", qty: 1, rate: 45000, remarks: "S/H" }, { id: "e_d5b", part_id: "p_d5a", category: "booth_painting", qty: 1, rate: 15000 }], sundries: [], total: 60000, approved_entries: [{ id: "e_d5a", part_id: "p_d5a", category: "replace", qty: 1, rate: 45000, approved_rate: 45000, approval_status: "approved" }, { id: "e_d5b", part_id: "p_d5a", category: "booth_painting", qty: 1, rate: 15000, approved_rate: 15000, approval_status: "approved" }], approved_total: 60000, created_at: daysAgo(8) }],
-        partsOrdered: true, partsArrived: { "p_d5a": true } }),
-      // 6. Direct — non-insurance job in progress
-      baseJob({ id: "demo_j6", jobNumber: "JOB-006", stage: "in_progress", created_at: daysAgo(3),
-        jobInfo: { customer_name: "Mr. Ajith Kumara", customer_phone: "0716543210", vehicle_reg: "GC 7890", vehicle_make: "Toyota", vehicle_model: "Hilux", insurance_name: "", work_type: "mechanical", job_type: "direct" },
-        estimates: [{ id: "est_d6", number: "EST-001", type: "quotation", label: "Quotation", status: "approved", parts: [{ id: "p_d6a", name: "Brake Pads (Front)" }], entries: [{ id: "e_d6a", part_id: "p_d6a", category: "replace", qty: 1, rate: 8500 }, { id: "e_d6b", part_id: "p_d6a", category: "labour", qty: 1, rate: 3500 }], sundries: [{ id: "sun_d6", name: "Brake Fluid", rate: 1200, qty: 1 }], total: 13200, approved_entries: [{ id: "e_d6a", part_id: "p_d6a", category: "replace", qty: 1, rate: 8500 }, { id: "e_d6b", part_id: "p_d6a", category: "labour", qty: 1, rate: 3500 }], approved_total: 12000, created_at: daysAgo(3) }] }),
-      // 7. Quick job — being worked on
-      baseJob({ id: "demo_j7", jobNumber: "JOB-007", stage: "job_received", created_at: daysAgo(0),
-        jobInfo: { customer_name: "Walk-in Customer", customer_phone: "0789876543", vehicle_reg: "KP 1997", vehicle_make: "Toyota", vehicle_model: "Aqua", insurance_name: "", work_type: "paint", job_type: "quick" },
-        jobCosts: [{ id: "jc_d7a", name: "Touch-up paint", type: "part", source: "ex_stock", cost: 0, confirmed: true }, { id: "jc_d7b", name: "Polishing labour", type: "labour", source: null, cost: 2500, confirmed: true }] }),
-      // 8. Insurance — closed (fully paid)
-      baseJob({ id: "demo_j8", jobNumber: "JOB-008", stage: "closed", created_at: daysAgo(60),
-        jobInfo: { customer_name: "Dr. Lakshman Gunaratne", customer_phone: "0704567890", vehicle_reg: "BBB 1111", vehicle_make: "Mercedes-Benz", vehicle_model: "C200", insurance_name: "Janashakthi Insurance", work_type: "paint", job_type: "insurance" },
-        estimates: [{ id: "est_d8", number: "EST-001", type: "insurance_claim", label: "Insurance Claim", status: "approved", parts: [{ id: "p_d8a", name: "Front Bumper" }], entries: [{ id: "e_d8a", part_id: "p_d8a", category: "replace", qty: 1, rate: 85000 }], sundries: [], total: 85000, approved_entries: [{ id: "e_d8a", part_id: "p_d8a", category: "replace", qty: 1, rate: 85000, approved_rate: 85000, approval_status: "approved" }], approved_total: 85000, created_at: daysAgo(60) }],
-        invoices: [{ id: "inv_d8", invoice_number: `INV-${today.getFullYear()}-0001`, source_estimates: ["EST-001"], status: "paid", items: [{ id: "ii_d8", description: "Front Bumper", category: "replace", qty: 1, unit_price: 85000 }], payments: [{ id: "pay_d8a", amount: 85000, type: "insurance", date: daysAgo(20), ins_status: "received", reference: "CHQ-22456" }], created_at: daysAgo(58), finalized_at: daysAgo(45) }] }),
-      // 9. Quick — closed, cash paid
-      baseJob({ id: "demo_j9", jobNumber: "JOB-009", stage: "closed", created_at: daysAgo(15),
-        jobInfo: { customer_name: "Mr. Dinesh Madushan", customer_phone: "0728765432", vehicle_reg: "PV 2345", vehicle_make: "Honda", vehicle_model: "Fit", insurance_name: "", work_type: "paint", job_type: "quick" },
-        invoices: [{ id: "inv_d9", invoice_number: `INV-${today.getFullYear()}-0002`, source_estimates: ["Quick Job"], status: "paid", items: [{ id: "ii_d9a", description: "Bonnet polishing", category: "labour", qty: 1, unit_price: 3500 }], payments: [{ id: "pay_d9", amount: 3500, type: "customer", date: daysAgo(15), method: "cash" }], created_at: daysAgo(15), finalized_at: daysAgo(15) }],
-        jobCosts: [{ id: "jc_d9", name: "Bonnet polishing", type: "labour", cost: 0, confirmed: true }] }),
-      // 10. Cancelled job (customer changed mind)
-      baseJob({ id: "demo_j10", jobNumber: "JOB-010", stage: "cancelled", created_at: daysAgo(7), cancelledAt: daysAgo(5),
-        jobInfo: { customer_name: "Ms. Anushka Perera", customer_phone: "0747890123", vehicle_reg: "BAA 8888", vehicle_make: "Suzuki", vehicle_model: "Swift", insurance_name: "Fairfirst Insurance", work_type: "paint", job_type: "insurance" },
-        estimates: [{ id: "est_d10", number: "EST-001", type: "insurance_claim", label: "Insurance Claim", status: "draft", parts: [{ id: "p_d10", name: "RHS Fender" }], entries: [{ id: "e_d10", part_id: "p_d10", category: "replace", qty: 1, rate: 22000, remarks: "S/H" }], sundries: [], total: 22000, created_at: daysAgo(6) }] }),
-      // 11. Warranty job (linked to closed JOB-008)
-      baseJob({ id: "demo_j11", jobNumber: "JOB-011", stage: "in_progress", created_at: daysAgo(2),
-        is_warranty: true, parent_job_id: "demo_j8", parent_job_number: "JOB-008", parent_job_date: daysAgo(60),
-        jobInfo: { customer_name: "Dr. Lakshman Gunaratne", customer_phone: "0704567890", vehicle_reg: "BBB 1111", vehicle_make: "Mercedes-Benz", vehicle_model: "C200", insurance_name: "", work_type: "paint", job_type: "direct" } }),
-      // 12. Job on hold (delivered, awaiting follow-up)
-      baseJob({ id: "demo_j12", jobNumber: "JOB-012", stage: "follow_up", created_at: daysAgo(20), onHold: true, holdUntil: daysAgo(-7),
-        jobInfo: { customer_name: "Mr. Pradeep Silva", customer_phone: "0759876543", vehicle_reg: "BAS 7777", vehicle_make: "Toyota", vehicle_model: "Vitz", insurance_name: "AIA Insurance Lanka", work_type: "paint", job_type: "insurance" },
-        estimates: [{ id: "est_d12", number: "EST-001", type: "insurance_claim", label: "Insurance Claim", status: "approved", parts: [{ id: "p_d12", name: "Rear Bumper" }], entries: [{ id: "e_d12", part_id: "p_d12", category: "replace", qty: 1, rate: 18000 }], sundries: [], total: 18000, approved_entries: [{ id: "e_d12", part_id: "p_d12", category: "replace", qty: 1, rate: 18000, approved_rate: 18000, approval_status: "approved" }], approved_total: 18000, created_at: daysAgo(20) }],
-        invoices: [{ id: "inv_d12", invoice_number: `INV-${today.getFullYear()}-0003`, source_estimates: ["EST-001"], status: "partially_paid", items: [{ id: "ii_d12", description: "Rear Bumper", category: "replace", qty: 1, unit_price: 18000 }], payments: [{ id: "pay_d12", amount: 18000, type: "insurance", date: daysAgo(8), ins_status: "recorded", reference: "Pending claim" }], created_at: daysAgo(15), finalized_at: daysAgo(10) }],
-        followUpNote: "Customer didn't answer twice", followUpAttempts: 2 }),
-      // 13. Direct, ready for delivery, customer pays cash
-      baseJob({ id: "demo_j13", jobNumber: "JOB-013", stage: "ready", created_at: daysAgo(4),
-        jobInfo: { customer_name: "Mrs. Chamari Jayasinghe", customer_phone: "0712098765", vehicle_reg: "WP CAW 3210", vehicle_make: "Honda", vehicle_model: "Civic", insurance_name: "", work_type: "paint", job_type: "direct" },
-        estimates: [{ id: "est_d13", number: "EST-001", type: "quotation", label: "Quotation", status: "approved", parts: [{ id: "p_d13", name: "LHS Side Mirror" }], entries: [{ id: "e_d13", part_id: "p_d13", category: "replace", qty: 1, rate: 8500 }], sundries: [], total: 8500, approved_entries: [{ id: "e_d13", part_id: "p_d13", category: "replace", qty: 1, rate: 8500 }], approved_total: 8500, created_at: daysAgo(4) }],
-        invoices: [{ id: "inv_d13", invoice_number: `INV-${today.getFullYear()}-0004`, source_estimates: ["EST-001"], status: "draft", items: [{ id: "ii_d13", description: "LHS Side Mirror", category: "replace", qty: 1, unit_price: 8500 }], payments: [], created_at: daysAgo(4) }] }),
-      // 14. Insurance with U/S replace + supplementary estimate
-      baseJob({ id: "demo_j14", jobNumber: "JOB-014", stage: "qc", created_at: daysAgo(12),
-        jobInfo: { customer_name: "Mr. Ravi Senanayake", customer_phone: "0714567890", vehicle_reg: "CAR 8901", vehicle_make: "Mazda", vehicle_model: "Demio", insurance_name: "LOLC General Insurance", work_type: "paint", job_type: "insurance" },
-        estimates: [{ id: "est_d14a", number: "EST-001", type: "insurance_claim", label: "Insurance Claim", status: "approved", parts: [{ id: "p_d14a", name: "Front Bumper" }, { id: "p_d14b", name: "Bonnet" }], entries: [{ id: "e_d14a", part_id: "p_d14a", category: "replace", qty: 1, rate: 32000, remarks: "S/H" }, { id: "e_d14b", part_id: "p_d14b", category: "remove_refix", qty: 1, rate: 8000 }], sundries: [], total: 40000, approved_entries: [{ id: "e_d14a", part_id: "p_d14a", category: "replace", qty: 1, rate: 0, approved_rate: 0, approval_status: "use_same", remarks: "U/S" }, { id: "e_d14b", part_id: "p_d14b", category: "remove_refix", qty: 1, rate: 8000, approved_rate: 8000, approval_status: "approved" }], approved_total: 8000, created_at: daysAgo(12) }, { id: "est_d14b", number: "EST-001-S1", type: "supplementary", label: "Supplementary 1", status: "approved", parts: [{ id: "p_d14c", name: "Front Grille" }], entries: [{ id: "e_d14c", part_id: "p_d14c", category: "replace", qty: 1, rate: 4500 }], sundries: [], total: 4500, approved_entries: [{ id: "e_d14c", part_id: "p_d14c", category: "replace", qty: 1, rate: 4500, approved_rate: 4500, approval_status: "approved" }], approved_total: 4500, created_at: daysAgo(8) }] }),
-    ]
-  }
-
-  const seedDemoData = async () => {
-    if (!confirm("⚠️ This will WIPE all your jobs, POs, GRNs and load 14 demo jobs + sample store/cash data. Continue?")) return false
-    try {
-      // Wipe Supabase tables
-      await supabase.from("jobs").delete().neq("id", "_never_match_")
-      await supabase.from("store_data").delete().eq("id", "main")
-      // Build demo jobs
-      const demoJobs = buildDemoJobs()
-      // Insert jobs into Supabase
-      const rows = demoJobs.map(j => ({ id: j.id, data: j, created_at: j.created_at, stage: j.stage }))
-      const { error } = await supabase.from("jobs").upsert(rows)
-      if (error) throw error
-      // Seed store + cashbook
-      const today = new Date()
-      const daysAgo = (n) => new Date(today.getTime() - n * 86400000).toISOString().slice(0, 10)
-      const demoCashBook = {
-        openingCash: 25000,
-        bankBalance: 350000,
-        miscExpenses: [
-          { id: genId("exp"), date: daysAgo(0), description: "Lunch for staff", amount: 1500, category: "food" },
-          { id: genId("exp"), date: daysAgo(0), description: "CEB electricity bill", amount: 8500, category: "utility" },
-          { id: genId("exp"), date: daysAgo(1), description: "Diesel for compressor", amount: 4500, category: "transport" },
-        ],
-        dailyCounts: [{ date: daysAgo(1), actualCash: 24850, note: "Rs. 150 short — investigated", timestamp: daysAgo(1) }],
-      }
-      await supabase.from("store_data").upsert({ id: "main", data: { purchaseOrders: DEMO_POS, grns: DEMO_GRNS, cashBook: demoCashBook }, updated_at: new Date().toISOString() })
-      // Reload local state
-      setJobs(demoJobs)
-      setPurchaseOrders(DEMO_POS)
-      setGrns(DEMO_GRNS)
-      setCashBook(demoCashBook)
-      tt("✅ Demo data seeded — 14 jobs, store, cashbook ready")
-      return true
-    } catch (err) {
-      console.error("Seed failed:", err)
-      tt("❌ Seed failed — check console")
-      return false
-    }
-  }
-
-  // ═══ STORE / PROCUREMENT ═══
-  const DEMO_POS = [
-    { id: "po_demo1", poNumber: "PO-001", status: "ordered", supplier: "Nippon Paint Lanka", supplierPhone: "0112345678", supplierWhatsapp: "0771234567", supplierEmail: "orders@nipponpaint.lk", supplierAddress: "Colombo 10", items: [
-      { id: "pi_d1", name: "2K Clear Coat", qty: 5, unit: "litre", unitPrice: 4500, received: 0 },
-      { id: "pi_d2", name: "Primer Surfacer (Grey)", qty: 10, unit: "litre", unitPrice: 2800, received: 0 },
-      { id: "pi_d3", name: "Hardener", qty: 3, unit: "litre", unitPrice: 3200, received: 0 },
-    ], notes: "Delivery expected by end of week", totalAmount: 60100, created_at: "2026-03-15T08:00:00Z" },
-    { id: "po_demo2", poNumber: "PO-002", status: "received", supplier: "Lanka Auto Parts", supplierPhone: "0112987654", supplierWhatsapp: "0779876543", supplierEmail: "sales@lankaautoparts.lk", supplierAddress: "Nugegoda", items: [
-      { id: "pi_d4", name: "Sandpaper P800", qty: 50, unit: "sheet", unitPrice: 120, received: 50 },
-      { id: "pi_d5", name: "Sandpaper P1200", qty: 30, unit: "sheet", unitPrice: 150, received: 30 },
-      { id: "pi_d6", name: "Masking Tape 1\"", qty: 20, unit: "roll", unitPrice: 350, received: 20 },
-    ], notes: "", totalAmount: 17500, created_at: "2026-03-10T09:30:00Z" },
-    { id: "po_demo3", poNumber: "PO-003", status: "draft", supplier: "Akzo Nobel Lanka", supplierPhone: "0114567890", supplierWhatsapp: "0764567890", supplierEmail: "info@akzonobel.lk", supplierAddress: "Peliyagoda", items: [
-      { id: "pi_d7", name: "Base Coat - Pearl White (NH788P)", qty: 2, unit: "litre", unitPrice: 12000, received: 0 },
-      { id: "pi_d8", name: "Base Coat - Midnight Blue (B607P)", qty: 1, unit: "litre", unitPrice: 14500, received: 0 },
-      { id: "pi_d9", name: "Thinner (Slow)", qty: 5, unit: "litre", unitPrice: 1800, received: 0 },
-    ], notes: "Check colour code before ordering", totalAmount: 47500, created_at: "2026-03-19T14:00:00Z" },
-  ]
-  const DEMO_GRNS = [
-    { id: "grn_demo1", grnNumber: "GRN-001", poId: "po_demo2", supplier: "Lanka Auto Parts", items: [
-      { id: "gi_d1", name: "Sandpaper P800", qty: 50, unit: "sheet", unitPrice: 120, poItemId: "pi_d4" },
-      { id: "gi_d2", name: "Sandpaper P1200", qty: 30, unit: "sheet", unitPrice: 150, poItemId: "pi_d5" },
-      { id: "gi_d3", name: "Masking Tape 1\"", qty: 20, unit: "roll", unitPrice: 350, poItemId: "pi_d6" },
-    ], receivedBy: "Kamal", invoiceRef: "INV-LA-4521", invoicePhoto: null, notes: "All items in good condition", totalAmount: 17500, receivedDate: "2026-03-12T11:00:00Z", created_at: "2026-03-12T11:00:00Z" },
-    { id: "grn_demo2", grnNumber: "GRN-002", poId: null, supplier: "Perera Paint Supplies", items: [
-      { id: "gi_d4", name: "Polishing Compound", qty: 2, unit: "kg", unitPrice: 3500, poItemId: null },
-      { id: "gi_d5", name: "Microfiber Cloth", qty: 10, unit: "pcs", unitPrice: 250, poItemId: null },
-      { id: "gi_d6", name: "Spray Gun Cleaner", qty: 3, unit: "litre", unitPrice: 1200, poItemId: null },
-    ], receivedBy: "Nuwan", invoiceRef: "PPS-887", invoicePhoto: null, notes: "Direct purchase - urgent need", totalAmount: 13100, receivedDate: "2026-03-18T15:30:00Z", created_at: "2026-03-18T15:30:00Z" },
-  ]
   const [purchaseOrders, setPurchaseOrders] = useState([])
   const [grns, setGrns] = useState([])
   // CashBook: { miscExpenses: [{id, date, description, amount, category}], dailyCounts: [{date, actualCash, note}], bankBalance: number, openingCash: number }
@@ -459,29 +311,35 @@ export function WorkshopProvider({ children }) {
   // Assessor reference list: [{id, name, phone, insurance}] — built up as jobs record assessors
   const [assessors, setAssessors] = useState([])
   const storeSyncRef = useRef(false)
+  // Sync-health surface: {type:'error'|'conflict', msg} — rendered as a banner in the app shell
+  const [syncIssue, setSyncIssue] = useState(null)
+  const [storeLoadError, setStoreLoadError] = useState(false)
+  const storeBaseRef = useRef(null)   // server updated_at we last loaded/wrote (optimistic-lock baseline)
+  const storeAdoptRef = useRef(false) // skip dirty-marking once after adopting server state
+  const storeStateRef = useRef({ purchaseOrders: [], grns: [], cashBook: null, assessors: [] })
+  const storeRetryRef = useRef(null)
   // Load from Supabase
-  useEffect(() => {
+  const loadStore = useCallback(() => {
+    setStoreLoadError(false)
     supabase.from("store_data").select("*").eq("id", "main").single()
       .then(({ data, error }) => {
         if (error && error.code !== "PGRST116") {
-          // Transient load failure — do NOT seed demo data or enable sync,
-          // otherwise the next sync would overwrite real data with demo/empty state
+          // Load failure — do NOT enable sync (the next write would overwrite real
+          // data with empty state). Surface it loudly; the banner offers retry.
           console.error("Failed to load store data:", error)
+          setStoreLoadError(true)
           return
         }
-        if (data?.data && (data.data.purchaseOrders?.length > 0 || data.data.grns?.length > 0)) {
-          setPurchaseOrders(data.data.purchaseOrders || [])
-          setGrns(data.data.grns || [])
-        } else {
-          // Load demo data if empty
-          setPurchaseOrders(DEMO_POS)
-          setGrns(DEMO_GRNS)
-        }
+        storeAdoptRef.current = true
+        setPurchaseOrders(data?.data?.purchaseOrders || [])
+        setGrns(data?.data?.grns || [])
         if (data?.data?.cashBook) setCashBook(data.data.cashBook)
         if (data?.data?.assessors) setAssessors(data.data.assessors)
+        storeBaseRef.current = data?.updated_at || null
         storeSyncRef.current = true
       })
   }, [])
+  useEffect(() => { loadStore() }, [loadStore])
   // Remember an assessor in the reference list (upsert by name, case-insensitive)
   const rememberAssessor = useCallback((name, phone, insurance) => {
     const n = (name || "").trim()
@@ -498,21 +356,72 @@ export function WorkshopProvider({ children }) {
       return [...prev, { id: genId("ass"), name: n, phone: p, insurance: insurance || "" }]
     })
   }, [])
-  // Sync store data to Supabase (debounced)
+  // Sync store data to Supabase (debounced, conflict-checked, retried on failure)
   const storeDirtyRef = useRef(false)
   const storeTimerRef = useRef(null)
+  const flushStore = useCallback(async () => {
+    if (!storeSyncRef.current || !storeDirtyRef.current) return
+    const payload = storeStateRef.current
+    const nowISO = new Date().toISOString()
+    const baseline = storeBaseRef.current
+    try {
+      if (baseline) {
+        // Optimistic lock: only write if the server row is still the version we loaded
+        const { data: res, error } = await supabase.from("store_data")
+          .update({ data: payload, updated_at: nowISO })
+          .eq("id", "main").eq("updated_at", baseline).select("id")
+        if (error) throw error
+        if (!res || res.length === 0) {
+          // Another device wrote since we loaded — adopt the server copy instead of
+          // clobbering it. The user is told their last change needs re-entering.
+          const { data: remote } = await supabase.from("store_data").select("*").eq("id", "main").single()
+          if (remote?.data) {
+            storeBaseRef.current = remote.updated_at
+            storeAdoptRef.current = true
+            storeDirtyRef.current = false
+            setPurchaseOrders(remote.data.purchaseOrders || [])
+            setGrns(remote.data.grns || [])
+            if (remote.data.cashBook) setCashBook(remote.data.cashBook)
+            setAssessors(remote.data.assessors || [])
+            setSyncIssue({ type: "conflict", msg: "Store/cash data was changed on another device — this screen was refreshed with the latest version. Please re-enter your last change." })
+            return
+          }
+          // Row vanished — recreate it with our copy
+          const { error: insErr } = await supabase.from("store_data").insert({ id: "main", data: payload, updated_at: nowISO })
+          if (insErr) throw insErr
+        }
+      } else {
+        const { error } = await supabase.from("store_data").insert({ id: "main", data: payload, updated_at: nowISO })
+        if (error) {
+          // 23505 = row appeared meanwhile (another device's first write) — record its
+          // version so the next flush goes through the conflict-checked update path
+          if (error.code === "23505") {
+            const { data: remote } = await supabase.from("store_data").select("updated_at").eq("id", "main").single()
+            storeBaseRef.current = remote?.updated_at || null
+          }
+          throw error
+        }
+      }
+      storeBaseRef.current = nowISO
+      storeDirtyRef.current = false
+      setSyncIssue(prev => (prev && prev.type === "error" ? null : prev))
+    } catch (err) {
+      // Keep the dirty flag set and retry — never silently drop a write
+      console.error("Store sync error:", err)
+      setSyncIssue({ type: "error", msg: "Changes not saved yet — check your connection. Retrying…" })
+      if (storeRetryRef.current) clearTimeout(storeRetryRef.current)
+      storeRetryRef.current = setTimeout(flushStore, 5000)
+    }
+  }, [])
   useEffect(() => {
+    storeStateRef.current = { purchaseOrders, grns, cashBook, assessors }
     if (!storeSyncRef.current) return
+    if (storeAdoptRef.current) { storeAdoptRef.current = false; return } // server state adopted — not a local edit
     storeDirtyRef.current = true
     if (storeTimerRef.current) clearTimeout(storeTimerRef.current)
-    storeTimerRef.current = setTimeout(() => {
-      if (!storeDirtyRef.current) return
-      supabase.from("store_data").upsert({ id: "main", data: { purchaseOrders, grns, cashBook, assessors }, updated_at: new Date().toISOString() })
-        .then(({ error }) => { if (error) console.error("Store sync error:", error) })
-      storeDirtyRef.current = false
-    }, 1000)
+    storeTimerRef.current = setTimeout(flushStore, 1000)
     return () => { if (storeTimerRef.current) clearTimeout(storeTimerRef.current) }
-  }, [purchaseOrders, grns, cashBook, assessors])
+  }, [purchaseOrders, grns, cashBook, assessors, flushStore])
   // Parts Quotation (insurance) / PO (direct)
   const [partsQuotation, setPartsQuotation] = useState([]) // [{id, partName, estLabel, supplier, quotedPrice, approvedPrice, remarks}]
   const [pqStatus, setPqStatus] = useState("draft") // draft | submitted | approved
@@ -548,6 +457,9 @@ export function WorkshopProvider({ children }) {
   const prevJobsRef = useRef([])
   const dirtyJobsRef = useRef(new Set()) // track which job IDs have changed
   const syncTimerRef = useRef(null)
+  const syncedAtRef = useRef(new Map()) // job id → server updated_at (optimistic-lock baseline)
+  const adoptJobRef = useRef(new Set()) // ids just adopted from the server — skip dirty-marking once
+  const jobsRetryRef = useRef(null)
   const [loadError, setLoadError] = useState(null)
 
   // Load active + on-hold jobs on mount; closed jobs loaded lazily when tab opened
@@ -566,6 +478,8 @@ export function WorkshopProvider({ children }) {
           return
         }
         const loaded = (data || []).map(row => row.data)
+        // Record each job's server version for optimistic-lock checks on write
+        loaded.forEach(j => { if (j?.id && j.updated_at) syncedAtRef.current.set(j.id, j.updated_at) })
         prevJobsRef.current = loaded
         setJobs(loaded)
         initializedRef.current = true
@@ -590,6 +504,7 @@ export function WorkshopProvider({ children }) {
       .then(({ data, error }) => {
         if (error) { console.error("Failed to load closed jobs:", error); return }
         const loaded = (data || []).map(row => row.data)
+        loaded.forEach(j => { if (j?.id && j.updated_at) syncedAtRef.current.set(j.id, j.updated_at) })
         setJobs(prev => {
           const existing = new Set(prev.map(j => j.id))
           const newRows = loaded.filter(j => !existing.has(j.id))
@@ -619,28 +534,64 @@ export function WorkshopProvider({ children }) {
     job_type: job.jobInfo?.job_type || "",
   })
 
-  // Debounced sync: collects dirty job IDs and flushes after 500ms
-  const flushSync = useCallback(() => {
+  // Debounced sync: collects dirty job IDs and flushes after 500ms.
+  // Each write is optimistic-locked on the server's data->>updated_at; a job is
+  // removed from the dirty set ONLY after its write succeeds (failures retry).
+  const flushSync = useCallback(async () => {
     if (!initializedRef.current) return
     const dirty = dirtyJobsRef.current
     if (dirty.size === 0) return
-
+    const ids = [...dirty]
     const current = prevJobsRef.current // already updated by the effect
-    const toUpsert = []
-    const nowISO = new Date().toISOString()
-    for (const id of dirty) {
+    let failed = false
+    for (const id of ids) {
       const job = current.find(j => j.id === id)
-      if (job) {
-        // Stamp updated_at so concurrent edits can be detected later
-        job.updated_at = nowISO
-        toUpsert.push(buildRow(job))
+      if (!job) { dirty.delete(id); continue }
+      const nowISO = new Date().toISOString()
+      const row = buildRow({ ...job, updated_at: nowISO })
+      const baseline = syncedAtRef.current.get(id)
+      try {
+        if (baseline) {
+          // Only write if the server still holds the version we last saw
+          const { data: res, error } = await supabase.from("jobs")
+            .update(row).eq("id", id).eq("data->>updated_at", baseline).select("id")
+          if (error) throw error
+          if (!res || res.length === 0) {
+            // Version mismatch: the job changed on another device — adopt the
+            // server copy rather than silently clobbering its payments/edits
+            const { data: remoteRows, error: rerr } = await supabase.from("jobs").select("*").eq("id", id)
+            if (rerr) throw rerr
+            const remote = remoteRows && remoteRows[0]
+            if (remote?.data) {
+              syncedAtRef.current.set(id, remote.data.updated_at)
+              adoptJobRef.current.add(id)
+              setJobs(prev => prev.map(j => j.id === id ? remote.data : j))
+              dirty.delete(id)
+              setSyncIssue({ type: "conflict", msg: `${remote.data.jobNumber ? "Job " + remote.data.jobNumber : "A job"} was changed on another device — refreshed with the latest version. Please re-check your last change.` })
+              continue
+            }
+            // Row gone on the server — recreate with our copy so local work isn't lost
+            const { error: uerr } = await supabase.from("jobs").upsert(row)
+            if (uerr) throw uerr
+          }
+        } else {
+          const { error } = await supabase.from("jobs").upsert(row)
+          if (error) throw error
+        }
+        syncedAtRef.current.set(id, nowISO)
+        dirty.delete(id)
+      } catch (err) {
+        console.error("Failed to sync job:", id, err)
+        failed = true
       }
     }
-    if (toUpsert.length > 0) {
-      supabase.from("jobs").upsert(toUpsert)
-        .then(({ error }) => { if (error) console.error("Failed to sync jobs:", error) })
+    if (failed) {
+      setSyncIssue({ type: "error", msg: "Changes not saved yet — check your connection. Retrying…" })
+      if (jobsRetryRef.current) clearTimeout(jobsRetryRef.current)
+      jobsRetryRef.current = setTimeout(flushSync, 5000)
+    } else {
+      setSyncIssue(prev => (prev && prev.type === "error" ? null : prev))
     }
-    dirty.clear()
   }, [])
 
   // Sync job changes to Supabase with debouncing and dirty tracking
@@ -654,7 +605,9 @@ export function WorkshopProvider({ children }) {
     for (const job of current) {
       const prevJob = prevMap.get(job.id)
       if (!prevJob || prevJob !== job) {
-        dirtyJobsRef.current.add(job.id)
+        // A job we just adopted FROM the server isn't a local edit — don't write it back
+        if (adoptJobRef.current.has(job.id)) adoptJobRef.current.delete(job.id)
+        else dirtyJobsRef.current.add(job.id)
       }
     }
 
@@ -906,6 +859,43 @@ export function WorkshopProvider({ children }) {
     if (!activeJobId) return
     setJobs(prev => prev.map(j => j.id === activeJobId ? { ...j, jobInfo: { ...jobInfo }, stage: jobStage, paused: jobPaused, partsOrdered, partsArrived: { ...partsArrived }, partsQuotation: [...partsQuotation], pqStatus, pqApprovalPhoto, pqLumpSum, pqLumpMode, customerConfirmed, estimates: [...estimates], invoices: [...invoices], jobDocs: [...jobDocs], qcChecks: { ...qcChecks }, supplierInvoices: [...supplierInvoices], jobCosts: [...jobCosts], advances: [...advances], followUpNote, followUpAttempts, followUpLog: [...followUpLog] } : j))
   }
+  // ═══ LAST-GASP FLUSH (tab hidden / closing) ═══
+  // Job-screen edits (payments, invoices, QC…) live in working state until
+  // saveCurrentJob() runs on navigation — if the tab is killed first they'd be
+  // lost. On visibilitychange/pagehide, merge the active job's screen state and
+  // write it plus anything dirty immediately. Unconditional upsert here: it's a
+  // best-effort last write, and waiting on a conflict round-trip may not finish.
+  const flushAllNowRef = useRef(null)
+  flushAllNowRef.current = () => {
+    try {
+      if (activeJobId) {
+        const base = prevJobsRef.current.find(j => j.id === activeJobId)
+        if (base) {
+          const merged = { ...base, jobInfo: { ...jobInfo }, stage: jobStage, paused: jobPaused, partsOrdered, partsArrived: { ...partsArrived }, partsQuotation: [...partsQuotation], pqStatus, pqApprovalPhoto, pqLumpSum, pqLumpMode, customerConfirmed, estimates: [...estimates], invoices: [...invoices], jobDocs: [...jobDocs], qcChecks: { ...qcChecks }, supplierInvoices: [...supplierInvoices], jobCosts: [...jobCosts], advances: [...advances], followUpNote, followUpAttempts, followUpLog: [...followUpLog], updated_at: new Date().toISOString() }
+          supabase.from("jobs").upsert(buildRow(merged))
+            .then(({ error }) => { if (!error) syncedAtRef.current.set(activeJobId, merged.updated_at) })
+        }
+      }
+      saveCurrentJob() // keep React state aligned if the tab resumes instead of dying
+      if (syncTimerRef.current) clearTimeout(syncTimerRef.current)
+      flushSync()
+      if (storeTimerRef.current) clearTimeout(storeTimerRef.current)
+      flushStore()
+    } catch (e) { console.error("flushAllNow failed:", e) }
+  }
+  useEffect(() => {
+    const onHide = () => { if (document.visibilityState === "hidden") flushAllNowRef.current?.() }
+    const onLeave = () => flushAllNowRef.current?.()
+    document.addEventListener("visibilitychange", onHide)
+    window.addEventListener("pagehide", onLeave)
+    window.addEventListener("beforeunload", onLeave)
+    return () => {
+      document.removeEventListener("visibilitychange", onHide)
+      window.removeEventListener("pagehide", onLeave)
+      window.removeEventListener("beforeunload", onLeave)
+    }
+  }, [])
+
   const openJob = (job) => {
     saveCurrentJob() // save any unsaved changes before switching jobs
     setActiveJobId(job.id)
@@ -1609,6 +1599,8 @@ export function WorkshopProvider({ children }) {
     isUploading, setIsUploading,
     closedLoaded, setClosedLoaded, closedCount, loadClosedJobs,
     loadError, loadJobs,
+    syncIssue, clearSyncIssue: () => setSyncIssue(null),
+    storeLoadError, loadStore,
     newJobInfo, setNewJobInfo,
     newJobMakeSugg, setNewJobMakeSugg,
     newJobInsDD, setNewJobInsDD,
@@ -1639,7 +1631,7 @@ export function WorkshopProvider({ children }) {
     generatePOText, generatePQText, sharePQ,
     generateEstimatePDF, generateInvoicePDF, generatePQPDF, openPDF,
     saveCurrentJob, openJob, goHome,
-    startNewJob, startWarrantyJob, validateAndCreateJob, seedDemoData,
+    startNewJob, startWarrantyJob, validateAndCreateJob,
     toggleHold, deleteJob, deleteEstimate,
     advanceStage, goBackStage, getNextActionLabel, getNextStepHint, canAdvance,
     addPart, removePart, handlePartInput, toggleCheck, setRate, toggleRemarks, handleRateEnter,
@@ -1654,12 +1646,31 @@ export function WorkshopProvider({ children }) {
     uploadPhoto, deletePhoto,
   }
 
+  const bannerBtn = { background: "rgba(255,255,255,0.2)", color: "#fff", border: "1px solid rgba(255,255,255,0.4)", borderRadius: 8, padding: "6px 16px", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: FONT, flexShrink: 0 }
+  const bannerRow = (bg) => ({ background: bg, color: "#fff", padding: "12px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, fontFamily: FONT, fontSize: 14, fontWeight: 500 })
+
   return (
     <WorkshopContext.Provider value={value}>
-      {loadError && (
-        <div style={{ position: "fixed", top: 0, left: 0, right: 0, zIndex: 9999, background: C.red, color: "#fff", padding: "12px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", fontFamily: FONT, fontSize: 14, fontWeight: 500 }}>
-          <span>{loadError}</span>
-          <button onClick={loadJobs} style={{ background: "rgba(255,255,255,0.2)", color: "#fff", border: "1px solid rgba(255,255,255,0.4)", borderRadius: 8, padding: "6px 16px", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: FONT }}>Retry</button>
+      {(loadError || storeLoadError || syncIssue) && (
+        <div style={{ position: "fixed", top: 0, left: 0, right: 0, zIndex: 9999, display: "flex", flexDirection: "column" }}>
+          {loadError && (
+            <div style={bannerRow(C.red)}>
+              <span>{loadError}</span>
+              <button onClick={loadJobs} style={bannerBtn}>Retry</button>
+            </div>
+          )}
+          {storeLoadError && (
+            <div style={bannerRow(C.red)}>
+              <span>⚠️ Store &amp; cash book failed to load — nothing entered there will be saved until this is fixed.</span>
+              <button onClick={loadStore} style={bannerBtn}>Retry</button>
+            </div>
+          )}
+          {syncIssue && (
+            <div style={bannerRow(syncIssue.type === "error" ? C.red : C.orange)}>
+              <span>⚠️ {syncIssue.msg}</span>
+              {syncIssue.type === "conflict" && <button onClick={() => setSyncIssue(null)} style={bannerBtn}>OK</button>}
+            </div>
+          )}
         </div>
       )}
       {children}

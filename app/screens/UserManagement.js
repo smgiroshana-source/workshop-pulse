@@ -1,7 +1,7 @@
 "use client"
 import { useState, useEffect } from "react"
 import { useAuth, listUsers, addUser, updateUserRole, toggleUserActive, removeUser } from "../AuthGate"
-import { C, FONT, card, btn, btnSm, inp, NavBar, Sheet, useWorkshop } from "../WorkshopContext"
+import { C, FONT, card, btn, btnSm, inp, NavBar, Sheet } from "../WorkshopContext"
 
 const ROLES = [
   { key: "viewer", label: "Viewer", desc: "Read-only access", icon: "👁️", color: C.muted },
@@ -12,9 +12,7 @@ const ROLES = [
 
 export default function UserManagement({ onBack }) {
   const { isSuperAdmin, user } = useAuth()
-  const { seedDemoData } = useWorkshop()
   const [users, setUsers] = useState([])
-  const [seeding, setSeeding] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [showAdd, setShowAdd] = useState(false)
@@ -123,23 +121,6 @@ export default function UserManagement({ onBack }) {
         </div>
       </div>
 
-      {/* Demo data seed (super admin only) */}
-      <div style={{ ...card, background: "#FF950010", border: "1px solid #FF950040", marginTop: 12 }}>
-        <div style={{ fontSize: 14, fontWeight: 600, color: C.orange, marginBottom: 4 }}>🧪 Reset & Seed Demo Data</div>
-        <div style={{ fontSize: 13, color: C.sub, marginBottom: 12 }}>
-          Wipes ALL existing jobs, POs, GRNs, cashbook and loads 14 demo jobs covering every scenario:
-          insurance × all stages, direct, quick, cancelled, warranty, on-hold, partial payment, U/S parts, supplementary estimates.
-        </div>
-        <button onClick={async () => {
-          setSeeding(true)
-          await seedDemoData()
-          setSeeding(false)
-          setTimeout(() => location.reload(), 500)
-        }} disabled={seeding} style={{ ...btn(C.orange, "#fff"), opacity: seeding ? 0.6 : 1, cursor: seeding ? "wait" : "pointer" }}>
-          {seeding ? "⏳ Wiping & seeding…" : "🧪 Reset & Seed Demo Data"}
-        </button>
-      </div>
-
       {/* SQL Setup notice */}
       {tableError && (
         <div style={{ ...card, background: "#FF950015", border: "1px solid #FF950030" }}>
@@ -158,30 +139,11 @@ export default function UserManagement({ onBack }) {
   updated_at TIMESTAMPTZ DEFAULT now()
 );
 
--- Enable RLS
-ALTER TABLE user_roles ENABLE ROW LEVEL SECURITY;
-
--- Allow authenticated users to read roles
-CREATE POLICY "Users can read roles"
-  ON user_roles FOR SELECT
-  TO authenticated
-  USING (true);
-
--- Allow super admin to manage roles (by email)
-CREATE POLICY "Super admin can insert"
-  ON user_roles FOR INSERT
-  TO authenticated
-  WITH CHECK (true);
-
-CREATE POLICY "Super admin can update"
-  ON user_roles FOR UPDATE
-  TO authenticated
-  USING (true);
-
-CREATE POLICY "Super admin can delete"
-  ON user_roles FOR DELETE
-  TO authenticated
-  USING (true);`}</pre>
+-- Then run supabase-security.sql (in the repo root)
+-- to enable row-level security. It restricts every
+-- table to active staff and role management to the
+-- super admin ONLY — do not write your own
+-- allow-all policies here.`}</pre>
           <button onClick={loadUsers} style={{ ...btnSm(C.orange), marginTop: 12, width: "auto", padding: "10px 20px", fontSize: 14 }}>
             Retry After Creating Table
           </button>
