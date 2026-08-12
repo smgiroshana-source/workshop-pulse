@@ -1285,11 +1285,17 @@ export function WorkshopProvider({ children }) {
     if (isInsurance && hasReplaceItems && unfilledPQ.length > 0) {
       tt(`⚠️ ${unfilledPQ.length} part${unfilledPQ.length > 1 ? "s" : ""} missing supplier prices -- fill Parts Quotation`)
     }
-    // Only items the assessor actually actioned go onto the approval — untouched
-    // (pending) items must NOT ride onto the insurance invoice at the quoted rate
-    const skipped = approvalItems.length - approvedItems.length
+    // Items with no decision must be confirmed, never handled silently: they
+    // used to ride onto the insurance invoice at the quoted rate unnoticed.
+    // (For "used / market rate" letter items: enter the rupee figure you will
+    // bill as the approved rate, or mark U/S — both count as actioned.)
+    const pendingItems = approvalItems.filter(i => i.approved_rate === null && i.approval_status !== "use_same")
+    if (pendingItems.length > 0) {
+      const names = pendingItems.map(i => "• " + (i.part_name || "item")).join("\n")
+      if (!confirm(`${pendingItems.length} item${pendingItems.length > 1 ? "s have" : " has"} NO approved rate:\n\n${names}\n\nThey will be LEFT OFF this approval (and the invoice). Continue?\n\n(Cancel to go back and enter their rates or mark them U/S.)`)) return
+    }
     setEstimates(prev => prev.map(e => e.id !== selEst.id ? e : { ...e, status: "approved", approved_entries: approvedItems.map(i => ({ ...i, rate: i.approval_status === "use_same" ? 0 : (i.approved_rate ?? i.original_rate), remarks: i.approval_status === "use_same" ? "U/S" : (i.remarks || "") })), approved_total: approvedItems.filter(i => i.approval_status !== "use_same").reduce((s, i) => s + (i.approved_rate ?? i.original_rate) * i.qty, 0) }))
-    tt(`${selEst.number} approved${skipped > 0 ? ` — ${skipped} un-actioned item${skipped > 1 ? "s" : ""} left off` : ""}`)
+    tt(`${selEst.number} approved${pendingItems.length > 0 ? ` — ${pendingItems.length} left off` : ""}`)
     // Auto-advance: est_ready -> approved_dismantle (insurance)
     if (jobStage === "est_ready" && isInsurance) advanceStage("approved_dismantle")
     // If all estimates approved and direct job at est_ready -> in_progress
@@ -1409,18 +1415,14 @@ export function WorkshopProvider({ children }) {
     // Flag payments landing AFTER today's cash count — they won't be in it
     const todayLocal = new Date().toLocaleDateString("en-CA")
     const afterCount = (cashBook?.dailyCounts || []).some(c => c.date === todayLocal)
-    // Customer cheques start as pending: they credit the bank only when marked
-    // cleared (Cash Book → Bank tab), and a bounced cheque un-pays the invoice
-    const pay = { id: genId("pay"), amount: amt, type: payType, date: new Date().toISOString(), ...(payType === "insurance" ? { ins_status: "recorded", photo: insPayPhoto, reference: payRef } : { method: payMethod, reference: payRef, ...(payMethod === "cheque" ? { cheque_status: "pending" } : {}) }) }
+    // Bank balance is a manual note (owner decision: the app does not mirror
+    // the bank account) — payments only track who paid, on which invoice
+    const pay = { id: genId("pay"), amount: amt, type: payType, date: new Date().toISOString(), ...(payType === "insurance" ? { ins_status: "recorded", photo: insPayPhoto, reference: payRef } : { method: payMethod, reference: payRef }) }
     const np = [...(selInv.payments || []), pay]
     const updated = { ...selInv, payments: np }
     const ns = calcStatus(updated)
     setInvoices(p => p.map(inv => inv.id === selInv.id ? { ...inv, payments: np, status: ns } : inv))
     setSelInv(prev => ({ ...prev, payments: np, status: ns }))
-    // Auto-add bank balance for bank/online customer payments
-    if (payType !== "insurance" && (payMethod === "bank_transfer" || payMethod === "bank" || payMethod === "online")) {
-      setCashBook(prev => ({ ...prev, bankBalance: (Number(prev.bankBalance) || 0) + amt }))
-    }
     setShowPayForm(false); setPayAmount(""); setPayRef(""); setInsPayPhoto(null)
     const base = payType === "insurance" ? `🛡️ Insurance Rs.${fmt(amt)} recorded` : `💰 Rs.${fmt(amt)} received — nice!`
     tt(afterCount ? base + " ⚠️ AFTER today's cash count — re-count before closing" : base)
@@ -1433,11 +1435,6 @@ export function WorkshopProvider({ children }) {
     const ns = np.length === 0 ? (selInv.finalized_at ? "finalized" : "draft") : calcStatus(updated)
     setInvoices(p => p.map(inv => inv.id === selInv.id ? { ...inv, payments: np, status: ns } : inv))
     setSelInv(prev => ({ ...prev, payments: np, status: ns }))
-    // Reverse bank balance for deleted bank/online payments
-    // (skip advance-applied payments — their bank entry was made when the advance was recorded)
-    if (removed && removed.type !== "insurance" && !removed.advance_id && (removed.method === "bank_transfer" || removed.method === "bank" || removed.method === "online")) {
-      setCashBook(prev => ({ ...prev, bankBalance: (Number(prev.bankBalance) || 0) - (Number(removed.amount) || 0) }))
-    }
     // Release the source advance so it can be re-applied
     if (removed?.advance_id) {
       setAdvances(prev => prev.map(a => a.id === removed.advance_id ? { ...a, appliedTo: null } : a))
@@ -1445,40 +1442,26 @@ export function WorkshopProvider({ children }) {
     setConfirmDel(null); tt("Payment deleted")
   }
   const updateInsStatus = (pid, newStatus) => {
-    const prevPay = (selInv.payments || []).find(p => p.id === pid)
     const np = (selInv.payments || []).map(p => p.id === pid ? { ...p, ins_status: newStatus } : p)
     const updated = { ...selInv, payments: np }
     const ns = calcStatus(updated)
     setInvoices(p => p.map(inv => inv.id === selInv.id ? { ...inv, payments: np, status: ns } : inv))
     setSelInv(prev => ({ ...prev, payments: np, status: ns }))
-    // Insurance settlements land in the bank — keep the bank balance in step
-    // with the received flag (and reverse if the flag is undone)
-    const amt = Number(prevPay?.amount) || 0
-    if (amt > 0 && prevPay) {
-      if (newStatus === "received" && prevPay.ins_status !== "received") {
-        setCashBook(prev => ({ ...prev, bankBalance: (Number(prev.bankBalance) || 0) + amt }))
-      } else if (newStatus !== "received" && prevPay.ins_status === "received") {
-        setCashBook(prev => ({ ...prev, bankBalance: (Number(prev.bankBalance) || 0) - amt }))
-      }
-    }
     tt(`→ ${newStatus}`)
   }
-  // Patch one payment inside any job's invoice (used by Cash Book cheque
-  // clearing, where the target job usually isn't the one open on screen).
-  // Also patches the active job's working state so a later saveCurrentJob
-  // can't overwrite the change with a stale copy.
-  const patchJobPayment = (jobId, invoiceId, paymentId, patch) => {
-    const apply = inv => {
-      if (inv.id !== invoiceId) return inv
-      const np = (inv.payments || []).map(p => p.id === paymentId ? { ...p, ...patch } : p)
-      const upd = { ...inv, payments: np }
-      return { ...upd, status: calcStatus(upd) }
-    }
-    setJobs(prev => prev.map(j => j.id !== jobId ? j : { ...j, invoices: (j.invoices || []).map(apply) }))
-    if (activeJobId === jobId) {
-      setInvoices(prev => prev.map(apply))
-      setSelInv(prev => (prev && prev.id === invoiceId) ? apply(prev) : prev)
-    }
+  // Manual bounce marker for a customer cheque payment (rare — the workshop
+  // only accepts insurance/reputed-company cheques). Bounced = the amount
+  // shows as owed again on the invoice; un-bounce reverses it.
+  const toggleChequeBounced = (pid) => {
+    const target = (selInv.payments || []).find(p => p.id === pid)
+    if (!target) return
+    const bounced = target.cheque_status === "bounced"
+    const np = (selInv.payments || []).map(p => p.id === pid ? { ...p, cheque_status: bounced ? null : "bounced", cheque_bounced_date: bounced ? null : new Date().toISOString() } : p)
+    const updated = { ...selInv, payments: np }
+    const ns = calcStatus(updated)
+    setInvoices(p => p.map(inv => inv.id === selInv.id ? { ...inv, payments: np, status: ns } : inv))
+    setSelInv(prev => ({ ...prev, payments: np, status: ns }))
+    tt(bounced ? "✓ Bounce undone — cheque counts as paid again" : "✗ Cheque marked bounced — amount owed again")
   }
   const applyCustomerDiscount = (d) => {
     const amt = Math.max(0, Number(d) || 0)
@@ -1509,9 +1492,6 @@ export function WorkshopProvider({ children }) {
     if (!isFinite(amt) || amt <= 0) { tt("⚠️ Enter a valid amount"); return false }
     const adv = { id: genId("adv"), amount: amt, method: method || "cash", note: (note || "").trim(), date: new Date().toISOString(), appliedTo: null }
     setAdvances(prev => [...prev, adv])
-    if (method === "bank" || method === "bank_transfer" || method === "online") {
-      setCashBook(prev => ({ ...prev, bankBalance: (Number(prev.bankBalance) || 0) + amt }))
-    }
     tt(`💵 Advance Rs.${fmt(amt)} recorded`)
     return true
   }
@@ -1520,9 +1500,6 @@ export function WorkshopProvider({ children }) {
     if (!a) return
     if (a.appliedTo) { tt("⚠️ Already applied to an invoice — delete the invoice payment instead"); return }
     setAdvances(prev => prev.filter(x => x.id !== id))
-    if (a.method === "bank" || a.method === "bank_transfer" || a.method === "online") {
-      setCashBook(prev => ({ ...prev, bankBalance: (Number(prev.bankBalance) || 0) - (Number(a.amount) || 0) }))
-    }
     tt("Advance removed")
   }
   // Convert unapplied advances into customer payments on the selected invoice.
@@ -1681,7 +1658,7 @@ export function WorkshopProvider({ children }) {
     invCustDiscount, invCustPortion, invCustOwes, invCustBalance, invTotalDiscount, invFullyPaid,
     invExcess, invInsExpected, jobOutstandingTotal,
     updateInvItem, removeInvItem, setInvStatus, calcStatus,
-    addPayment, deletePayment, updateInsStatus, patchJobPayment, applyCustomerDiscount, applyExcess,
+    addPayment, deletePayment, updateInsStatus, toggleChequeBounced, applyCustomerDiscount, applyExcess,
     uploadPhoto, deletePhoto,
   }
 

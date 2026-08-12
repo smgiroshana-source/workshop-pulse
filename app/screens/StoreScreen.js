@@ -309,14 +309,6 @@ function GRNDetail({ grn, onBack, pos, onUpdate, cashBook, setCashBook, tt }) {
     if (!wasPaid && nowPaid) { patch.paymentDate = new Date().toISOString(); patch.paymentAmount = total }
     if (wasPaid && !nowPaid) { patch.paymentDate = null; patch.paymentAmount = 0 }
     if (wasMethod === "cheque" && paymentMethod !== "cheque") { patch.chequeNo = null; patch.chequeBank = null; patch.chequeDate = null; patch.chequeCleared = false }
-    // Bank balance: undo the old method's deduction, apply the new one
-    if (setCashBook) {
-      const amtOld = Number(grn.paymentAmount || grn.totalAmount) || 0
-      const wasBankDeducted = wasPaid && (wasMethod === "bank" || (wasMethod === "cheque" && grn.chequeCleared))
-      const nowBank = nowPaid && paymentMethod === "bank"
-      const delta = (wasBankDeducted ? amtOld : 0) - (nowBank ? total : 0)
-      if (delta !== 0) setCashBook(prev => ({ ...prev, bankBalance: (Number(prev.bankBalance) || 0) + delta }))
-    }
     onUpdate(grn.id, patch)
     setEditing(false)
     tt("✓ GRN updated")
@@ -425,16 +417,7 @@ function GRNDetail({ grn, onBack, pos, onUpdate, cashBook, setCashBook, tt }) {
           <button onClick={() => setEditing(true)} style={{ ...btnOutline(C.accent), marginBottom: SP.sm }}>✏️ Edit</button>
           {grn.paid && grn.paymentMethod !== "credit" && (
             <button onClick={() => {
-              const method = grn.paymentMethod
-              const amt = Number(grn.paymentAmount || grn.totalAmount) || 0
-              const refundMsg = method === "bank" && setCashBook
-                ? `Unmark payment? Rs.${amt.toLocaleString()} will be added back to bank balance. GRN will return to unpaid.`
-                : `Unmark payment? GRN will return to unpaid.`
-              if (!confirm(refundMsg)) return
-              // Restore bank balance if bank payment
-              if (method === "bank" && setCashBook) {
-                setCashBook(prev => ({ ...prev, bankBalance: (Number(prev.bankBalance) || 0) + amt }))
-              }
+              if (!confirm("Unmark payment? GRN will return to unpaid.")) return
               onUpdate(grn.id, { paid: false, paymentMethod: "credit", paymentAmount: 0, paymentDate: null, chequeNo: null, chequeBank: null, chequeDate: null, chequeCleared: false, bankSlipUrl: null })
               tt("Payment unmarked — GRN moved to Payables")
             }} style={{ ...btnOutline(C.red), marginBottom: SP.sm }}>↶ Unmark Payment</button>
@@ -1092,11 +1075,6 @@ export default function StoreScreen({ purchaseOrders, grns, setPurchaseOrders, s
       return [grn, ...prev]
     })
 
-    // Bank purchases paid on the spot come out of the bank balance immediately
-    // (cash purchases flow through the drawer calculation via paymentDate)
-    if (data.paid && data.paymentMethod === "bank" && setCashBook) {
-      setCashBook(prev => ({ ...prev, bankBalance: (Number(prev.bankBalance) || 0) - (Number(data.totalAmount) || 0) }))
-    }
 
     // Update PO received quantities if linked
     if (data.poId) {

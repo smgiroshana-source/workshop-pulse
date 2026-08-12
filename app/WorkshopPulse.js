@@ -35,7 +35,6 @@ function toLocalDate(iso) {
 function num(v) { const n = Number(v); return isFinite(n) ? n : 0 }
 
 function CashBookScreen({ cashBook, setCashBook, grns, setGrns, jobs, loadClosedJobs, tt, onBack }) {
-  const { patchJobPayment } = useWorkshop()
   const [tab, setTab] = useState("cash") // cash | bank | history
   // Load closed jobs on mount so late payments on closed jobs appear in cashbook
   useEffect(() => { if (loadClosedJobs) loadClosedJobs() }, [loadClosedJobs])
@@ -162,11 +161,8 @@ function CashBookScreen({ cashBook, setCashBook, grns, setGrns, jobs, loadClosed
   const dayCount = (cashBook.dailyCounts || []).find(c => c.date === viewDate)
   const cashDiff = dayCount ? num(dayCount.actualCash) - calculatedBalance : null
 
-  // ── Pending cheques ── (overdue uncleared cheques MUST stay visible — they
-  // used to vanish from this list the day after their date passed)
-  const pendingCheques = grns.filter(g => g.paid && g.paymentMethod === "cheque" && g.chequeDate && !g.chequeCleared).sort((a, b) => a.chequeDate.localeCompare(b.chequeDate))
-  const overdueCheques = pendingCheques.filter(g => g.chequeDate < today)
-  const dueTodayCheques = grns.filter(g => g.paid && g.paymentMethod === "cheque" && g.chequeDate === today && !g.chequeCleared)
+  // Cheques count as paid the day they're written (owner decision) — no
+  // pending/cleared tracking, and the app does not mirror the bank account.
 
   // ── Add misc expense ──
   const addMiscExpense = () => {
@@ -186,17 +182,9 @@ function CashBookScreen({ cashBook, setCashBook, grns, setGrns, jobs, loadClosed
   const deleteMisc = (id, desc) => {
     const entry = (cashBook.miscExpenses || []).find(e => e.id === id)
     const isTransfer = entry?.category === "transfer"
-    if (!confirm(isTransfer ? `Delete transfer "${desc}"? The bank balance will be adjusted back.` : `Delete expense "${desc}"?`)) return
-    setCashBook(prev => {
-      const next = { ...prev, miscExpenses: (prev.miscExpenses || []).filter(e => e.id !== id) }
-      // Deleting a transfer must reverse its bank-balance effect
-      if (isTransfer) {
-        const amt = num(entry.amount)
-        next.bankBalance = num(prev.bankBalance) + (entry.direction === "c2b" ? -amt : amt)
-      }
-      return next
-    })
-    tt(isTransfer ? "Transfer removed, bank adjusted" : "Expense removed")
+    if (!confirm(`Delete ${isTransfer ? "transfer" : "expense"} "${desc}"?`)) return
+    setCashBook(prev => ({ ...prev, miscExpenses: (prev.miscExpenses || []).filter(e => e.id !== id) }))
+    tt(isTransfer ? "Transfer removed" : "Expense removed")
   }
 
   // ── Save cash count (does NOT overwrite openingCash) ──
@@ -243,32 +231,6 @@ function CashBookScreen({ cashBook, setCashBook, grns, setGrns, jobs, loadClosed
     tt("✓ Bank balance updated")
   }
 
-  // ── Clear a cheque: deduct from bank balance ──
-  const clearCheque = (grn) => {
-    if (!confirm(`Mark cheque ${grn.chequeNo || ""} as cleared? Rs.${num(grn.paymentAmount || grn.totalAmount).toLocaleString()} will be deducted from bank balance.`)) return
-    const amt = num(grn.paymentAmount || grn.totalAmount)
-    setGrns(prev => prev.map(g => g.id === grn.id ? { ...g, chequeCleared: true, chequeClearedDate: new Date().toISOString() } : g))
-    setCashBook(prev => ({ ...prev, bankBalance: num(prev.bankBalance) - amt }))
-    tt("✓ Cheque cleared, bank updated")
-  }
-
-  // ── Customer cheques (received on invoices) — pending until cleared ──
-  const customerPendingCheques = []
-  ;(jobs || []).forEach(j => (j.invoices || []).forEach(inv => (inv.payments || []).forEach(p => {
-    if (p && p.method === "cheque" && p.cheque_status === "pending") customerPendingCheques.push({ job: j, inv, p })
-  })))
-  const clearCustomerCheque = ({ job, inv, p }) => {
-    if (!confirm(`Mark customer cheque Rs.${num(p.amount).toLocaleString()} (${job.jobInfo?.vehicle_reg || job.jobNumber || "job"}) as cleared? Bank balance will increase.`)) return
-    patchJobPayment(job.id, inv.id, p.id, { cheque_status: "cleared", cheque_cleared_date: new Date().toISOString() })
-    setCashBook(prev => ({ ...prev, bankBalance: num(prev.bankBalance) + num(p.amount) }))
-    tt("✓ Customer cheque cleared, bank updated")
-  }
-  const bounceCustomerCheque = ({ job, inv, p }) => {
-    if (!confirm(`Mark customer cheque Rs.${num(p.amount).toLocaleString()} as BOUNCED? The invoice will show this amount as unpaid again.`)) return
-    patchJobPayment(job.id, inv.id, p.id, { cheque_status: "bounced", cheque_bounced_date: new Date().toISOString() })
-    tt("✗ Cheque marked bounced — invoice balance restored")
-  }
-
   // Cash ↔ Bank transfer (e.g., owner deposits cash to bank)
   const doTransfer = () => {
     const amt = num(transferAmt)
@@ -284,33 +246,16 @@ function CashBookScreen({ cashBook, setCashBook, grns, setGrns, jobs, loadClosed
       date: viewDate, description: `${isC2B ? "Cash → Bank" : "Bank → Cash"} transfer${transferNote ? ": " + transferNote : ""}`,
       amount: amt, category: "transfer", direction: transferDir
     }
-    // Only the bank counter moves here — the CASH side flows through the day's
-    // calculation via the transfer entry itself (counting it in openingCash too
-    // double-counted every transfer)
+    // The CASH side flows through the day's calculation via the transfer entry
+    // itself; the bank balance is a manual note and is not touched
     setCashBook(prev => ({
       ...prev,
-      bankBalance: isC2B ? num(prev.bankBalance) + amt : num(prev.bankBalance) - amt,
       miscExpenses: [...(prev.miscExpenses || []), exp],
     }))
     setShowTransfer(false); setTransferAmt(""); setTransferNote("")
     tt(`✓ ${isC2B ? "Cash → Bank" : "Bank → Cash"} Rs.${amt.toLocaleString()} transferred`)
   }
 
-  const bounceCheque = (grn) => {
-    const wasCleared = !!grn.chequeCleared
-    const amt = num(grn.paymentAmount || grn.totalAmount)
-    const msg = wasCleared
-      ? `Cheque ${grn.chequeNo || ""} was cleared. Bouncing will add Rs.${amt.toLocaleString()} back to bank balance and return GRN to unpaid. Continue?`
-      : `Mark cheque ${grn.chequeNo || ""} as bounced? GRN will return to unpaid.`
-    if (!confirm(msg)) return
-    setGrns(prev => prev.map(g => g.id === grn.id ? { ...g, paid: false, paymentMethod: "credit", paymentAmount: 0, chequeNo: null, chequeBank: null, chequeDate: null, chequeCleared: false, chequeClearedDate: null, paymentDate: null } : g))
-    if (wasCleared) {
-      setCashBook(prev => ({ ...prev, bankBalance: num(prev.bankBalance) + amt }))
-      tt("Cheque bounced, bank balance restored")
-    } else {
-      tt("Cheque bounced, GRN returned to unpaid")
-    }
-  }
 
   // ── Historical days with any activity ──
   const activeDays = [...new Set([
@@ -384,21 +329,6 @@ function CashBookScreen({ cashBook, setCashBook, grns, setGrns, jobs, loadClosed
           <span style={{ fontSize: 13, fontWeight: 600, color: C.orange }}>⚠️ Day not closed since {new Date(staleClose + "T00:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short" })} — opening cash may be stale. Count &amp; close each business day.</span>
         </div>
       )}
-      {/* Alert: overdue uncleared cheques */}
-      {overdueCheques.length > 0 && tab !== "history" && (
-        <div style={{ ...card, background: C.red + "10", border: `1.5px solid ${C.red}40`, display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", marginBottom: 10 }}>
-          <span style={{ fontSize: 13, fontWeight: 600, color: C.red }}>🚨 {overdueCheques.length} cheque{overdueCheques.length !== 1 ? "s" : ""} past due &amp; not cleared — check with the bank</span>
-          <span onClick={() => setTab("bank")} style={{ fontSize: 12, color: C.red, fontWeight: 700, cursor: "pointer" }}>View →</span>
-        </div>
-      )}
-      {/* Alert: cheques due today */}
-      {dueTodayCheques.length > 0 && tab !== "history" && (
-        <div style={{ ...card, background: C.red + "10", border: `1.5px solid ${C.red}40`, display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", marginBottom: 10 }}>
-          <span style={{ fontSize: 13, fontWeight: 600, color: C.red }}>⚠️ {dueTodayCheques.length} cheque{dueTodayCheques.length !== 1 ? "s" : ""} due today</span>
-          <span onClick={() => setTab("bank")} style={{ fontSize: 12, color: C.accent, cursor: "pointer", fontWeight: 600 }}>View →</span>
-        </div>
-      )}
-
       {/* ═══ CASH TAB ═══ */}
       {tab === "cash" && (
         <>
@@ -570,7 +500,7 @@ function CashBookScreen({ cashBook, setCashBook, grns, setGrns, jobs, loadClosed
               </div>
               {!editingBank && <span onClick={() => setEditingBank(true)} style={{ fontSize: 12, color: C.accent, fontWeight: 600, cursor: "pointer" }}>✏️ Reconcile</span>}
             </div>
-            <div style={{ fontSize: 11, color: C.muted, marginTop: 6 }}>Auto-updated from bank transfers & cleared cheques</div>
+            <div style={{ fontSize: 11, color: C.muted, marginTop: 6 }}>Manual note only — the app does not track your bank account. Tap Reconcile to update it.</div>
           </div>
 
           {/* Bank Transactions */}
@@ -596,85 +526,6 @@ function CashBookScreen({ cashBook, setCashBook, grns, setGrns, jobs, loadClosed
             )}
           </div>
 
-          {/* Pending Cheques */}
-          <div style={card}>
-            <div style={{ fontSize: 14, fontWeight: 600, color: C.orange, textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 8 }}>📝 Pending Cheques</div>
-            {pendingCheques.length === 0 && dueTodayCheques.length === 0 ? (
-              <div style={{ fontSize: 13, color: C.muted, padding: "8px 0" }}>No pending cheques</div>
-            ) : (
-              <>
-                {/* Due today first */}
-                {dueTodayCheques.map(g => (
-                  <div key={g.id} style={{ padding: "10px 0", borderBottom: `1px solid ${C.border}` }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 }}>
-                      <div>
-                        <div style={{ fontSize: 14, fontWeight: 600 }}>{g.supplier}</div>
-                        <div style={{ fontSize: 12, color: C.muted }}>
-                          {g.grnNumber} · Chq: {g.chequeNo || "—"} · {g.chequeBank || "—"}
-                        </div>
-                      </div>
-                      <div style={{ textAlign: "right" }}>
-                        <div style={{ fontFamily: MONO, fontSize: 15, fontWeight: 700, color: C.red }}>Rs.{num(g.paymentAmount || g.totalAmount).toLocaleString()}</div>
-                        <div style={{ fontSize: 11, color: C.red, fontWeight: 700 }}>⚠️ Due today</div>
-                      </div>
-                    </div>
-                    <div style={{ display: "flex", gap: 6 }}>
-                      <button onClick={() => clearCheque(g)} style={{ flex: 1, padding: "8px", borderRadius: 8, border: "none", background: C.green, color: "#fff", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: FONT }}>✓ Mark Cleared</button>
-                      <button onClick={() => bounceCheque(g)} style={{ flex: 1, padding: "8px", borderRadius: 8, border: `1px solid ${C.red}`, background: "#fff", color: C.red, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: FONT }}>✕ Bounced</button>
-                    </div>
-                  </div>
-                ))}
-                {pendingCheques.filter(c => c.chequeDate !== today).map(g => (
-                  <div key={g.id} style={{ padding: "10px 0", borderBottom: `1px solid ${C.border}` }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 }}>
-                      <div>
-                        <div style={{ fontSize: 14, fontWeight: 600 }}>{g.supplier}</div>
-                        <div style={{ fontSize: 12, color: C.muted }}>
-                          {g.grnNumber} · Chq: {g.chequeNo || "—"} · {g.chequeBank || "—"}
-                        </div>
-                      </div>
-                      <div style={{ textAlign: "right" }}>
-                        <div style={{ fontFamily: MONO, fontSize: 15, fontWeight: 700, color: g.chequeDate < today ? C.red : C.orange }}>Rs.{num(g.paymentAmount || g.totalAmount).toLocaleString()}</div>
-                        <div style={{ fontSize: 11, color: g.chequeDate < today ? C.red : C.muted, fontWeight: g.chequeDate < today ? 700 : 400 }}>{g.chequeDate < today ? "⚠️ OVERDUE · " : ""}{new Date(g.chequeDate).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</div>
-                      </div>
-                    </div>
-                    <div style={{ display: "flex", gap: 6 }}>
-                      <button onClick={() => clearCheque(g)} style={{ flex: 1, padding: "6px", borderRadius: 8, border: `1px solid ${C.green}`, background: "#fff", color: C.green, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: FONT }}>✓ Cleared Early</button>
-                      <button onClick={() => bounceCheque(g)} style={{ flex: 1, padding: "6px", borderRadius: 8, border: `1px solid ${C.red}`, background: "#fff", color: C.red, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: FONT }}>✕ Bounced</button>
-                    </div>
-                  </div>
-                ))}
-              </>
-            )}
-            {(pendingCheques.length + dueTodayCheques.length) > 0 && (
-              <div style={{ display: "flex", justifyContent: "space-between", paddingTop: 8, marginTop: 4 }}>
-                <span style={{ fontSize: 13, fontWeight: 600 }}>Total Pending</span>
-                <span style={{ fontFamily: MONO, fontSize: 16, fontWeight: 700, color: C.orange }}>Rs.{pendingCheques.reduce((s, g) => s + num(g.paymentAmount || g.totalAmount), 0).toLocaleString()}</span>
-              </div>
-            )}
-          </div>
-
-          {/* Customer cheques received — pending clearance */}
-          <div style={card}>
-            <div style={{ fontSize: 14, fontWeight: 600, color: C.sub, textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 10 }}>Customer Cheques Pending</div>
-            {customerPendingCheques.length === 0 ? (
-              <div style={{ fontSize: 13, color: C.muted, padding: "4px 0" }}>No customer cheques awaiting clearance</div>
-            ) : customerPendingCheques.map(({ job, inv, p }) => (
-              <div key={p.id} style={{ padding: "10px 0", borderBottom: `1px solid ${C.border}` }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 }}>
-                  <div>
-                    <div style={{ fontSize: 14, fontWeight: 600 }}>{job.jobInfo?.vehicle_reg || job.jobNumber} · {job.jobInfo?.customer_name || ""}</div>
-                    <div style={{ fontSize: 12, color: C.muted }}>{inv.invoice_number || "Invoice"} · Chq: {p.reference || "—"} · {toLocalDate(p.date)}</div>
-                  </div>
-                  <div style={{ fontFamily: MONO, fontSize: 15, fontWeight: 700, color: C.accent }}>Rs.{num(p.amount).toLocaleString()}</div>
-                </div>
-                <div style={{ display: "flex", gap: 6 }}>
-                  <button onClick={() => clearCustomerCheque({ job, inv, p })} style={{ flex: 1, padding: "8px", borderRadius: 8, border: "none", background: C.green, color: "#fff", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: FONT }}>✓ Cleared (into bank)</button>
-                  <button onClick={() => bounceCustomerCheque({ job, inv, p })} style={{ flex: 1, padding: "8px", borderRadius: 8, border: `1px solid ${C.red}`, background: "#fff", color: C.red, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: FONT }}>✕ Bounced</button>
-                </div>
-              </div>
-            ))}
-          </div>
         </>
       )}
 
@@ -759,15 +610,6 @@ function PayableScreen({ unpaidPOs, setPurchaseOrders, setGrns, cashBook, setCas
       } finally {
         setUploading(false)
       }
-    }
-    // Auto-deduct bank balance for bank transfer payments
-    if (payMethod === "bank" && setCashBook) {
-      const deduction = Number(payAmount) || 0
-      const currentBank = Number(cashBook?.bankBalance) || 0
-      if (deduction > currentBank && !confirm(`⚠️ This payment (Rs.${deduction.toLocaleString()}) exceeds bank balance (Rs.${currentBank.toLocaleString()}).\n\nResulting balance will be Rs.${(currentBank - deduction).toLocaleString()}.\n\nProceed?`)) {
-        return
-      }
-      setCashBook(prev => ({ ...prev, bankBalance: (Number(prev.bankBalance) || 0) - deduction }))
     }
     setGrns(prev => prev.map(g => g.id === item.id ? { ...g, ...paymentData } : g))
     tt("✓ Payment recorded")
@@ -1375,7 +1217,6 @@ function AppInner() {
       + (j.invoices || []).reduce((s2, inv) => s2 + (inv.payments || []).filter(p => !p.advance_id && isTodayPay(p)).reduce((s3, p) => s3 + (p.amount || 0), 0), 0)
       + (j.advances || []).filter(isTodayPay).reduce((s2, a) => s2 + (a.amount || 0), 0)
     , 0)
-    const dueTodayCheques = grns.filter(g => g.paid && g.paymentMethod === "cheque" && g.chequeDate === todayStr && !g.chequeCleared).length
     const activeCount = jobs.filter(j => !j.onHold && j.stage !== "closed" && j.stage !== "cancelled").length
     const hour = new Date().getHours()
     const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening"
@@ -1412,12 +1253,6 @@ function AppInner() {
             <div style={{ fontSize: 11, color: C.muted, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5 }}>Petty Cash</div>
             <div style={{ fontSize: 18, fontWeight: 700, fontFamily: MONO, color: C.orange, marginTop: 2 }}>Add</div>
           </div>
-          {dueTodayCheques > 0 && (
-            <div onClick={() => setRightTab("cashbook")} style={{ flex: 1, minWidth: 110, ...card, padding: "10px 12px", background: C.red + "08", border: `1px solid ${C.red}30`, cursor: "pointer" }}>
-              <div style={{ fontSize: 11, color: C.muted, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5 }}>Cheques Due</div>
-              <div style={{ fontSize: 18, fontWeight: 700, fontFamily: MONO, color: C.red, marginTop: 2 }} className="pulse">{dueTodayCheques} due</div>
-            </div>
-          )}
         </div>
 
         {/* ═══ ACTION QUEUE — what to work on today ═══ */}

@@ -34,7 +34,7 @@ export default function InvoiceDetail() {
     invCustDiscount, invCustPortion, invCustOwes, invCustBalance, invTotalDiscount, invFullyPaid,
     invExcess, invInsExpected,
     updateInvItem, removeInvItem, setInvStatus, calcStatus,
-    addPayment, deletePayment, updateInsStatus, applyCustomerDiscount, applyExcess,
+    addPayment, deletePayment, updateInsStatus, toggleChequeBounced, applyCustomerDiscount, applyExcess,
     unappliedAdvances, unappliedAdvanceTotal, applyAdvancesToInvoice,
     saveCurrentJob,
     generateInvoicePDF,
@@ -162,9 +162,13 @@ export default function InvoiceDetail() {
             : <div onClick={() => { setCustDiscount(0); setShowCustDiscInput(true) }} style={{ fontSize: 13, color: C.orange, marginBottom: 4, cursor: "pointer", opacity: 0.7 }}>+ {isDirectJob ? "Discount" : "Customer discount"}</div>}
           <div style={{ display: "flex", justifyContent: "space-between", fontSize: 16, paddingTop: 6, borderTop: `1px solid ${C.border}` }}><span style={{ fontWeight: 700 }}>{isDirectJob ? "Amount Due" : "Customer Owes"}</span><span style={{ fontFamily: MONO, fontSize: 20, fontWeight: 700, color: invCustOwes(selInv) <= 0 ? C.green : C.text }}>Rs.{fmt(invCustOwes(selInv))}</span></div>
         </div>
-        {invCustPayments(selInv).map(p => <div key={p.id} style={{ ...card, padding: "12px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", borderLeft: `4px solid ${C.green}`, marginTop: 6 }}>
-          <div><span style={{ fontSize: 17, fontWeight: 600, color: C.green }}>Rs.{fmt(p.amount)}</span> <span style={{ fontSize: 15, color: C.sub }}>{(p.method || "").replace("_", " ")}</span>{p.reference ? <span style={{ fontSize: 13, color: C.muted }}> · {p.reference}</span> : null}</div>
+        {invCustPayments(selInv).map(p => <div key={p.id} style={{ ...card, padding: "12px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", borderLeft: `4px solid ${p.cheque_status === "bounced" ? C.red : C.green}`, marginTop: 6 }}>
+          <div>
+            <span style={{ fontSize: 17, fontWeight: 600, color: p.cheque_status === "bounced" ? C.red : C.green, textDecoration: p.cheque_status === "bounced" ? "line-through" : "none" }}>Rs.{fmt(p.amount)}</span> <span style={{ fontSize: 15, color: C.sub }}>{(p.method || "").replace("_", " ")}</span>{p.reference ? <span style={{ fontSize: 13, color: C.muted }}> · {p.reference}</span> : null}
+            {p.cheque_status === "bounced" && <span style={{ fontSize: 12, color: C.red, fontWeight: 700 }}> · BOUNCED</span>}
+          </div>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            {p.method === "cheque" && <span onClick={() => toggleChequeBounced(p.id)} style={{ fontSize: 11, fontWeight: 700, color: p.cheque_status === "bounced" ? C.sub : C.red, border: `1px solid ${p.cheque_status === "bounced" ? C.border : C.red + "60"}`, borderRadius: 6, padding: "3px 8px", cursor: "pointer" }}>{p.cheque_status === "bounced" ? "Undo bounce" : "Bounced?"}</span>}
             <span style={{ fontSize: 14, color: C.sub }}>{new Date(p.date).toLocaleDateString("en-LK", { month: "short", day: "numeric" })}</span>
             <span onClick={() => deletePayment(p.id)} style={{ fontSize: confirmDel === p.id ? 13 : 16, color: C.red, cursor: "pointer", opacity: confirmDel === p.id ? 1 : 0.4, background: confirmDel === p.id ? C.red + "15" : "none", padding: confirmDel === p.id ? "2px 8px" : "0", borderRadius: 6, fontWeight: confirmDel === p.id ? 700 : 400 }}>{confirmDel === p.id ? "Delete?" : "✕"}</span>
           </div>
