@@ -1,5 +1,5 @@
 "use client"
-import { useState } from "react"
+import { useState, useRef } from "react"
 import SecureImg from "../SecureImg"
 import { C, FONT, MONO, SP, inp, btn, btnSm, btnOutline, card, pill, NavBar, fmt, genId } from "../WorkshopContext"
 
@@ -481,12 +481,23 @@ function NewPOForm({ onSave, onCancel, suppliers, supplierRegistry, tt, nextPONu
 
   const goPreview = () => { if (validate()) setMode("preview") }
 
-  const getData = () => ({ supplier: supplier.trim(), supplierPhone: phone.trim(), supplierWhatsapp: whatsapp.trim(), supplierEmail: email.trim(), supplierAddress: address.trim(), items, notes, totalAmount: total })
+  // One stable id for the PO this form is building: every save path (silent
+  // saves from WhatsApp/Email/Print, then the final Save or Mark-as-Ordered)
+  // upserts the SAME PO. Each send used to create a brand-new duplicate PO.
+  const formPoIdRef = useRef(genId("po"))
+  const getData = () => ({ id: formPoIdRef.current, supplier: supplier.trim(), supplierPhone: phone.trim(), supplierWhatsapp: whatsapp.trim(), supplierEmail: email.trim(), supplierAddress: address.trim(), items, notes, totalAmount: total })
 
   const save = () => { onSave(getData()) }
 
   // Save without navigating away (for send actions)
-  const saveSilent = () => { if (onSaveQuiet) onSaveQuiet(getData()) }
+  const saveSilent = () => { if (onSaveQuiet) { onSaveQuiet(getData()); setSent(true) } }
+
+  // Unsaved-form guard: typed data is lost silently on back/cancel otherwise
+  const cancelGuarded = () => {
+    const dirty = !sent && (supplier.trim() || items.length > 0 || notes.trim())
+    if (dirty && !confirm("Discard this unsaved PO?")) return
+    onCancel()
+  }
 
   const saveAndSend = () => {
     if (validate()) setShowSendOpts(true)
@@ -497,9 +508,9 @@ function NewPOForm({ onSave, onCancel, suppliers, supplierRegistry, tt, nextPONu
 
   // WhatsApp send
   const sendWhatsApp = () => {
-    saveSilent()
     const wa = (whatsapp || phone || "").replace(/\s/g, "")
     if (!wa) { tt("⚠️ No WhatsApp number"); return }
+    saveSilent()
     const intl = wa.startsWith("0") ? "+94" + wa.slice(1) : wa.startsWith("+") ? wa : "+94" + wa
     const itemLines = items.map((i, idx) => `${idx + 1}. ${i.name} — ${i.qty} ${i.unit} × Rs.${i.unitPrice.toLocaleString()} = Rs.${(i.qty * i.unitPrice).toLocaleString()}`).join("\n")
     const msg = `*${poNum}*\n\nDear ${supplier},\n\nPlease supply the following:\n\n${itemLines}\n\n*Total: Rs.${total.toLocaleString()}*\n${notes ? "\nNote: " + notes + "\n" : ""}\n— MacForce Auto Engineering`
@@ -510,8 +521,8 @@ function NewPOForm({ onSave, onCancel, suppliers, supplierRegistry, tt, nextPONu
 
   // Email send
   const sendEmail = () => {
-    saveSilent()
     if (!email) { tt("⚠️ No email address"); return }
+    saveSilent()
     const itemLines = items.map((i, idx) => `${idx + 1}. ${i.name} - ${i.qty} ${i.unit} x Rs.${i.unitPrice.toLocaleString()} = Rs.${(i.qty * i.unitPrice).toLocaleString()}`).join("%0A")
     const body = `Dear ${supplier},%0A%0APlease supply the following items:%0A%0A${itemLines}%0A%0ATotal: Rs.${total.toLocaleString()}%0A${notes ? "%0ANote: " + encodeURIComponent(notes) + "%0A" : ""}%0A— MacForce Auto Engineering`
     window.open(`https://mail.google.com/mail/?view=cm&to=${encodeURIComponent(email)}&su=${encodeURIComponent(poNum + " - Purchase Order")}&body=${body}`, "_blank")
@@ -538,7 +549,7 @@ function NewPOForm({ onSave, onCancel, suppliers, supplierRegistry, tt, nextPONu
   if (mode === "preview") {
     return (
       <div>
-        <NavBar title="Preview PO" onBack={onCancel} />
+        <NavBar title="Preview PO" onBack={cancelGuarded} />
 
         {/* PO Header */}
         <div style={{ ...card, padding: "16px" }}>
@@ -607,7 +618,7 @@ function NewPOForm({ onSave, onCancel, suppliers, supplierRegistry, tt, nextPONu
   // ── EDIT MODE ──
   return (
     <div>
-      <NavBar title="New Purchase Order" onBack={onCancel} />
+      <NavBar title="New Purchase Order" onBack={cancelGuarded} />
 
       <div style={card}>
         <div style={{ fontSize: 14, fontWeight: 600, color: C.sub, textTransform: "uppercase", letterSpacing: 0.8, marginBottom: SP.sm }}>Supplier</div>
@@ -735,6 +746,16 @@ function ReceiveGoodsForm({ po, onSave, onCancel, suppliers, tt }) {
     setAddName(""); setAddQty("1"); setAddPrice("")
   }
 
+  // Unsaved-form guard (PO mode prefills supplier/items, so gauge dirtiness by
+  // the fields only the user fills in)
+  const cancelGuarded = () => {
+    const dirty = isPOMode
+      ? (receivedBy.trim() || invoiceRef.trim() || notes.trim() || invoicePhoto)
+      : (supplier.trim() || items.length > 0)
+    if (dirty && !confirm("Discard this unsaved GRN?")) return
+    onCancel()
+  }
+
   const save = () => {
     if (!supplier.trim()) { tt("⚠️ Enter supplier"); return }
     if (items.length === 0) { tt("⚠️ Add items"); return }
@@ -771,7 +792,7 @@ function ReceiveGoodsForm({ po, onSave, onCancel, suppliers, tt }) {
 
   return (
     <div>
-      <NavBar title={isPOMode ? `Receive: ${po.poNumber}` : "Direct Purchase"} onBack={onCancel} />
+      <NavBar title={isPOMode ? `Receive: ${po.poNumber}` : "Direct Purchase"} onBack={cancelGuarded} />
 
       {!isPOMode && (
         <div style={card}>
@@ -1061,13 +1082,20 @@ export default function StoreScreen({ purchaseOrders, grns, setPurchaseOrders, s
   const createPO = (data) => {
     let createdNum = ""
     setPurchaseOrders(prev => {
+      // Upsert by the form's stable id: a quiet save (WhatsApp/Email/Print)
+      // may already have created this PO — update it, don't mint a duplicate
+      const existing = data.id && prev.find(p => p.id === data.id)
+      if (existing) {
+        createdNum = existing.poNumber
+        return prev.map(p => p.id === data.id ? { ...p, ...data, poNumber: existing.poNumber } : p)
+      }
       const num = allocatePONum(prev)
       createdNum = num
-      const po = { id: genId("po"), poNumber: num, status: "draft", ...data, created_at: new Date().toISOString() }
+      const po = { poNumber: num, status: "draft", ...data, id: data.id || genId("po"), created_at: new Date().toISOString() }
       return [po, ...prev]
     })
     setStoreScreen("list")
-    tt(`✓ ${createdNum} created`)
+    tt(`✓ ${createdNum} saved`)
   }
 
   const updatePO = (id, updates) => {
@@ -1121,10 +1149,13 @@ export default function StoreScreen({ purchaseOrders, grns, setPurchaseOrders, s
 
   if (storeScreen === "new_po") {
     return <NewPOForm onSave={createPO} onSaveQuiet={(data) => {
-      // Save as draft without navigating away — atomic
+      // Save as draft without navigating away — upsert by the form's stable id
+      // so repeated sends update ONE PO instead of creating duplicates
       setPurchaseOrders(prev => {
+        const existing = data.id && prev.find(p => p.id === data.id)
+        if (existing) return prev.map(p => p.id === data.id ? { ...p, ...data, poNumber: existing.poNumber } : p)
         const num = allocatePONum(prev)
-        const po = { id: genId("po"), poNumber: num, status: "draft", ...data, created_at: new Date().toISOString() }
+        const po = { poNumber: num, status: "draft", ...data, id: data.id || genId("po"), created_at: new Date().toISOString() }
         return [po, ...prev]
       })
     }} onCancel={() => setStoreScreen("list")} suppliers={suppliers} supplierRegistry={supplierRegistry} tt={tt} nextPONum={allocatePONum(purchaseOrders)} />
