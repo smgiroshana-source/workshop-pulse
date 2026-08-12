@@ -12,6 +12,37 @@
 --      only by active staff via signed URLs (the app already supports this).
 -- ═══════════════════════════════════════════════════════════════════════════
 
+-- ── Tables (created if missing — store_data was never created in production,
+--    which is why the Store/Cash Book never persisted anything) ─────────────
+create table if not exists public.user_roles (
+  id uuid default gen_random_uuid() primary key,
+  email text unique not null,
+  name text default '',
+  role text not null default 'staff'
+    check (role in ('viewer','staff','admin','super_admin')),
+  is_active boolean default true,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
+create table if not exists public.jobs (
+  id text primary key,
+  data jsonb not null default '{}'::jsonb,
+  created_at timestamptz default now(),
+  stage text,
+  on_hold boolean default false,
+  vehicle_reg text,
+  customer_name text,
+  customer_phone text,
+  job_type text
+);
+
+create table if not exists public.store_data (
+  id text primary key,
+  data jsonb not null default '{}'::jsonb,
+  updated_at timestamptz default now()
+);
+
 -- ── Helper functions (SECURITY DEFINER so policies don't recurse) ──────────
 create or replace function public.wp_is_staff()
 returns boolean
