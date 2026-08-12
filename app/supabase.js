@@ -18,7 +18,7 @@ export const supabase = new Proxy({}, {
 const BUCKET = "job-photos"
 
 function getBaseUrl() {
-  return process.env.NEXT_PUBLIC_SUPABASE_URL + "/storage/v1/object/public/" + BUCKET + "/"
+  return SUPABASE_URL + "/storage/v1/object/public/" + BUCKET + "/"
 }
 
 // Compress image to target size (80-120kb) using canvas
