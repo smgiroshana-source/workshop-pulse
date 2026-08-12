@@ -35,6 +35,7 @@ function toLocalDate(iso) {
 function num(v) { const n = Number(v); return isFinite(n) ? n : 0 }
 
 function CashBookScreen({ cashBook, setCashBook, grns, setGrns, jobs, loadClosedJobs, tt, onBack }) {
+  const { patchJobPayment } = useWorkshop()
   const [tab, setTab] = useState("cash") // cash | bank | history
   // Load closed jobs on mount so late payments on closed jobs appear in cashbook
   useEffect(() => { if (loadClosedJobs) loadClosedJobs() }, [loadClosedJobs])
@@ -142,21 +143,29 @@ function CashBookScreen({ cashBook, setCashBook, grns, setGrns, jobs, loadClosed
 
   const totalCashIn = cashIn.reduce((s, i) => s + i.amount, 0)
   const totalCashOut = cashOut.reduce((s, e) => s + e.amount, 0)
-  const totalMisc = dayMisc.reduce((s, e) => s + num(e.amount), 0)
-  const totalExpenses = totalCashOut + totalMisc
+  // Cash↔bank transfers are cash MOVEMENTS, not expenses: a cash→bank deposit is
+  // cash out of the drawer, a bank→cash withdrawal is cash into it. They were
+  // previously double-counted (opening adjusted AND summed as an expense).
+  const plainMisc = dayMisc.filter(e => e.category !== "transfer")
+  const transferOut = dayMisc.filter(e => e.category === "transfer" && e.direction === "c2b").reduce((s, e) => s + num(e.amount), 0)
+  const transferIn = dayMisc.filter(e => e.category === "transfer" && e.direction === "b2c").reduce((s, e) => s + num(e.amount), 0)
+  const totalMisc = plainMisc.reduce((s, e) => s + num(e.amount), 0)
+  const totalExpenses = totalCashOut + totalMisc + transferOut
 
   // Opening cash: openingCash in cashBook is always for TODAY at start
   // For historical dates, we use the stored dailyCounts to reconstruct
   const prevCount = (cashBook.dailyCounts || []).filter(c => c.date < viewDate).sort((a, b) => b.date.localeCompare(a.date))[0]
   const prevBalance = isToday ? num(cashBook.openingCash) : (prevCount ? num(prevCount.actualCash) : 0)
-  const calculatedBalance = prevBalance + totalCashIn - totalExpenses
+  const calculatedBalance = prevBalance + totalCashIn + transferIn - totalExpenses
 
   // Today's cash count
   const dayCount = (cashBook.dailyCounts || []).find(c => c.date === viewDate)
   const cashDiff = dayCount ? num(dayCount.actualCash) - calculatedBalance : null
 
-  // ── Pending cheques ──
-  const pendingCheques = grns.filter(g => g.paid && g.paymentMethod === "cheque" && g.chequeDate && !g.chequeCleared && g.chequeDate >= today).sort((a, b) => a.chequeDate.localeCompare(b.chequeDate))
+  // ── Pending cheques ── (overdue uncleared cheques MUST stay visible — they
+  // used to vanish from this list the day after their date passed)
+  const pendingCheques = grns.filter(g => g.paid && g.paymentMethod === "cheque" && g.chequeDate && !g.chequeCleared).sort((a, b) => a.chequeDate.localeCompare(b.chequeDate))
+  const overdueCheques = pendingCheques.filter(g => g.chequeDate < today)
   const dueTodayCheques = grns.filter(g => g.paid && g.paymentMethod === "cheque" && g.chequeDate === today && !g.chequeCleared)
 
   // ── Add misc expense ──
@@ -175,9 +184,19 @@ function CashBookScreen({ cashBook, setCashBook, grns, setGrns, jobs, loadClosed
   }
 
   const deleteMisc = (id, desc) => {
-    if (!confirm(`Delete expense "${desc}"?`)) return
-    setCashBook(prev => ({ ...prev, miscExpenses: (prev.miscExpenses || []).filter(e => e.id !== id) }))
-    tt("Expense removed")
+    const entry = (cashBook.miscExpenses || []).find(e => e.id === id)
+    const isTransfer = entry?.category === "transfer"
+    if (!confirm(isTransfer ? `Delete transfer "${desc}"? The bank balance will be adjusted back.` : `Delete expense "${desc}"?`)) return
+    setCashBook(prev => {
+      const next = { ...prev, miscExpenses: (prev.miscExpenses || []).filter(e => e.id !== id) }
+      // Deleting a transfer must reverse its bank-balance effect
+      if (isTransfer) {
+        const amt = num(entry.amount)
+        next.bankBalance = num(prev.bankBalance) + (entry.direction === "c2b" ? -amt : amt)
+      }
+      return next
+    })
+    tt(isTransfer ? "Transfer removed, bank adjusted" : "Expense removed")
   }
 
   // ── Save cash count (does NOT overwrite openingCash) ──
@@ -198,9 +217,16 @@ function CashBookScreen({ cashBook, setCashBook, grns, setGrns, jobs, loadClosed
   const closeDay = () => {
     if (!dayCount) { tt("⚠️ Save cash count first"); return }
     if (cashDiff !== 0 && !confirm(`Cash is ${cashDiff > 0 ? "+" : ""}${cashDiff.toLocaleString()} off. Close day anyway?`)) return
-    setCashBook(prev => ({ ...prev, openingCash: num(dayCount.actualCash) }))
+    setCashBook(prev => ({ ...prev, openingCash: num(dayCount.actualCash), lastClosedDate: viewDate }))
     tt("✓ Day closed. Opening balance updated for tomorrow.")
   }
+  // Days since the last close (Colombo dates): stale opening cash makes every
+  // count look "off" — tell the user instead of letting them distrust the numbers
+  const staleClose = (() => {
+    if (!isToday || !cashBook.lastClosedDate) return null
+    const yesterday = localDateStr(new Date(Date.now() - 86400000))
+    return cashBook.lastClosedDate < yesterday ? cashBook.lastClosedDate : null
+  })()
 
   const saveOpening = () => {
     const amt = num(openingCash)
@@ -226,6 +252,23 @@ function CashBookScreen({ cashBook, setCashBook, grns, setGrns, jobs, loadClosed
     tt("✓ Cheque cleared, bank updated")
   }
 
+  // ── Customer cheques (received on invoices) — pending until cleared ──
+  const customerPendingCheques = []
+  ;(jobs || []).forEach(j => (j.invoices || []).forEach(inv => (inv.payments || []).forEach(p => {
+    if (p && p.method === "cheque" && p.cheque_status === "pending") customerPendingCheques.push({ job: j, inv, p })
+  })))
+  const clearCustomerCheque = ({ job, inv, p }) => {
+    if (!confirm(`Mark customer cheque Rs.${num(p.amount).toLocaleString()} (${job.jobInfo?.vehicle_reg || job.jobNumber || "job"}) as cleared? Bank balance will increase.`)) return
+    patchJobPayment(job.id, inv.id, p.id, { cheque_status: "cleared", cheque_cleared_date: new Date().toISOString() })
+    setCashBook(prev => ({ ...prev, bankBalance: num(prev.bankBalance) + num(p.amount) }))
+    tt("✓ Customer cheque cleared, bank updated")
+  }
+  const bounceCustomerCheque = ({ job, inv, p }) => {
+    if (!confirm(`Mark customer cheque Rs.${num(p.amount).toLocaleString()} as BOUNCED? The invoice will show this amount as unpaid again.`)) return
+    patchJobPayment(job.id, inv.id, p.id, { cheque_status: "bounced", cheque_bounced_date: new Date().toISOString() })
+    tt("✗ Cheque marked bounced — invoice balance restored")
+  }
+
   // Cash ↔ Bank transfer (e.g., owner deposits cash to bank)
   const doTransfer = () => {
     const amt = num(transferAmt)
@@ -241,9 +284,11 @@ function CashBookScreen({ cashBook, setCashBook, grns, setGrns, jobs, loadClosed
       date: viewDate, description: `${isC2B ? "Cash → Bank" : "Bank → Cash"} transfer${transferNote ? ": " + transferNote : ""}`,
       amount: amt, category: "transfer", direction: transferDir
     }
+    // Only the bank counter moves here — the CASH side flows through the day's
+    // calculation via the transfer entry itself (counting it in openingCash too
+    // double-counted every transfer)
     setCashBook(prev => ({
       ...prev,
-      openingCash: isC2B ? num(prev.openingCash) - amt : num(prev.openingCash) + amt,
       bankBalance: isC2B ? num(prev.bankBalance) + amt : num(prev.bankBalance) - amt,
       miscExpenses: [...(prev.miscExpenses || []), exp],
     }))
@@ -333,6 +378,19 @@ function CashBookScreen({ cashBook, setCashBook, grns, setGrns, jobs, loadClosed
         ))}
       </div>
 
+      {/* Alert: day-close overdue — a stale opening makes every count look off */}
+      {staleClose && tab !== "history" && (
+        <div style={{ ...card, background: C.orange + "10", border: `1.5px solid ${C.orange}40`, padding: "10px 14px", marginBottom: 10 }}>
+          <span style={{ fontSize: 13, fontWeight: 600, color: C.orange }}>⚠️ Day not closed since {new Date(staleClose + "T00:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short" })} — opening cash may be stale. Count &amp; close each business day.</span>
+        </div>
+      )}
+      {/* Alert: overdue uncleared cheques */}
+      {overdueCheques.length > 0 && tab !== "history" && (
+        <div style={{ ...card, background: C.red + "10", border: `1.5px solid ${C.red}40`, display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", marginBottom: 10 }}>
+          <span style={{ fontSize: 13, fontWeight: 600, color: C.red }}>🚨 {overdueCheques.length} cheque{overdueCheques.length !== 1 ? "s" : ""} past due &amp; not cleared — check with the bank</span>
+          <span onClick={() => setTab("bank")} style={{ fontSize: 12, color: C.red, fontWeight: 700, cursor: "pointer" }}>View →</span>
+        </div>
+      )}
       {/* Alert: cheques due today */}
       {dueTodayCheques.length > 0 && tab !== "history" && (
         <div style={{ ...card, background: C.red + "10", border: `1.5px solid ${C.red}40`, display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", marginBottom: 10 }}>
@@ -576,8 +634,8 @@ function CashBookScreen({ cashBook, setCashBook, grns, setGrns, jobs, loadClosed
                         </div>
                       </div>
                       <div style={{ textAlign: "right" }}>
-                        <div style={{ fontFamily: MONO, fontSize: 15, fontWeight: 700, color: C.orange }}>Rs.{num(g.paymentAmount || g.totalAmount).toLocaleString()}</div>
-                        <div style={{ fontSize: 11, color: C.muted }}>{new Date(g.chequeDate).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</div>
+                        <div style={{ fontFamily: MONO, fontSize: 15, fontWeight: 700, color: g.chequeDate < today ? C.red : C.orange }}>Rs.{num(g.paymentAmount || g.totalAmount).toLocaleString()}</div>
+                        <div style={{ fontSize: 11, color: g.chequeDate < today ? C.red : C.muted, fontWeight: g.chequeDate < today ? 700 : 400 }}>{g.chequeDate < today ? "⚠️ OVERDUE · " : ""}{new Date(g.chequeDate).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</div>
                       </div>
                     </div>
                     <div style={{ display: "flex", gap: 6 }}>
@@ -591,9 +649,31 @@ function CashBookScreen({ cashBook, setCashBook, grns, setGrns, jobs, loadClosed
             {(pendingCheques.length + dueTodayCheques.length) > 0 && (
               <div style={{ display: "flex", justifyContent: "space-between", paddingTop: 8, marginTop: 4 }}>
                 <span style={{ fontSize: 13, fontWeight: 600 }}>Total Pending</span>
-                <span style={{ fontFamily: MONO, fontSize: 16, fontWeight: 700, color: C.orange }}>Rs.{[...pendingCheques, ...dueTodayCheques].reduce((s, g) => s + num(g.paymentAmount || g.totalAmount), 0).toLocaleString()}</span>
+                <span style={{ fontFamily: MONO, fontSize: 16, fontWeight: 700, color: C.orange }}>Rs.{pendingCheques.reduce((s, g) => s + num(g.paymentAmount || g.totalAmount), 0).toLocaleString()}</span>
               </div>
             )}
+          </div>
+
+          {/* Customer cheques received — pending clearance */}
+          <div style={card}>
+            <div style={{ fontSize: 14, fontWeight: 600, color: C.sub, textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 10 }}>Customer Cheques Pending</div>
+            {customerPendingCheques.length === 0 ? (
+              <div style={{ fontSize: 13, color: C.muted, padding: "4px 0" }}>No customer cheques awaiting clearance</div>
+            ) : customerPendingCheques.map(({ job, inv, p }) => (
+              <div key={p.id} style={{ padding: "10px 0", borderBottom: `1px solid ${C.border}` }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 }}>
+                  <div>
+                    <div style={{ fontSize: 14, fontWeight: 600 }}>{job.jobInfo?.vehicle_reg || job.jobNumber} · {job.jobInfo?.customer_name || ""}</div>
+                    <div style={{ fontSize: 12, color: C.muted }}>{inv.invoice_number || "Invoice"} · Chq: {p.reference || "—"} · {toLocalDate(p.date)}</div>
+                  </div>
+                  <div style={{ fontFamily: MONO, fontSize: 15, fontWeight: 700, color: C.accent }}>Rs.{num(p.amount).toLocaleString()}</div>
+                </div>
+                <div style={{ display: "flex", gap: 6 }}>
+                  <button onClick={() => clearCustomerCheque({ job, inv, p })} style={{ flex: 1, padding: "8px", borderRadius: 8, border: "none", background: C.green, color: "#fff", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: FONT }}>✓ Cleared (into bank)</button>
+                  <button onClick={() => bounceCustomerCheque({ job, inv, p })} style={{ flex: 1, padding: "8px", borderRadius: 8, border: `1px solid ${C.red}`, background: "#fff", color: C.red, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: FONT }}>✕ Bounced</button>
+                </div>
+              </div>
+            ))}
           </div>
         </>
       )}

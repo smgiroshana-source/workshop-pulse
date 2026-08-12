@@ -300,7 +300,24 @@ function GRNDetail({ grn, onBack, pos, onUpdate, cashBook, setCashBook, tt }) {
   ]
 
   const save = () => {
-    onUpdate(grn.id, { items, invoiceAmount: Number(invoiceAmount) || 0, paymentMethod, paid: paymentMethod !== "credit", totalAmount: total })
+    const wasPaid = !!grn.paid
+    const wasMethod = grn.paymentMethod || "credit"
+    const nowPaid = paymentMethod !== "credit"
+    const patch = { items, invoiceAmount: Number(invoiceAmount) || 0, paymentMethod, paid: nowPaid, totalAmount: total }
+    // Payment-state transitions must keep the cash book truthful:
+    // paymentDate is what the expense calculation keys on
+    if (!wasPaid && nowPaid) { patch.paymentDate = new Date().toISOString(); patch.paymentAmount = total }
+    if (wasPaid && !nowPaid) { patch.paymentDate = null; patch.paymentAmount = 0 }
+    if (wasMethod === "cheque" && paymentMethod !== "cheque") { patch.chequeNo = null; patch.chequeBank = null; patch.chequeDate = null; patch.chequeCleared = false }
+    // Bank balance: undo the old method's deduction, apply the new one
+    if (setCashBook) {
+      const amtOld = Number(grn.paymentAmount || grn.totalAmount) || 0
+      const wasBankDeducted = wasPaid && (wasMethod === "bank" || (wasMethod === "cheque" && grn.chequeCleared))
+      const nowBank = nowPaid && paymentMethod === "bank"
+      const delta = (wasBankDeducted ? amtOld : 0) - (nowBank ? total : 0)
+      if (delta !== 0) setCashBook(prev => ({ ...prev, bankBalance: (Number(prev.bankBalance) || 0) + delta }))
+    }
+    onUpdate(grn.id, patch)
     setEditing(false)
     tt("✓ GRN updated")
   }
@@ -728,6 +745,17 @@ function ReceiveGoodsForm({ po, onSave, onCancel, suppliers, tt }) {
   const save = () => {
     if (!supplier.trim()) { tt("⚠️ Enter supplier"); return }
     if (items.length === 0) { tt("⚠️ Add items"); return }
+    if (items.some(i => i.qty <= 0)) { tt("⚠️ Every item needs a quantity"); return }
+    // Over-receive guard: warn when receiving more than the PO has outstanding
+    if (po) {
+      const over = items.filter(gi => {
+        if (!gi.poItemId) return false
+        const pi = po.items.find(x => x.id === gi.poItemId)
+        return pi && gi.qty > (pi.qty - (pi.received || 0))
+      })
+      if (over.length > 0 && !confirm(`⚠️ ${over.map(o => o.name).join(", ")}: receiving MORE than the PO ordered. Is that really what arrived?`)) return
+    }
+    const paid = paymentMethod !== "credit"
     onSave({
       poId: po?.id || null,
       supplier: supplier.trim(),
@@ -738,9 +766,13 @@ function ReceiveGoodsForm({ po, onSave, onCancel, suppliers, tt }) {
       invoicePhoto: typeof invoicePhoto === "string" ? invoicePhoto : null,
       notes: notes.trim(),
       paymentMethod,
-      paid: paymentMethod !== "credit",
+      paid,
       totalAmount: total,
       receivedDate: new Date().toISOString(),
+      // Paid-on-the-spot purchases must land in the cash book: paymentDate is
+      // what the day's expense calculation keys on (it used to be missing here,
+      // so cash purchases vanished from the drawer balance entirely)
+      ...(paid ? { paymentDate: new Date().toISOString(), paymentAmount: total } : {}),
     })
   }
 
@@ -764,16 +796,16 @@ function ReceiveGoodsForm({ po, onSave, onCancel, suppliers, tt }) {
           <div key={item.id} style={{ padding: "10px 0", borderBottom: idx < items.length - 1 ? `1px solid ${C.border}` : "none" }}>
             <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 6 }}>{item.name}</div>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <input type="number" inputMode="decimal" defaultValue={item.qty}
+              <input type="number" inputMode="decimal" min="0" defaultValue={item.qty}
                 onFocus={e => { e.target.dataset.prev = e.target.value; e.target.value = "" }}
-                onBlur={e => { if (e.target.value === "") e.target.value = e.target.dataset.prev; setItems(prev => prev.map(i => i.id === item.id ? { ...i, qty: Number(e.target.value) || 0 } : i)) }}
-                onChange={e => setItems(prev => prev.map(i => i.id === item.id ? { ...i, qty: Number(e.target.value) || 0 } : i))}
+                onBlur={e => { if (e.target.value === "") e.target.value = e.target.dataset.prev; setItems(prev => prev.map(i => i.id === item.id ? { ...i, qty: Math.max(0, Number(e.target.value) || 0) } : i)) }}
+                onChange={e => setItems(prev => prev.map(i => i.id === item.id ? { ...i, qty: Math.max(0, Number(e.target.value) || 0) } : i))}
                 style={{ ...inp, width: 80, flex: "0 0 80px", fontSize: 16, fontFamily: MONO, fontWeight: 700, textAlign: "center", padding: "10px 6px" }} />
               <span style={{ fontSize: 13, color: C.muted }}>{item.unit || "pcs"} ×</span>
-              <input type="number" inputMode="decimal" defaultValue={item.unitPrice || 0}
+              <input type="number" inputMode="decimal" min="0" defaultValue={item.unitPrice || 0}
                 onFocus={e => { e.target.dataset.prev = e.target.value; e.target.value = "" }}
-                onBlur={e => { if (e.target.value === "") e.target.value = e.target.dataset.prev; setItems(prev => prev.map(i => i.id === item.id ? { ...i, unitPrice: Number(e.target.value) || 0 } : i)) }}
-                onChange={e => setItems(prev => prev.map(i => i.id === item.id ? { ...i, unitPrice: Number(e.target.value) || 0 } : i))}
+                onBlur={e => { if (e.target.value === "") e.target.value = e.target.dataset.prev; setItems(prev => prev.map(i => i.id === item.id ? { ...i, unitPrice: Math.max(0, Number(e.target.value) || 0) } : i)) }}
+                onChange={e => setItems(prev => prev.map(i => i.id === item.id ? { ...i, unitPrice: Math.max(0, Number(e.target.value) || 0) } : i))}
                 placeholder="Price"
                 style={{ ...inp, flex: 1, fontSize: 15, fontFamily: MONO, fontWeight: 700, textAlign: "right", padding: "10px 10px" }} />
               {!isPOMode && <span onClick={() => setItems(prev => prev.filter(i => i.id !== item.id))} style={{ fontSize: 18, color: C.muted, cursor: "pointer", padding: 4 }}>×</span>}
@@ -1059,6 +1091,12 @@ export default function StoreScreen({ purchaseOrders, grns, setPurchaseOrders, s
       const grn = { id: genId("grn"), grnNumber: num, ...data, created_at: new Date().toISOString() }
       return [grn, ...prev]
     })
+
+    // Bank purchases paid on the spot come out of the bank balance immediately
+    // (cash purchases flow through the drawer calculation via paymentDate)
+    if (data.paid && data.paymentMethod === "bank" && setCashBook) {
+      setCashBook(prev => ({ ...prev, bankBalance: (Number(prev.bankBalance) || 0) - (Number(data.totalAmount) || 0) }))
+    }
 
     // Update PO received quantities if linked
     if (data.poId) {

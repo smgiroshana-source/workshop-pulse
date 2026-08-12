@@ -1140,7 +1140,7 @@ export function WorkshopProvider({ children }) {
   const removePart = (pid) => { setEstParts(p => p.filter(x => x.id !== pid)); setEstEntries(e => e.filter(x => x.part_id !== pid)) }
   const handlePartInput = (val) => { setPartInput(val); if (val.length >= 2) { const q = val.toLowerCase(); const ex = estParts.map(p => p.name.toLowerCase()); setSuggestions(COMMON_PARTS.filter(p => p.toLowerCase().includes(q) && !ex.includes(p.toLowerCase())).slice(0, 6)) } else setSuggestions([]) }
   const toggleCheck = (part) => { const ck = cat.key; if (hasEntry(part.id, ck)) setEstEntries(e => e.filter(x => !(x.part_id === part.id && x.category === ck))); else { setEstEntries(e => [...e, { id: genId("e"), part_id: part.id, category: ck, qty: 1, rate: 0, remarks: ck === "replace" ? "S/H" : "" }]); setTimeout(() => rateRefs.current[part.id]?.focus(), 50) } }
-  const setRate = (pid, rate) => { setEstEntries(e => e.map(x => x.part_id === pid && x.category === cat.key ? { ...x, rate: Number(rate) || 0 } : x)) }
+  const setRate = (pid, rate) => { setEstEntries(e => e.map(x => x.part_id === pid && x.category === cat.key ? { ...x, rate: Math.max(0, Math.round(Number(rate) || 0)) } : x)) }
   const toggleRemarks = (pid) => { setEstEntries(e => e.map(x => x.part_id === pid && x.category === cat.key ? { ...x, remarks: x.remarks === "S/H" ? "M/R" : "S/H" } : x)) }
   const handleRateEnter = (pid) => { const ci = estParts.filter(p => hasEntry(p.id, cat.key)); const idx = ci.findIndex(p => p.id === pid); for (let i = idx + 1; i < ci.length; i++) { rateRefs.current[ci[i].id]?.focus(); return } tt("✓ Done") }
 
@@ -1266,7 +1266,7 @@ export function WorkshopProvider({ children }) {
     }))
     setApprovalCat(0); setScreen("approve")
   }
-  const setApproved = (eid, rate) => { setApprovalItems(prev => prev.map(i => { if (i.id !== eid) return i; const r = rate === "" ? null : Number(rate); let s = "pending"; if (r !== null && isFinite(r)) { s = r === i.original_rate ? "approved" : r < i.original_rate ? "cut" : "upgraded" } return { ...i, approved_rate: r, approval_status: s } })) }
+  const setApproved = (eid, rate) => { setApprovalItems(prev => prev.map(i => { if (i.id !== eid) return i; let r = rate === "" ? null : Number(rate); if (r !== null && (!isFinite(r) || r < 0)) r = null; if (r !== null) r = Math.round(r); let s = "pending"; if (r !== null) { s = r === i.original_rate ? "approved" : r < i.original_rate ? "cut" : "upgraded" } return { ...i, approved_rate: r, approval_status: s } })) }
   const approveAsIs = (eid) => { const i = approvalItems.find(x => x.id === eid); if (i) setApproved(eid, i.original_rate) }
   const markUseSame = (eid) => {
     const item = approvalItems.find(i => i.id === eid)
@@ -1285,8 +1285,11 @@ export function WorkshopProvider({ children }) {
     if (isInsurance && hasReplaceItems && unfilledPQ.length > 0) {
       tt(`⚠️ ${unfilledPQ.length} part${unfilledPQ.length > 1 ? "s" : ""} missing supplier prices -- fill Parts Quotation`)
     }
-    setEstimates(prev => prev.map(e => e.id !== selEst.id ? e : { ...e, status: "approved", approved_entries: approvalItems.map(i => ({ ...i, rate: i.approval_status === "use_same" ? 0 : (i.approved_rate ?? i.original_rate), remarks: i.approval_status === "use_same" ? "U/S" : (i.remarks || "") })), approved_total: approvalItems.filter(i => i.approval_status !== "use_same").reduce((s, i) => s + (i.approved_rate ?? i.original_rate) * i.qty, 0) }))
-    tt(`${selEst.number} approved`)
+    // Only items the assessor actually actioned go onto the approval — untouched
+    // (pending) items must NOT ride onto the insurance invoice at the quoted rate
+    const skipped = approvalItems.length - approvedItems.length
+    setEstimates(prev => prev.map(e => e.id !== selEst.id ? e : { ...e, status: "approved", approved_entries: approvedItems.map(i => ({ ...i, rate: i.approval_status === "use_same" ? 0 : (i.approved_rate ?? i.original_rate), remarks: i.approval_status === "use_same" ? "U/S" : (i.remarks || "") })), approved_total: approvedItems.filter(i => i.approval_status !== "use_same").reduce((s, i) => s + (i.approved_rate ?? i.original_rate) * i.qty, 0) }))
+    tt(`${selEst.number} approved${skipped > 0 ? ` — ${skipped} un-actioned item${skipped > 1 ? "s" : ""} left off` : ""}`)
     // Auto-advance: est_ready -> approved_dismantle (insurance)
     if (jobStage === "est_ready" && isInsurance) advanceStage("approved_dismantle")
     // If all estimates approved and direct job at est_ready -> in_progress
@@ -1346,18 +1349,20 @@ export function WorkshopProvider({ children }) {
   const invInsTotal = inv => invInsPayments(inv).reduce((s, p) => s + p.amount, 0)
   // invInsReceivedTotal: only RECEIVED payments (for actual paid calculations)
   const invInsReceivedTotal = inv => invInsPayments(inv).filter(p => p.ins_status === "received").reduce((s, p) => s + p.amount, 0)
-  const invCustPaidTotal = inv => invCustPayments(inv).reduce((s, p) => s + p.amount, 0)
+  // Bounced customer cheques don't count as money received
+  const invCustPaidTotal = inv => invCustPayments(inv).filter(p => p.cheque_status !== "bounced").reduce((s, p) => s + p.amount, 0)
   const invCustDiscount = inv => inv?.customer_discount || 0
   // Excess (deductible): the part of the claim the CUSTOMER pays, known from the approval letter
   const invExcess = inv => Math.max(0, Number(inv?.excess) || 0)
-  // What insurance is expected to cover: recorded payments win; before any are
-  // recorded, derive from excess (net - excess) so the customer share is known at delivery
+  // What insurance is expected to cover. When the excess is known (approval
+  // letter) it DEFINES the split: customer owes the excess, insurer owes the
+  // rest — recorded partial insurance payments must NOT shrink the insurer's
+  // share (a first tranche used to balloon "Customer Owes" to the insurer's
+  // unpaid balance). Recorded payments only stand in when no excess is set.
   const invInsExpected = inv => {
-    const recorded = invInsTotal(inv)
-    if (recorded > 0) return recorded
     const exc = invExcess(inv)
     if (exc > 0) return Math.max(0, invNet(inv) - exc)
-    return 0
+    return invInsTotal(inv)
   }
   // Customer portion = net minus what insurance is expected to cover
   const invCustPortion = inv => invNet(inv) - invInsExpected(inv)
@@ -1398,10 +1403,15 @@ export function WorkshopProvider({ children }) {
     return inv.finalized_at ? "finalized" : "draft"
   }
   const addPayment = () => {
-    const amt = Number(payAmount)
+    const amt = Math.round(Number(payAmount))
     if (!isFinite(amt) || amt <= 0) { tt("⚠️ Enter a valid payment amount"); return }
     if (payType === "insurance" && !insPayPhoto) { tt("⚠️ Attach release letter/cheque photo"); return }
-    const pay = { id: genId("pay"), amount: amt, type: payType, date: new Date().toISOString(), ...(payType === "insurance" ? { ins_status: "recorded", photo: insPayPhoto, reference: payRef } : { method: payMethod, reference: payRef }) }
+    // Flag payments landing AFTER today's cash count — they won't be in it
+    const todayLocal = new Date().toLocaleDateString("en-CA")
+    const afterCount = (cashBook?.dailyCounts || []).some(c => c.date === todayLocal)
+    // Customer cheques start as pending: they credit the bank only when marked
+    // cleared (Cash Book → Bank tab), and a bounced cheque un-pays the invoice
+    const pay = { id: genId("pay"), amount: amt, type: payType, date: new Date().toISOString(), ...(payType === "insurance" ? { ins_status: "recorded", photo: insPayPhoto, reference: payRef } : { method: payMethod, reference: payRef, ...(payMethod === "cheque" ? { cheque_status: "pending" } : {}) }) }
     const np = [...(selInv.payments || []), pay]
     const updated = { ...selInv, payments: np }
     const ns = calcStatus(updated)
@@ -1412,7 +1422,8 @@ export function WorkshopProvider({ children }) {
       setCashBook(prev => ({ ...prev, bankBalance: (Number(prev.bankBalance) || 0) + amt }))
     }
     setShowPayForm(false); setPayAmount(""); setPayRef(""); setInsPayPhoto(null)
-    tt(payType === "insurance" ? `🛡️ Insurance Rs.${fmt(amt)} recorded` : `💰 Rs.${fmt(amt)} received — nice!`)
+    const base = payType === "insurance" ? `🛡️ Insurance Rs.${fmt(amt)} recorded` : `💰 Rs.${fmt(amt)} received — nice!`
+    tt(afterCount ? base + " ⚠️ AFTER today's cash count — re-count before closing" : base)
   }
   const deletePayment = (pid) => {
     if (confirmDel !== pid) { setConfirmDel(pid); setTimeout(() => setConfirmDel(c => c === pid ? null : c), 3000); return }
@@ -1434,12 +1445,40 @@ export function WorkshopProvider({ children }) {
     setConfirmDel(null); tt("Payment deleted")
   }
   const updateInsStatus = (pid, newStatus) => {
+    const prevPay = (selInv.payments || []).find(p => p.id === pid)
     const np = (selInv.payments || []).map(p => p.id === pid ? { ...p, ins_status: newStatus } : p)
     const updated = { ...selInv, payments: np }
     const ns = calcStatus(updated)
     setInvoices(p => p.map(inv => inv.id === selInv.id ? { ...inv, payments: np, status: ns } : inv))
     setSelInv(prev => ({ ...prev, payments: np, status: ns }))
+    // Insurance settlements land in the bank — keep the bank balance in step
+    // with the received flag (and reverse if the flag is undone)
+    const amt = Number(prevPay?.amount) || 0
+    if (amt > 0 && prevPay) {
+      if (newStatus === "received" && prevPay.ins_status !== "received") {
+        setCashBook(prev => ({ ...prev, bankBalance: (Number(prev.bankBalance) || 0) + amt }))
+      } else if (newStatus !== "received" && prevPay.ins_status === "received") {
+        setCashBook(prev => ({ ...prev, bankBalance: (Number(prev.bankBalance) || 0) - amt }))
+      }
+    }
     tt(`→ ${newStatus}`)
+  }
+  // Patch one payment inside any job's invoice (used by Cash Book cheque
+  // clearing, where the target job usually isn't the one open on screen).
+  // Also patches the active job's working state so a later saveCurrentJob
+  // can't overwrite the change with a stale copy.
+  const patchJobPayment = (jobId, invoiceId, paymentId, patch) => {
+    const apply = inv => {
+      if (inv.id !== invoiceId) return inv
+      const np = (inv.payments || []).map(p => p.id === paymentId ? { ...p, ...patch } : p)
+      const upd = { ...inv, payments: np }
+      return { ...upd, status: calcStatus(upd) }
+    }
+    setJobs(prev => prev.map(j => j.id !== jobId ? j : { ...j, invoices: (j.invoices || []).map(apply) }))
+    if (activeJobId === jobId) {
+      setInvoices(prev => prev.map(apply))
+      setSelInv(prev => (prev && prev.id === invoiceId) ? apply(prev) : prev)
+    }
   }
   const applyCustomerDiscount = (d) => {
     const amt = Math.max(0, Number(d) || 0)
@@ -1642,7 +1681,7 @@ export function WorkshopProvider({ children }) {
     invCustDiscount, invCustPortion, invCustOwes, invCustBalance, invTotalDiscount, invFullyPaid,
     invExcess, invInsExpected, jobOutstandingTotal,
     updateInvItem, removeInvItem, setInvStatus, calcStatus,
-    addPayment, deletePayment, updateInsStatus, applyCustomerDiscount, applyExcess,
+    addPayment, deletePayment, updateInsStatus, patchJobPayment, applyCustomerDiscount, applyExcess,
     uploadPhoto, deletePhoto,
   }
 
