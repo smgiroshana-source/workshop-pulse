@@ -68,8 +68,22 @@ const main = async () => {
   console.log(`Mode:        ${EXECUTE ? "EXECUTE" : "DRY RUN (no writes)"}\n`)
 
   // ── Tables ──
+  // Only columns that exist in the destination schema; extras in the old
+  // tables (e.g. a redundant jobs.updated_at — the app tracks updated_at
+  // inside the data JSON) are dropped, with a note.
+  const COLUMNS = {
+    user_roles: ["id", "email", "name", "role", "is_active", "created_at", "updated_at"],
+    jobs: ["id", "data", "created_at", "stage", "on_hold", "vehicle_reg", "customer_name", "customer_phone", "job_type"],
+    store_data: ["id", "data", "updated_at"],
+  }
   for (const table of ["user_roles", "jobs", "store_data"]) {
-    const rows = await fetchAll(oldDb, table)
+    let rows = await fetchAll(oldDb, table)
+    if (rows.length > 0) {
+      const keep = new Set(COLUMNS[table])
+      const dropped = Object.keys(rows[0]).filter(k => !keep.has(k))
+      if (dropped.length) console.log(`${table}: dropping old-only column(s): ${dropped.join(", ")}`)
+      rows = rows.map(r => Object.fromEntries(Object.entries(r).filter(([k]) => keep.has(k))))
+    }
     const { count: existing, error: cErr } = await newDb.from(table).select("*", { count: "exact", head: true })
     if (cErr) throw new Error(`${table} missing in kuruma project — run migration-to-kuruma.sql first (${cErr.message})`)
     console.log(`${table}: ${rows.length} rows to copy (destination currently has ${existing})`)
