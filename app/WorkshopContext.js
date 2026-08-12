@@ -864,6 +864,57 @@ export function WorkshopProvider({ children }) {
     openPDF("Parts Quotation - " + jobInfo.vehicle_reg, html)
   }
 
+  // ═══ OFFICIAL INVOICES (shared tax system with kuruma / WHEEL MART) ═══
+  // Issues a REAL document via the kuruma API: a gazette TAX INVOICE on the
+  // Pvt Ltd REPR serial stream, or a proprietor receipt on the WRCP series.
+  // The result snapshot is stored on the workshop invoice; reprints always
+  // use the snapshot so they can never drift from what was legally issued.
+  const KURUMA_WORKSHOP_API = "https://www.kuruma.lk/api/workshop/sales"
+  const issueOfficialInvoice = async (payload) => {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) throw new Error("Not signed in — please sign in again")
+    const res = await fetch(KURUMA_WORKSHOP_API, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: "Bearer " + session.access_token },
+      body: JSON.stringify(payload),
+    })
+    let j = null
+    try { j = await res.json() } catch {}
+    if (!res.ok) throw new Error(j?.error || `Failed (${res.status})`)
+    return j
+  }
+
+  // Print the issued document from its stored snapshot (gazette-compliant)
+  const printOfficialInvoice = (official) => {
+    const o = official
+    const isTax = o.docType === "tax_invoice"
+    const mdy = (d) => { const x = new Date(d); return `${String(x.getMonth() + 1).padStart(2, "0")}/${String(x.getDate()).padStart(2, "0")}/${x.getFullYear()}` }
+    let rows = ""
+    ;(o.items || []).forEach((it, i) => {
+      rows += "<tr><td>" + (i + 1) + "</td><td>" + esc(it.description) + "</td><td class=\"text-center\">" + it.qty + "</td><td class=\"text-right mono\">Rs." + Number(it.unitPrice).toLocaleString() + "</td><td class=\"text-right mono bold\">Rs." + (it.qty * it.unitPrice).toLocaleString() + "</td></tr>"
+    })
+    let totals = ""
+    if (o.discount > 0) {
+      totals += "<tr class=\"total-row\"><td colspan=\"4\" class=\"text-right\">Subtotal</td><td class=\"text-right mono\">Rs." + Number(o.subtotal).toLocaleString() + "</td></tr>"
+      totals += "<tr><td colspan=\"4\" class=\"text-right\" style=\"color:#e53935\">Discount</td><td class=\"text-right mono\" style=\"color:#e53935\">-Rs." + Number(o.discount).toLocaleString() + "</td></tr>"
+    }
+    if (isTax) {
+      totals += "<tr><td colspan=\"4\" class=\"text-right\">NET (excl. VAT)</td><td class=\"text-right mono\">Rs." + Number(o.net).toLocaleString() + "</td></tr>"
+      totals += "<tr><td colspan=\"4\" class=\"text-right\">VAT " + (o.vatRate || 18) + "%</td><td class=\"text-right mono\">Rs." + Number(o.vat).toLocaleString() + "</td></tr>"
+      totals += "<tr class=\"total-row\"><td colspan=\"4\" class=\"text-right\" style=\"font-size:16px\">TOTAL (incl. VAT)</td><td class=\"text-right mono\" style=\"font-size:16px\">Rs." + Number(o.total).toLocaleString() + "</td></tr>"
+    } else {
+      totals += "<tr class=\"total-row\"><td colspan=\"4\" class=\"text-right\" style=\"font-size:16px\">TOTAL</td><td class=\"text-right mono\" style=\"font-size:16px\">Rs." + Number(o.total).toLocaleString() + "</td></tr>"
+    }
+    const supplier = "<div><div class=\"shop-name\">" + esc(o.entity?.name) + "</div><div class=\"shop-detail\">" + esc(o.entity?.address) + "</div>" + (isTax && o.entity?.tin ? "<div class=\"shop-detail\"><strong>TIN: " + esc(o.entity.tin) + "</strong></div>" : "") + "</div>"
+    const docBlock = "<div><div class=\"doc-title\">" + (isTax ? "TAX INVOICE" : "SALES RECEIPT") + "</div><div class=\"doc-sub mono\"><strong>" + esc(o.serial) + "</strong></div><div class=\"doc-sub\">Date of Invoice: " + mdy(o.createdAt) + "</div>" + (isTax ? "<div class=\"doc-sub\">Date of Supply: " + mdy(o.dateSupply + "T00:00:00") + "</div>" : "") + "</div>"
+    const buyer = "<div class=\"info-grid\"><div><div class=\"info-label\">Bill To</div><div class=\"info-value\">" + esc(o.customer?.name) + "</div>" + (o.customer?.address ? "<div class=\"shop-detail\">" + esc(o.customer.address) + "</div>" : "") + (isTax && o.customer?.tin ? "<div class=\"shop-detail\">TIN: " + esc(o.customer.tin) + "</div>" : "") + "</div><div><div class=\"info-label\">Vehicle</div><div class=\"info-value\">" + esc(o.vehicleNo || "—") + "</div></div></div>"
+    const html = "<div class=\"header\">" + supplier + docBlock + "</div>" + buyer +
+      "<table><thead><tr><th>#</th><th>Description</th><th class=\"text-center\">Qty</th><th class=\"text-right\">Rate</th><th class=\"text-right\">Amount</th></tr></thead><tbody>" + rows + totals + "</tbody></table>" +
+      "<div class=\"stamp\"><div class=\"stamp-box\"><div class=\"stamp-line\">" + esc(o.entity?.name || "") + "</div></div><div class=\"stamp-box\"><div class=\"stamp-line\">Customer Signature</div></div></div>" +
+      "<div class=\"footer\"><span>" + esc(o.entity?.name || "") + "</span><span>" + esc(o.serial) + "</span></div>"
+    openPDF((isTax ? "Tax Invoice " : "Receipt ") + o.serial, html)
+  }
+
   // ═══ JOB MANAGEMENT ═══
   const saveCurrentJob = () => {
     if (!activeJobId) return
@@ -1672,6 +1723,7 @@ export function WorkshopProvider({ children }) {
     saveEstimate,
     startApproval, setApproved, approveAsIs, markUseSame, approveAllCatAsIs, handleApprovalEnter, finalizeApproval,
     generateInvoice, generateMinorInvoice,
+    issueOfficialInvoice, printOfficialInvoice,
     invTotal, invNet, invInsPayments, invCustPayments, invInsTotal, invInsReceivedTotal, invInsOutstanding, invCustPaidTotal,
     invCustDiscount, invCustPortion, invCustOwes, invCustBalance, invTotalDiscount, invFullyPaid,
     invExcess, invInsExpected, jobOutstandingTotal,

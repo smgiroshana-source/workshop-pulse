@@ -38,10 +38,82 @@ export default function InvoiceDetail() {
     unappliedAdvances, unappliedAdvanceTotal, applyAdvancesToInvoice,
     saveCurrentJob,
     generateInvoicePDF,
+    issueOfficialInvoice, printOfficialInvoice,
     tt,
   } = useWorkshop()
   const [showExcessInput, setShowExcessInput] = useState(false)
   const [excessVal, setExcessVal] = useState("")
+
+  // ── Official invoice (gazette tax invoice / proprietor receipt) ──
+  const [showIssueSheet, setShowIssueSheet] = useState(false)
+  const [offKind, setOffKind] = useState("tax_invoice") // insurance jobs are locked to tax_invoice
+  const [offPriceMode, setOffPriceMode] = useState("incl")
+  const [offName, setOffName] = useState("")
+  const [offAddress, setOffAddress] = useState("")
+  const [offTin, setOffTin] = useState("")
+  const [offPaidNow, setOffPaidNow] = useState(false)
+  const [offBusy, setOffBusy] = useState(false)
+
+  const openIssueSheet = () => {
+    const kind = "tax_invoice"
+    setOffKind(kind)
+    setOffPriceMode(isInsurance ? "excl" : "incl")
+    setOffName(isInsurance ? (jobInfo.insurance_name || "") : (jobInfo.customer_name || ""))
+    setOffAddress("")
+    setOffTin("")
+    setOffPaidNow(false)
+    setShowIssueSheet(true)
+  }
+
+  const doIssue = async () => {
+    if (!offName.trim()) { tt("⚠️ Enter the Bill To name"); return }
+    const isTax = offKind === "tax_invoice"
+    if (isTax && isInsurance && !offTin.trim() && !confirm("No purchaser TIN entered. A VAT-registered insurer normally needs their TIN on the tax invoice. Issue anyway?")) return
+    const items = (selInv.items || []).filter(i => i.qty > 0).map(i => ({
+      description: i.description + (i.remarks ? ` (${i.remarks})` : ""),
+      qty: i.qty, unitPrice: i.unit_price,
+      // replacement parts are goods (PART, 50% SSCL base); everything else is service work
+      stream: i.category === "replace" ? "PART" : "SVC",
+    }))
+    if (items.length === 0) { tt("⚠️ Invoice has no items"); return }
+    setOffBusy(true)
+    try {
+      const resp = await issueOfficialInvoice({
+        entityKind: offKind,
+        priceMode: offPriceMode,
+        customerName: offName.trim(),
+        customerPhone: isInsurance ? "" : (jobInfo.customer_phone || ""),
+        customerAddress: offAddress.trim(),
+        customerTin: offTin.trim(),
+        customerVatRegistered: isTax && !!offTin.trim(),
+        customerIsInsurance: isInsurance,
+        vehicleNo: jobInfo.vehicle_reg || "",
+        items,
+        discount: selInv.discount || 0, // insurance/invoice discount only — the private customer discount NEVER goes on official documents
+        payFullCash: offPaidNow,
+        jobRef: `${selInv.invoice_number}`,
+      })
+      const s = resp.sale
+      const official = {
+        docType: s.document_type, serial: s.invoice_no, saleId: s.id,
+        subtotal: s.subtotal, discount: s.discount, total: s.total,
+        net: s.net_amount, vat: s.vat_amount, vatRate: s.vat_rate,
+        dateSupply: s.date_supply, createdAt: s.created_at,
+        items: s.items.map(i => ({ description: i.description, qty: i.qty, unitPrice: i.unitPrice })),
+        entity: resp.entity,
+        customer: { name: offName.trim(), address: offAddress.trim(), tin: offTin.trim() },
+        vehicleNo: jobInfo.vehicle_reg || "", issuedAt: new Date().toISOString(),
+      }
+      setInvoices(p => p.map(inv => inv.id === selInv.id ? { ...inv, official } : inv))
+      setSelInv(prev => ({ ...prev, official }))
+      setShowIssueSheet(false)
+      tt(`✅ ${official.docType === "tax_invoice" ? "Tax Invoice" : "Receipt"} ${official.serial} issued`)
+      printOfficialInvoice(official)
+    } catch (e) {
+      tt("❌ " + e.message)
+    }
+    setOffBusy(false)
+  }
 
   if (!selInv) return null
 
@@ -51,6 +123,75 @@ export default function InvoiceDetail() {
       <div style={{ display: "flex", gap: 4, marginBottom: 16, background: C.card, borderRadius: 14, padding: 5, boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
         {["draft", "finalized", "sent", "paid"].map(k => { const s = INV_STATUS[k]; const active = selInv.status === k || (k === "paid" && selInv.status === "partially_paid"); return <div key={k} style={{ flex: 1, textAlign: "center", padding: "8px 0", borderRadius: 12, fontSize: 14, fontWeight: 600, background: active ? s.c + "12" : "transparent", color: active ? s.c : C.muted }}>{selInv.status === "partially_paid" && k === "paid" ? "Partial" : s.l}</div> })}
       </div>
+
+      {/* ── Official document (gazette tax invoice / proprietor receipt) ── */}
+      {selInv.official ? (
+        <div style={{ ...card, background: C.green + "08", border: `1.5px solid ${C.green}40`, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: C.green }}>✅ {selInv.official.docType === "tax_invoice" ? "TAX INVOICE" : "Receipt"} issued</div>
+            <div style={{ fontFamily: MONO, fontSize: 15, fontWeight: 700, marginTop: 2 }}>{selInv.official.serial}</div>
+            <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>Official document — reprints always match what was issued. Edits here do NOT change it.</div>
+          </div>
+          <button onClick={() => printOfficialInvoice(selInv.official)} style={{ ...btnSm(C.green, "#fff"), width: "auto", padding: "10px 16px", flexShrink: 0 }}>🖨 Print</button>
+        </div>
+      ) : (
+        (selInv.status !== "draft") && (
+          <div style={{ ...card, background: C.accent + "06", border: `1.5px dashed ${C.accent}50`, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: C.accent }}>No official document yet</div>
+              <div style={{ fontSize: 12, color: C.sub, marginTop: 2 }}>{isInsurance ? "Insurance jobs need a Pvt Ltd TAX INVOICE (REPR serial)." : "Issue a Pvt Ltd TAX INVOICE or a Proprietor receipt."}</div>
+            </div>
+            <button onClick={openIssueSheet} style={{ ...btnSm(C.accent, "#fff"), width: "auto", padding: "10px 16px", flexShrink: 0 }}>🧾 Issue</button>
+          </div>
+        )
+      )}
+
+      {showIssueSheet && (
+        <Sheet onClose={() => !offBusy && setShowIssueSheet(false)}>
+          <div style={{ fontSize: 20, fontWeight: 700, marginBottom: 16 }}>Issue Official Document</div>
+          {/* Document type — locked to Pvt Ltd tax invoice for insurance jobs */}
+          <div style={{ fontSize: 12, color: C.muted, marginBottom: 6, fontWeight: 600 }}>Document</div>
+          <div style={{ display: "flex", gap: 8, marginBottom: 4 }}>
+            <div onClick={() => setOffKind("tax_invoice")} style={{ flex: 1, padding: "12px 8px", borderRadius: 10, textAlign: "center", cursor: "pointer", fontSize: 13, fontWeight: 700, background: offKind === "tax_invoice" ? C.accent : "#fff", color: offKind === "tax_invoice" ? "#fff" : C.sub, border: `2px solid ${offKind === "tax_invoice" ? C.accent : C.border}` }}>Pvt Ltd — TAX INVOICE</div>
+            <div onClick={() => { if (isInsurance) { tt("⚠️ Insurance jobs must get a Pvt Ltd TAX INVOICE"); return } setOffKind("receipt") }} style={{ flex: 1, padding: "12px 8px", borderRadius: 10, textAlign: "center", cursor: isInsurance ? "not-allowed" : "pointer", opacity: isInsurance ? 0.4 : 1, fontSize: 13, fontWeight: 700, background: offKind === "receipt" ? C.orange : "#fff", color: offKind === "receipt" ? "#fff" : C.sub, border: `2px solid ${offKind === "receipt" ? C.orange : C.border}` }}>Proprietor — Receipt</div>
+          </div>
+          <div style={{ fontSize: 11, color: C.muted, marginBottom: 12 }}>{offKind === "tax_invoice" ? "MacForce Auto Engineering (Pvt) Ltd · TIN 101969738 · serial " + (isInsurance ? "REPR" : "REPR") + " · VAT shown" : "Macforce Auto Engineering (proprietorship) · WRCP receipt · no VAT"}</div>
+
+          {offKind === "tax_invoice" && (
+            <>
+              <div style={{ fontSize: 12, color: C.muted, marginBottom: 6, fontWeight: 600 }}>Prices on this invoice are…</div>
+              <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+                <div onClick={() => setOffPriceMode("excl")} style={{ flex: 1, padding: "10px 8px", borderRadius: 10, textAlign: "center", cursor: "pointer", fontSize: 12, fontWeight: 700, background: offPriceMode === "excl" ? C.purple : "#fff", color: offPriceMode === "excl" ? "#fff" : C.sub, border: `2px solid ${offPriceMode === "excl" ? C.purple : C.border}` }}>Excl. VAT → +{18}% added</div>
+                <div onClick={() => setOffPriceMode("incl")} style={{ flex: 1, padding: "10px 8px", borderRadius: 10, textAlign: "center", cursor: "pointer", fontSize: 12, fontWeight: 700, background: offPriceMode === "incl" ? C.purple : "#fff", color: offPriceMode === "incl" ? "#fff" : C.sub, border: `2px solid ${offPriceMode === "incl" ? C.purple : C.border}` }}>Already incl. VAT</div>
+              </div>
+            </>
+          )}
+
+          <div style={{ fontSize: 12, color: C.muted, marginBottom: 6, fontWeight: 600 }}>Bill To</div>
+          <input value={offName} onChange={e => setOffName(e.target.value)} placeholder="Name (insurer or customer)" style={{ ...inp, marginBottom: 8 }} />
+          {offKind === "tax_invoice" && (
+            <>
+              <input value={offAddress} onChange={e => setOffAddress(e.target.value)} placeholder="Address" style={{ ...inp, marginBottom: 8 }} />
+              <input value={offTin} onChange={e => setOffTin(e.target.value)} placeholder="Purchaser TIN (9 digits — required for insurers)" style={{ ...inp, marginBottom: 8, fontFamily: MONO }} />
+            </>
+          )}
+
+          <label style={{ display: "flex", alignItems: "center", gap: 8, margin: "6px 0 14px", cursor: "pointer" }}>
+            <input type="checkbox" checked={offPaidNow} onChange={e => setOffPaidNow(e.target.checked)} />
+            <span style={{ fontSize: 13, color: C.sub }}>Paid in full now (cash)</span>
+          </label>
+
+          <div style={{ fontSize: 12, color: C.sub, background: C.bg, borderRadius: 10, padding: "10px 12px", marginBottom: 14 }}>
+            {(selInv.items || []).filter(i => i.qty > 0).length} line item{(selInv.items || []).filter(i => i.qty > 0).length !== 1 ? "s" : ""} from this invoice
+            {selInv.discount > 0 ? ` · discount Rs.${fmt(selInv.discount)}` : ""}
+            {selInv.customer_discount > 0 ? " · private customer discount NOT included (never on official documents)" : ""}
+            {offKind === "tax_invoice" && offPriceMode === "excl" ? " · VAT 18% will be added on top" : ""}
+          </div>
+
+          <button onClick={doIssue} disabled={offBusy} style={{ ...btn(C.green, "#fff"), opacity: offBusy ? 0.6 : 1 }}>{offBusy ? "⏳ Issuing…" : "✅ Issue & Print"}</button>
+          <div style={{ fontSize: 11, color: C.red, marginTop: 8, textAlign: "center" }}>This mints an official serial number — it cannot be un-issued, only voided by the office.</div>
+        </Sheet>
+      )}
       <div style={{ ...card, padding: 0, overflow: "hidden" }}>
         <div style={{ padding: "16px 18px", borderBottom: `1px solid ${C.border}` }}>
           <div style={{ fontSize: 18, fontWeight: 700 }}>{WORKSHOP.name}</div>
