@@ -572,6 +572,8 @@ function PayableScreen({ unpaidPOs, setPurchaseOrders, setGrns, cashBook, setCas
   const [bankSlipPreview, setBankSlipPreview] = useState(null)
   const [uploading, setUploading] = useState(false)
   const slipInputRef = useRef(null)
+  // Cheque confirmation slip overlay: {no, supplier, amount, chequeNo, chequeDate}
+  const [confirmSlip, setConfirmSlip] = useState(null)
 
   const totalPayable = unpaidPOs.reduce((s, p) => s + (p.totalAmount || 0), 0)
 
@@ -593,9 +595,15 @@ function PayableScreen({ unpaidPOs, setPurchaseOrders, setGrns, cashBook, setCas
       paymentDate: new Date().toISOString(),
     }
     if (payMethod === "cheque") {
+      // Cheque control: the cheque number is mandatory, and the system issues an
+      // 8-digit confirmation number the operator writes on the cheque book slip.
+      // House rule: the owner signs a cheque ONLY if its slip carries this number
+      // — so a cheque can't exist without being recorded here first.
+      if (!chequeNo.trim()) { tt("⚠️ Enter the cheque number first"); return }
       paymentData.chequeNo = chequeNo
       paymentData.chequeBank = chequeBank
       paymentData.chequeDate = chequeDate
+      paymentData.paymentConfirmNo = String(Math.floor(10000000 + Math.random() * 90000000))
     }
     if (payMethod === "bank" && bankSlip) {
       try {
@@ -612,7 +620,11 @@ function PayableScreen({ unpaidPOs, setPurchaseOrders, setGrns, cashBook, setCas
       }
     }
     setGrns(prev => prev.map(g => g.id === item.id ? { ...g, ...paymentData } : g))
-    tt("✓ Payment recorded")
+    if (paymentData.paymentConfirmNo) {
+      setConfirmSlip({ no: paymentData.paymentConfirmNo, supplier: item.supplier, amount: paymentData.paymentAmount, chequeNo, chequeDate })
+    } else {
+      tt("✓ Payment recorded")
+    }
     setPayingId(null)
   }
 
@@ -626,6 +638,25 @@ function PayableScreen({ unpaidPOs, setPurchaseOrders, setGrns, cashBook, setCas
 
   return (
     <div>
+      {/* Cheque payment confirmation — operator copies this number onto the
+          cheque book slip; the owner signs only slips that carry a number */}
+      {confirmSlip && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 10000, background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+          <div style={{ background: "#fff", borderRadius: 20, padding: "28px 24px", maxWidth: 420, width: "100%", textAlign: "center", fontFamily: FONT }}>
+            <div style={{ fontSize: 15, fontWeight: 700, color: C.green }}>✓ Cheque payment recorded</div>
+            <div style={{ fontSize: 13, color: C.sub, marginTop: 12 }}>Payment Confirmation Number</div>
+            <div style={{ fontFamily: MONO, fontSize: 40, fontWeight: 800, letterSpacing: 4, margin: "6px 0 14px", color: C.accent }}>{confirmSlip.no}</div>
+            <div style={{ fontSize: 14, color: C.sub, lineHeight: 1.6, background: C.bg, borderRadius: 12, padding: "12px 14px", textAlign: "left" }}>
+              ✍️ Write this number on the cheque book slip for cheque <strong>{confirmSlip.chequeNo || "—"}</strong> along with:<br />
+              • Supplier: <strong>{confirmSlip.supplier}</strong><br />
+              • Amount: <strong>Rs.{num(confirmSlip.amount).toLocaleString()}</strong><br />
+              • Date: <strong>{confirmSlip.chequeDate || localDateStr()}</strong>
+            </div>
+            <div style={{ fontSize: 12, color: C.red, fontWeight: 600, marginTop: 10 }}>The owner signs ONLY cheques whose slip carries a confirmation number.</div>
+            <button onClick={() => setConfirmSlip(null)} style={{ ...btn(C.accent, "#fff"), marginTop: 16 }}>Done — number written on slip</button>
+          </div>
+        </div>
+      )}
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
         <span onClick={onBack} style={{ fontSize: 14, color: C.accent, cursor: "pointer", fontWeight: 600 }}>← Back</span>
         <span style={{ fontSize: 20, fontWeight: 700 }}>Payable</span>

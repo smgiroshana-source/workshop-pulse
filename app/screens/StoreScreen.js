@@ -360,6 +360,12 @@ function GRNDetail({ grn, onBack, pos, onUpdate, cashBook, setCashBook, tt }) {
         {grn.invoiceAmount > 0 && !editing && (
           <div style={{ marginTop: 8, fontSize: 13, color: C.sub }}>Invoice Amount: <span style={{ fontFamily: MONO, fontWeight: 700 }}>Rs.{grn.invoiceAmount.toLocaleString()}</span></div>
         )}
+        {!editing && grn.paymentMethod === "cheque" && (
+          <div style={{ marginTop: 8, fontSize: 13, color: C.sub }}>
+            Cheque: <span style={{ fontFamily: MONO, fontWeight: 700 }}>{grn.chequeNo || "—"}</span>{grn.chequeBank ? ` · ${grn.chequeBank}` : ""}{grn.chequeDate ? ` · ${grn.chequeDate}` : ""}
+            {grn.paymentConfirmNo && <div style={{ marginTop: 4 }}>Payment Confirmation #: <span style={{ fontFamily: MONO, fontWeight: 800, color: C.accent, letterSpacing: 1 }}>{grn.paymentConfirmNo}</span> <span style={{ fontSize: 11, color: C.muted }}>(must match the cheque book slip)</span></div>}
+          </div>
+        )}
       </div>
 
       {/* Items */}
