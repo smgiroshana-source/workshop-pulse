@@ -310,6 +310,10 @@ export function WorkshopProvider({ children }) {
   const [cashBook, setCashBook] = useState({ miscExpenses: [], dailyCounts: [], bankBalance: 0, openingCash: 0 })
   // Assessor reference list: [{id, name, phone, insurance}] — built up as jobs record assessors
   const [assessors, setAssessors] = useState([])
+  // Contractor payment ledger: [{id, contractor, amount, method:"cash"|"bank", date:"YYYY-MM-DD", note, created_at}]
+  // Work entries live on jobs (jobCosts type "outsource" with contractor/category);
+  // balance per contractor = work billed − payments made.
+  const [contractorPayments, setContractorPayments] = useState([])
   const storeSyncRef = useRef(false)
   // Sync-health surface: {type:'error'|'conflict', msg} — rendered as a banner in the app shell
   const [syncIssue, setSyncIssue] = useState(null)
@@ -335,6 +339,7 @@ export function WorkshopProvider({ children }) {
         setGrns(data?.data?.grns || [])
         if (data?.data?.cashBook) setCashBook(data.data.cashBook)
         if (data?.data?.assessors) setAssessors(data.data.assessors)
+        if (data?.data?.contractorPayments) setContractorPayments(data.data.contractorPayments)
         storeBaseRef.current = data?.updated_at || null
         storeSyncRef.current = true
       })
@@ -356,6 +361,22 @@ export function WorkshopProvider({ children }) {
       return [...prev, { id: genId("ass"), name: n, phone: p, insurance: insurance || "" }]
     })
   }, [])
+  // ── Contractor payments (ledger side; work entries live on jobs) ──
+  const addContractorPayment = ({ contractor, amount, method, note, date }) => {
+    const amt = Math.round(Number(amount))
+    if (!contractor || !contractor.trim()) { tt("⚠️ Enter the contractor name"); return false }
+    if (!isFinite(amt) || amt <= 0) { tt("⚠️ Enter a valid amount"); return false }
+    setContractorPayments(prev => [...prev, {
+      id: genId("cpay"), contractor: contractor.trim(), amount: amt,
+      method: method === "bank" ? "bank" : "cash",
+      date: date || new Date().toLocaleDateString("en-CA"),
+      note: (note || "").trim(), created_at: new Date().toISOString(),
+    }])
+    tt(`💸 Rs.${fmt(amt)} paid to ${contractor.trim()}`)
+    return true
+  }
+  const deleteContractorPayment = (id) => setContractorPayments(prev => prev.filter(p => p.id !== id))
+
   // Sync store data to Supabase (debounced, conflict-checked, retried on failure)
   const storeDirtyRef = useRef(false)
   const storeTimerRef = useRef(null)
@@ -383,6 +404,7 @@ export function WorkshopProvider({ children }) {
             setGrns(remote.data.grns || [])
             if (remote.data.cashBook) setCashBook(remote.data.cashBook)
             setAssessors(remote.data.assessors || [])
+            setContractorPayments(remote.data.contractorPayments || [])
             setSyncIssue({ type: "conflict", msg: "Store/cash data was changed on another device — this screen was refreshed with the latest version. Please re-enter your last change." })
             return
           }
@@ -414,14 +436,14 @@ export function WorkshopProvider({ children }) {
     }
   }, [])
   useEffect(() => {
-    storeStateRef.current = { purchaseOrders, grns, cashBook, assessors }
+    storeStateRef.current = { purchaseOrders, grns, cashBook, assessors, contractorPayments }
     if (!storeSyncRef.current) return
     if (storeAdoptRef.current) { storeAdoptRef.current = false; return } // server state adopted — not a local edit
     storeDirtyRef.current = true
     if (storeTimerRef.current) clearTimeout(storeTimerRef.current)
     storeTimerRef.current = setTimeout(flushStore, 1000)
     return () => { if (storeTimerRef.current) clearTimeout(storeTimerRef.current) }
-  }, [purchaseOrders, grns, cashBook, assessors, flushStore])
+  }, [purchaseOrders, grns, cashBook, assessors, contractorPayments, flushStore])
   // Parts Quotation (insurance) / PO (direct)
   const [partsQuotation, setPartsQuotation] = useState([]) // [{id, partName, estLabel, supplier, quotedPrice, approvedPrice, remarks}]
   const [pqStatus, setPqStatus] = useState("draft") // draft | submitted | approved
@@ -1665,6 +1687,8 @@ export function WorkshopProvider({ children }) {
     grns, setGrns,
     cashBook, setCashBook,
     assessors, setAssessors, rememberAssessor,
+    contractorPayments, addContractorPayment, deleteContractorPayment,
+    openPDF, esc,
     advances, setAdvances, advanceTotal, unappliedAdvances, unappliedAdvanceTotal,
     addAdvance, deleteAdvance, applyAdvancesToInvoice,
     partsQuotation, setPartsQuotation,

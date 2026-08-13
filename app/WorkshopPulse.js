@@ -5,6 +5,7 @@ import { useAuth } from "./AuthGate"
 import { uploadPhoto, deletePhoto, compressForPreview } from "./supabase"
 import SecureImg from "./SecureImg"
 import UserManagement from "./screens/UserManagement"
+import ContractorsScreen from "./screens/ContractorsScreen"
 import { ClosedHistory, ClosedJobDetail } from "./screens/HomeScreen"
 import NewJobScreen from "./screens/NewJobScreen"
 import JobScreen from "./screens/JobScreen"
@@ -35,6 +36,7 @@ function toLocalDate(iso) {
 function num(v) { const n = Number(v); return isFinite(n) ? n : 0 }
 
 function CashBookScreen({ cashBook, setCashBook, grns, setGrns, jobs, loadClosedJobs, tt, onBack }) {
+  const { contractorPayments, openPDF, esc } = useWorkshop()
   const [tab, setTab] = useState("cash") // cash | bank | history
   // Load closed jobs on mount so late payments on closed jobs appear in cashbook
   useEffect(() => { if (loadClosedJobs) loadClosedJobs() }, [loadClosedJobs])
@@ -128,6 +130,14 @@ function CashBookScreen({ cashBook, setCashBook, grns, setGrns, jobs, loadClosed
         chequeDate: g.chequeDate
       })
     })
+    // Contractor payments (sub-contract settlements/advances) hit the drawer/bank
+    ;(contractorPayments || []).forEach(p => {
+      if (p.date !== date) return
+      items.push({
+        id: p.id, desc: `Contractor — ${p.contractor}${p.note ? ` (${p.note})` : ""}`,
+        amount: num(p.amount), method: p.method === "bank" ? "bank" : "cash",
+      })
+    })
     return items
   }
 
@@ -215,6 +225,103 @@ function CashBookScreen({ cashBook, setCashBook, grns, setGrns, jobs, loadClosed
     const yesterday = localDateStr(new Date(Date.now() - 86400000))
     return cashBook.lastClosedDate < yesterday ? cashBook.lastClosedDate : null
   })()
+
+  // ── Report PDFs (owner downloads → attaches on WhatsApp) ──
+  const officialsWhere = (pred) => {
+    const out = []
+    ;(jobs || []).forEach(j => (j.invoices || []).forEach(inv => {
+      const o = inv.official
+      if (o && o.issuedAt && pred(toLocalDate(o.issuedAt))) out.push({ o, j })
+    }))
+    return out
+  }
+
+  const generateDailyPDF = () => {
+    const expAll = [
+      ...dayExpenses.map(e => ({ desc: e.desc, method: e.method || "cash", amount: e.amount })),
+      ...plainMisc.map(e => ({ desc: e.description, method: "cash", amount: num(e.amount) })),
+    ]
+    const offs = officialsWhere(d => d === viewDate)
+    const totalInc = dayIncome.reduce((s, i) => s + i.amount, 0)
+    const totalExp = expAll.reduce((s, e) => s + e.amount, 0)
+    const newJobs = (jobs || []).filter(j => toLocalDate(j.created_at) === viewDate).length
+    const activeJobs = (jobs || []).filter(j => !j.onHold && j.stage !== "closed" && j.stage !== "cancelled").length
+    const sec = (title) => `<tr><td colspan="3" style="background:#f4f4f4;font-weight:700;padding:8px 12px">${title}</td></tr>`
+    let rows = ""
+    rows += sec("💰 Income — Rs." + totalInc.toLocaleString())
+    rows += dayIncome.length ? dayIncome.map(i => `<tr><td>${esc(i.desc)}</td><td class="text-center">${esc(i.method)}</td><td class="text-right mono">Rs.${i.amount.toLocaleString()}</td></tr>`).join("") : `<tr><td colspan="3" style="color:#999">No income recorded</td></tr>`
+    rows += sec("🧾 Official documents issued — " + offs.length)
+    rows += offs.length ? offs.map(({ o, j }) => `<tr><td class="mono">${esc(o.serial)}</td><td>${esc((j.jobNumber || "") + " " + (j.jobInfo?.vehicle_reg || ""))}</td><td class="text-right mono">Rs.${num(o.total).toLocaleString()}</td></tr>`).join("") : `<tr><td colspan="3" style="color:#999">None</td></tr>`
+    rows += sec("📤 Expenses — Rs." + totalExp.toLocaleString())
+    rows += expAll.length ? expAll.map(e => `<tr><td>${esc(e.desc)}</td><td class="text-center">${esc(e.method)}</td><td class="text-right mono">Rs.${e.amount.toLocaleString()}</td></tr>`).join("") : `<tr><td colspan="3" style="color:#999">No expenses</td></tr>`
+    rows += sec("💵 Cash Drawer")
+    rows += `<tr><td colspan="2">Opening cash</td><td class="text-right mono">Rs.${prevBalance.toLocaleString()}</td></tr>`
+    rows += `<tr><td colspan="2">+ Cash income</td><td class="text-right mono">Rs.${totalCashIn.toLocaleString()}</td></tr>`
+    if (transferIn > 0) rows += `<tr><td colspan="2">+ Bank → cash transfers</td><td class="text-right mono">Rs.${transferIn.toLocaleString()}</td></tr>`
+    rows += `<tr><td colspan="2">− Cash out (expenses${transferOut > 0 ? " + deposits" : ""})</td><td class="text-right mono">Rs.${(totalExpenses).toLocaleString()}</td></tr>`
+    rows += `<tr class="total-row"><td colspan="2">EXPECTED IN DRAWER</td><td class="text-right mono">Rs.${calculatedBalance.toLocaleString()}</td></tr>`
+    rows += `<tr><td colspan="2">Counted</td><td class="text-right mono">${dayCount ? "Rs." + num(dayCount.actualCash).toLocaleString() : "— not counted —"}</td></tr>`
+    if (dayCount) rows += `<tr><td colspan="2" style="font-weight:700;color:${cashDiff === 0 ? "#2e7d32" : "#e53935"}">Variance</td><td class="text-right mono" style="font-weight:700;color:${cashDiff === 0 ? "#2e7d32" : "#e53935"}">${cashDiff > 0 ? "+" : ""}Rs.${cashDiff.toLocaleString()}</td></tr>`
+    rows += sec("🚗 Jobs")
+    rows += `<tr><td colspan="2">New jobs today</td><td class="text-right mono">${newJobs}</td></tr>`
+    rows += `<tr><td colspan="2">Currently active</td><td class="text-right mono">${activeJobs}</td></tr>`
+    const dateLabel = new Date(viewDate + "T00:00:00").toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" })
+    const html = `<div class="header"><div><div class="shop-name">MacForce Auto Engineering</div><div class="shop-detail">Workshop Daily Report</div></div><div><div class="doc-title">DAILY REPORT</div><div class="doc-sub">${dateLabel}</div></div></div><table><tbody>${rows}</tbody></table><div class="footer"><span>Workshop Pulse</span><span>Generated ${new Date().toLocaleString()}</span></div>`
+    openPDF("Workshop Daily " + viewDate, html)
+  }
+
+  const generateMonthlyPDF = () => {
+    const month = viewDate.slice(0, 7)
+    const monthLabel = new Date(month + "-01T00:00:00").toLocaleDateString("en-GB", { month: "long", year: "numeric" })
+    // Revenue: official documents issued this month (tax invoices at NET — the
+    // VAT belongs to IRD, not profit) + internal invoices with no official doc
+    const offs = officialsWhere(d => d.slice(0, 7) === month)
+    let revTax = 0, revRcp = 0
+    const offRows = offs.map(({ o, j }) => {
+      const val = o.docType === "tax_invoice" ? num(o.net) : num(o.total)
+      if (o.docType === "tax_invoice") revTax += val; else revRcp += val
+      return `<tr><td class="mono">${esc(o.serial)}</td><td>${esc(j.jobNumber || "")}</td><td class="text-center">${o.docType === "tax_invoice" ? "Tax Invoice (net)" : "Receipt"}</td><td class="text-right mono">Rs.${val.toLocaleString()}</td></tr>`
+    }).join("")
+    let revInternal = 0
+    ;(jobs || []).forEach(j => (j.invoices || []).forEach(inv => {
+      if (inv.official) return
+      if (toLocalDate(inv.created_at).slice(0, 7) !== month) return
+      const t = (inv.items || []).reduce((s, i) => s + i.qty * i.unit_price, 0) - num(inv.discount) - num(inv.customer_discount)
+      revInternal += Math.max(0, t)
+    }))
+    const revenue = revTax + revRcp + revInternal
+    // Collected: actual money in across the month
+    const days = []
+    { const d = new Date(month + "-01T00:00:00"); while (localDateStr(d).slice(0, 7) === month) { days.push(localDateStr(d)); d.setDate(d.getDate() + 1) } }
+    const collected = days.reduce((s, day) => s + computeIncome(day).reduce((x, i) => x + i.amount, 0), 0)
+    // Costs
+    let costParts = 0, costSub = 0
+    ;(jobs || []).forEach(j => (j.jobCosts || []).forEach(c => {
+      if (c.type === "labour") return
+      const d = c.date || toLocalDate(j.created_at)
+      if ((d || "").slice(0, 7) !== month) return
+      if (c.type === "outsource") costSub += num(c.cost); else costParts += num(c.cost)
+    }))
+    const costGrn = grns.filter(g => toLocalDate(g.receivedDate).slice(0, 7) === month).reduce((s, g) => s + num(g.totalAmount), 0)
+    const costMisc = (cashBook.miscExpenses || []).filter(e => e.category !== "transfer" && (e.date || "").slice(0, 7) === month).reduce((s, e) => s + num(e.amount), 0)
+    const totalCosts = costParts + costSub + costGrn + costMisc
+    const profit = revenue - totalCosts
+    let rows = ""
+    const sec = (t) => `<tr><td colspan="4" style="background:#f4f4f4;font-weight:700;padding:8px 12px">${t}</td></tr>`
+    rows += sec("Revenue — Rs." + revenue.toLocaleString())
+    rows += offRows || ""
+    if (revInternal > 0) rows += `<tr><td colspan="3">Internal invoices (no official document yet)</td><td class="text-right mono">Rs.${revInternal.toLocaleString()}</td></tr>`
+    if (!offRows && revInternal === 0) rows += `<tr><td colspan="4" style="color:#999">No invoices this month</td></tr>`
+    rows += `<tr><td colspan="3" style="color:#666">Money actually collected this month (all methods)</td><td class="text-right mono" style="color:#666">Rs.${collected.toLocaleString()}</td></tr>`
+    rows += sec("Costs — Rs." + totalCosts.toLocaleString())
+    rows += `<tr><td colspan="3">Sub-contracted work (painting, denting, glass…)</td><td class="text-right mono">Rs.${costSub.toLocaleString()}</td></tr>`
+    rows += `<tr><td colspan="3">Parts &amp; materials bought for jobs</td><td class="text-right mono">Rs.${costParts.toLocaleString()}</td></tr>`
+    rows += `<tr><td colspan="3">Store purchases (paint, consumables — GRNs)</td><td class="text-right mono">Rs.${costGrn.toLocaleString()}</td></tr>`
+    rows += `<tr><td colspan="3">Other expenses (cash book)</td><td class="text-right mono">Rs.${costMisc.toLocaleString()}</td></tr>`
+    rows += `<tr class="total-row"><td colspan="3" style="font-size:16px">OPERATING PROFIT</td><td class="text-right mono" style="font-size:16px;color:${profit >= 0 ? "#2e7d32" : "#e53935"}">Rs.${profit.toLocaleString()}</td></tr>`
+    const html = `<div class="header"><div><div class="shop-name">MacForce Auto Engineering</div><div class="shop-detail">Workshop Monthly Summary</div></div><div><div class="doc-title">MONTHLY SUMMARY</div><div class="doc-sub">${monthLabel}</div></div></div><table><tbody>${rows}</tbody></table><div style="margin-top:14px;font-size:12px;color:#666;line-height:1.6">Notes: Tax-invoice revenue is shown NET of VAT (the 18% is payable to IRD, not profit). Contractor <em>payments</em> are settlements of the work costs above and are not counted again. Wages, rent and utilities are included only if entered as cash-book expenses.</div><div class="footer"><span>Workshop Pulse</span><span>Generated ${new Date().toLocaleString()}</span></div>`
+    openPDF("Workshop Monthly " + month, html)
+  }
 
   const saveOpening = () => {
     const amt = num(openingCash)
@@ -311,6 +418,12 @@ function CashBookScreen({ cashBook, setCashBook, grns, setGrns, jobs, loadClosed
         </div>
         <span onClick={() => shiftDate(1)} style={{ padding: "6px 10px", borderRadius: 8, background: C.bg, cursor: isToday ? "not-allowed" : "pointer", fontSize: 16, fontWeight: 700, opacity: isToday ? 0.3 : 1 }}>›</span>
         {!isToday && <span onClick={() => setViewDate(today)} style={{ fontSize: 12, color: C.accent, fontWeight: 600, cursor: "pointer", marginLeft: 4 }}>Today</span>}
+      </div>
+
+      {/* Report PDFs — download, then attach on WhatsApp */}
+      <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+        <button onClick={generateDailyPDF} style={{ flex: 1, padding: "11px 8px", borderRadius: 12, border: "none", background: C.accent, color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: FONT }}>📄 Daily Report PDF</button>
+        <button onClick={generateMonthlyPDF} style={{ flex: 1, padding: "11px 8px", borderRadius: 12, border: "none", background: C.purple, color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: FONT }}>📊 Monthly Summary PDF</button>
       </div>
 
       {/* Tabs */}
@@ -844,6 +957,7 @@ function AppInner() {
     purchaseOrders, setPurchaseOrders,
     grns, setGrns,
     cashBook, setCashBook,
+    contractorPayments,
     customerRegistry,
     loadClosedJobs,
     startWarrantyJob,
@@ -1045,6 +1159,11 @@ function AppInner() {
     // Unpaid POs/GRNs (ordered, partial, received but not marked paid)
     const unpaidPOs = grns.filter(g => !g.paid)
 
+    // Contractor balances: work billed on jobs − payments in the ledger
+    const contractorWork = jobs.reduce((s, j) => s + (j.jobCosts || []).filter(c => c.type === "outsource" && c.contractor).reduce((x, c) => x + (Number(c.cost) || 0), 0), 0)
+    const contractorPaid = (contractorPayments || []).reduce((s, p) => s + (Number(p.amount) || 0), 0)
+    const contractorOwed = Math.max(0, contractorWork - contractorPaid)
+
     // Job type counts
     const insCount = jobs.filter(j => j.jobInfo?.job_type === "insurance" && j.stage !== "closed").length
     const directCount = jobs.filter(j => j.jobInfo?.job_type === "direct" && j.stage !== "closed").length
@@ -1199,6 +1318,10 @@ function AppInner() {
 
     if (rightTab === "cashbook") {
       return <CashBookScreen cashBook={cashBook} setCashBook={setCashBook} grns={grns} setGrns={setGrns} jobs={jobs} loadClosedJobs={loadClosedJobs} tt={tt} onBack={() => setRightTab(null)} />
+    }
+
+    if (rightTab === "contractors") {
+      return <ContractorsScreen onBack={() => setRightTab(null)} />
     }
 
     if (rightTab === "assessors") {
@@ -1410,6 +1533,16 @@ function AppInner() {
             <div style={{ fontSize: 13, color: C.muted }}>Petty Cash · Expenses · Bank</div>
             <div style={{ fontFamily: MONO, fontSize: 13, fontWeight: 700, color: C.accent, marginTop: 8 }}>
               Cash Rs.{(cashBook.openingCash || 0).toLocaleString()}
+            </div>
+          </div>
+
+          {/* Contractors */}
+          <div data-card-hover onClick={() => setRightTab("contractors")} style={{ ...card, cursor: "pointer", padding: "20px 16px", textAlign: "center", border: `1px solid ${C.purple}20` }}>
+            <div style={{ display: "flex", justifyContent: "center", marginBottom: 10 }}><IconBadge name="users" color={C.purple} size={44} /></div>
+            <div style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 4 }}>Contractors</div>
+            <div style={{ fontSize: 13, color: C.muted }}>Sub-contract accounts</div>
+            <div style={{ fontFamily: MONO, fontSize: 13, fontWeight: 700, color: contractorOwed > 0 ? C.orange : C.green, marginTop: 8 }}>
+              {contractorOwed > 0 ? `Rs.${contractorOwed.toLocaleString()} owed` : "All settled"}
             </div>
           </div>
         </div>

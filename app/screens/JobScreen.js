@@ -4,6 +4,7 @@ import { useWorkshop } from "../WorkshopContext"
 import SecureImg from "../SecureImg"
 import { C, FONT, MONO, inp, btn, btnSm, btnOutline, btnText, card, pill, Sheet, NavBar, ALL_STAGES, VEHICLE_MAKES, INSURANCE_COMPANIES, INV_STATUS, fmt, SP, genId, phoneIntl, Icon, IconBadge } from "../WorkshopContext"
 import { uploadPhoto } from "../supabase"
+import JobCostsCard from "./JobCostsCard"
 
 // ═══ QUICK JOB COSTS — One-Line Entry with Category Dropdown ═══
 function QuickJobCosts({ jobCosts, setJobCosts, invoices, generateMinorInvoice, setSelInv, setScreen, saveCurrentJob, setJobs, activeJobId, setActiveJobId, setHomeTab, tt }) {
@@ -228,6 +229,7 @@ export default function JobScreen() {
     jobDocs, setJobDocs,
     qcChecks, toggleQc,
     jobCosts, setJobCosts,
+    jobs, contractorPayments,
     followUpNote, setFollowUpNote,
     followUpAttempts, setFollowUpAttempts,
     followUpLog, setFollowUpLog,
@@ -786,6 +788,20 @@ export default function JobScreen() {
 
       {/* Invoices -- visible for all job types */}
       {invoices.map(inv => { const st = INV_STATUS[inv.status]; return <div key={inv.id} onClick={() => { setSelInv(inv); setScreen("inv_detail") }} style={{ ...card, cursor: "pointer" }}><div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}><div style={{ display: "flex", alignItems: "center", gap: 10 }}><span style={{ fontSize: 18, fontWeight: 700, fontFamily: MONO }}>{inv.invoice_number}</span><span style={pill(st.c)}>{st.l}</span></div><span style={{ fontFamily: MONO, fontSize: 20, fontWeight: 700 }}>Rs.{fmt(invTotal(inv))}</span></div>{isDirectJob ? <div style={{ fontSize: 14, color: C.sub, marginTop: 6 }}>Balance: Rs.{fmt(invCustBalance(inv))}</div> : invInsTotal(inv) > 0 && <div style={{ fontSize: 14, color: C.sub, marginTop: 6 }}>Ins: Rs.{fmt(invInsTotal(inv))} {invInsPayments(inv).some(p => p.ins_status !== "received") ? "⏳" : "✓"} · Cust bal: Rs.{fmt(invCustBalance(inv))}</div>}</div> })}
+
+      {/* Costs & job profit (parts bought + sub-contracted work) */}
+      <JobCostsCard
+        jobCosts={jobCosts} setJobCosts={setJobCosts} tt={tt}
+        contractorNames={[...new Set([
+          ...(jobs || []).flatMap(j => (j.jobCosts || []).map(c => c.contractor).filter(Boolean)),
+          ...(contractorPayments || []).map(p => p.contractor),
+        ])]}
+        revenue={invoices.reduce((s, inv) => {
+          const off = inv.official
+          const base = off ? (off.docType === "tax_invoice" ? (off.net || 0) : (off.total || 0)) : invNet(inv)
+          return s + Math.max(0, base - (inv.customer_discount || 0))
+        }, 0)}
+      />
 
       {/* ═══ ADVANCE PAYMENTS — money taken before/while invoicing ═══ */}
       {jobStage !== "closed" && jobStage !== "cancelled" && <div style={{ ...card, padding: "14px 16px", border: `1px solid ${advances.length ? C.green + "30" : C.border}` }}>
