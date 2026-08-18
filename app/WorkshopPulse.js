@@ -155,9 +155,9 @@ function CashBookScreen({ cashBook, setCashBook, grns, setGrns, jobs, loadClosed
   // Cash↔bank transfers are cash MOVEMENTS, not expenses: a cash→bank deposit is
   // cash out of the drawer, a bank→cash withdrawal is cash into it. They were
   // previously double-counted (opening adjusted AND summed as an expense).
-  const plainMisc = dayMisc.filter(e => e.category !== "transfer")
-  const transferOut = dayMisc.filter(e => e.category === "transfer" && e.direction === "c2b").reduce((s, e) => s + num(e.amount), 0)
-  const transferIn = dayMisc.filter(e => e.category === "transfer" && e.direction === "b2c").reduce((s, e) => s + num(e.amount), 0)
+  const plainMisc = dayMisc.filter(e => e.category !== "transfer" && e.category !== "capital")
+  const transferOut = dayMisc.filter(e => (e.category === "transfer" && e.direction === "c2b") || (e.category === "capital" && e.direction === "c2o")).reduce((s, e) => s + num(e.amount), 0)
+  const transferIn = dayMisc.filter(e => (e.category === "transfer" && e.direction === "b2c") || (e.category === "capital" && e.direction === "o2c")).reduce((s, e) => s + num(e.amount), 0)
   const totalMisc = plainMisc.reduce((s, e) => s + num(e.amount), 0)
   const totalExpenses = totalCashOut + totalMisc + transferOut
 
@@ -191,10 +191,10 @@ function CashBookScreen({ cashBook, setCashBook, grns, setGrns, jobs, loadClosed
 
   const deleteMisc = (id, desc) => {
     const entry = (cashBook.miscExpenses || []).find(e => e.id === id)
-    const isTransfer = entry?.category === "transfer"
-    if (!confirm(`Delete ${isTransfer ? "transfer" : "expense"} "${desc}"?`)) return
+    const isMovement = entry?.category === "transfer" || entry?.category === "capital"
+    if (!confirm(`Delete ${isMovement ? "movement" : "expense"} "${desc}"?`)) return
     setCashBook(prev => ({ ...prev, miscExpenses: (prev.miscExpenses || []).filter(e => e.id !== id) }))
-    tt(isTransfer ? "Transfer removed" : "Expense removed")
+    tt(isMovement ? "Movement removed" : "Expense removed")
   }
 
   // ── Save cash count (does NOT overwrite openingCash) ──
@@ -303,7 +303,9 @@ function CashBookScreen({ cashBook, setCashBook, grns, setGrns, jobs, loadClosed
       if (c.type === "outsource") costSub += num(c.cost); else costParts += num(c.cost)
     }))
     const costGrn = grns.filter(g => toLocalDate(g.receivedDate).slice(0, 7) === month).reduce((s, g) => s + num(g.totalAmount), 0)
-    const costMisc = (cashBook.miscExpenses || []).filter(e => e.category !== "transfer" && (e.date || "").slice(0, 7) === month).reduce((s, e) => s + num(e.amount), 0)
+    // Transfers move money between pockets; capital is the owner's money in or
+    // out. Neither is a cost, so the monthly profit never sees them.
+    const costMisc = (cashBook.miscExpenses || []).filter(e => e.category !== "transfer" && e.category !== "capital" && (e.date || "").slice(0, 7) === month).reduce((s, e) => s + num(e.amount), 0)
     const totalCosts = costParts + costSub + costGrn + costMisc
     const profit = revenue - totalCosts
     let rows = ""
@@ -343,15 +345,21 @@ function CashBookScreen({ cashBook, setCashBook, grns, setGrns, jobs, loadClosed
     const amt = num(transferAmt)
     if (amt <= 0) { tt("⚠️ Enter valid amount"); return }
     const isC2B = transferDir === "c2b"
+    const isOwner = transferDir === "o2c" || transferDir === "c2o"
     const cashNow = num(cashBook.openingCash)
     const bankNow = num(cashBook.bankBalance)
-    if (isC2B && amt > cashNow && !confirm(`Cash balance is only Rs.${cashNow.toLocaleString()}. Continue?`)) return
-    if (!isC2B && amt > bankNow && !confirm(`Bank balance is only Rs.${bankNow.toLocaleString()}. Continue?`)) return
-    // Record as a misc expense entry for audit, with special category "transfer"
+    if ((isC2B || transferDir === "c2o") && amt > cashNow && !confirm(`Cash balance is only Rs.${cashNow.toLocaleString()}. Continue?`)) return
+    if (transferDir === "b2c" && amt > bankNow && !confirm(`Bank balance is only Rs.${bankNow.toLocaleString()}. Continue?`)) return
+    const DESC = {
+      c2b: "Cash → Bank transfer", b2c: "Bank → Cash transfer",
+      o2c: "Owner put money in", c2o: "Owner took drawings",
+    }
+    // Transfers are category "transfer"; owner money is "capital". Both are
+    // movements — the drawer follows them, profit never sees them.
     const exp = {
       id: "exp_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 6),
-      date: viewDate, description: `${isC2B ? "Cash → Bank" : "Bank → Cash"} transfer${transferNote ? ": " + transferNote : ""}`,
-      amount: amt, category: "transfer", direction: transferDir
+      date: viewDate, description: `${DESC[transferDir]}${transferNote ? ": " + transferNote : ""}`,
+      amount: amt, category: isOwner ? "capital" : "transfer", direction: transferDir
     }
     // The CASH side flows through the day's calculation via the transfer entry
     // itself; the bank balance is a manual note and is not touched
@@ -360,7 +368,7 @@ function CashBookScreen({ cashBook, setCashBook, grns, setGrns, jobs, loadClosed
       miscExpenses: [...(prev.miscExpenses || []), exp],
     }))
     setShowTransfer(false); setTransferAmt(""); setTransferNote("")
-    tt(`✓ ${isC2B ? "Cash → Bank" : "Bank → Cash"} Rs.${amt.toLocaleString()} transferred`)
+    tt(`✓ ${DESC[transferDir]} — Rs.${amt.toLocaleString()}`)
   }
 
 
@@ -391,11 +399,17 @@ function CashBookScreen({ cashBook, setCashBook, grns, setGrns, jobs, loadClosed
       {showTransfer && (
         <div onClick={() => setShowTransfer(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
           <div onClick={e => e.stopPropagation()} style={{ background: "#fff", borderRadius: 16, padding: 20, maxWidth: 400, width: "100%" }}>
-            <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>⇄ Transfer Money</div>
-            <div style={{ fontSize: 12, color: C.muted, marginBottom: 14 }}>Move money between cash and bank</div>
-            <div style={{ display: "flex", gap: 6, marginBottom: 14 }}>
-              <div onClick={() => setTransferDir("c2b")} style={{ flex: 1, padding: "10px", borderRadius: 10, textAlign: "center", cursor: "pointer", background: transferDir === "c2b" ? C.accent + "15" : C.bg, color: transferDir === "c2b" ? C.accent : C.sub, fontWeight: 600, fontSize: 13, border: `1.5px solid ${transferDir === "c2b" ? C.accent : C.border}` }}>💵 → 🏦<div style={{ fontSize: 11, marginTop: 2 }}>Deposit</div></div>
-              <div onClick={() => setTransferDir("b2c")} style={{ flex: 1, padding: "10px", borderRadius: 10, textAlign: "center", cursor: "pointer", background: transferDir === "b2c" ? C.accent + "15" : C.bg, color: transferDir === "b2c" ? C.accent : C.sub, fontWeight: 600, fontSize: 13, border: `1.5px solid ${transferDir === "b2c" ? C.accent : C.border}` }}>🏦 → 💵<div style={{ fontSize: 11, marginTop: 2 }}>Withdraw</div></div>
+            <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>⇄ Move Money</div>
+            <div style={{ fontSize: 12, color: C.muted, marginBottom: 14 }}>Between cash, bank and the owner — never income or an expense</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginBottom: 14 }}>
+              {[
+                { v: "c2b", icon: "💵 → 🏦", label: "Deposit to bank" },
+                { v: "b2c", icon: "🏦 → 💵", label: "Withdraw to cash" },
+                { v: "o2c", icon: "👤 → 💵", label: "Owner puts in" },
+                { v: "c2o", icon: "💵 → 👤", label: "Owner takes out" },
+              ].map(t => (
+                <div key={t.v} onClick={() => setTransferDir(t.v)} style={{ padding: "10px", borderRadius: 10, textAlign: "center", cursor: "pointer", background: transferDir === t.v ? C.accent + "15" : C.bg, color: transferDir === t.v ? C.accent : C.sub, fontWeight: 600, fontSize: 13, border: `1.5px solid ${transferDir === t.v ? C.accent : C.border}` }}>{t.icon}<div style={{ fontSize: 11, marginTop: 2 }}>{t.label}</div></div>
+              ))}
             </div>
             <div style={{ fontSize: 12, color: C.muted, marginBottom: 4 }}>Amount</div>
             <input type="number" value={transferAmt} onChange={e => setTransferAmt(e.target.value)} placeholder="Rs." min="0" style={{ ...inp, fontSize: 18, fontFamily: MONO, fontWeight: 700, marginBottom: 10 }} />
@@ -651,7 +665,7 @@ function CashBookScreen({ cashBook, setCashBook, grns, setGrns, jobs, loadClosed
           ) : activeDays.map(d => {
             const inc = computeIncome(d).filter(i => i.method === "cash").reduce((s, i) => s + i.amount, 0)
             const exp = computeExpenses(d).filter(e => e.method === "cash").reduce((s, e) => s + e.amount, 0)
-            const misc = (cashBook.miscExpenses || []).filter(e => e.date === d).reduce((s, e) => s + num(e.amount), 0)
+            const misc = (cashBook.miscExpenses || []).filter(e => e.date === d && e.category !== "transfer" && e.category !== "capital").reduce((s, e) => s + num(e.amount), 0)
             const count = (cashBook.dailyCounts || []).find(c => c.date === d)
             return (
               <div key={d} onClick={() => { setViewDate(d); setTab("cash") }} style={{ padding: "10px 0", borderBottom: `1px solid ${C.border}`, cursor: "pointer" }}>
