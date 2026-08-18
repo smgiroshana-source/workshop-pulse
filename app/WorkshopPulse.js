@@ -321,6 +321,22 @@ function CashBookScreen({ cashBook, setCashBook, grns, setGrns, jobs, loadClosed
     rows += `<tr><td colspan="3">Store purchases (paint, consumables — GRNs)</td><td class="text-right mono">Rs.${costGrn.toLocaleString()}</td></tr>`
     rows += `<tr><td colspan="3">Other expenses (cash book)</td><td class="text-right mono">Rs.${costMisc.toLocaleString()}</td></tr>`
     rows += `<tr class="total-row"><td colspan="3" style="font-size:16px">OPERATING PROFIT</td><td class="text-right mono" style="font-size:16px;color:${profit >= 0 ? "#2e7d32" : "#e53935"}">Rs.${profit.toLocaleString()}</td></tr>`
+    // Money MOVED this month — owner in/out and cash↔bank. Shown for the
+    // record, deliberately OUTSIDE revenue/costs/profit: moving money between
+    // the owner's pocket, the till and the bank earns and spends nothing.
+    const monthMovs = (cashBook.miscExpenses || []).filter(e => (e.category === "transfer" || e.category === "capital") && (e.date || "").slice(0, 7) === month)
+    if (monthMovs.length > 0) {
+      const mSum = (pred) => monthMovs.filter(pred).reduce((s, e) => s + num(e.amount), 0)
+      const ownerIn = mSum(e => e.direction === "o2c"), ownerOut = mSum(e => e.direction === "c2o")
+      const dep = mSum(e => e.direction === "c2b"), wdr = mSum(e => e.direction === "b2c")
+      const ownerNet = ownerIn - ownerOut
+      rows += sec("Money moved — not in profit above")
+      if (ownerIn > 0)  rows += `<tr><td colspan="3">Owner put money in</td><td class="text-right mono">Rs.${ownerIn.toLocaleString()}</td></tr>`
+      if (ownerOut > 0) rows += `<tr><td colspan="3">Given to owner</td><td class="text-right mono">Rs.${ownerOut.toLocaleString()}</td></tr>`
+      if (dep > 0)      rows += `<tr><td colspan="3">Cash banked</td><td class="text-right mono">Rs.${dep.toLocaleString()}</td></tr>`
+      if (wdr > 0)      rows += `<tr><td colspan="3">Drawn from bank</td><td class="text-right mono">Rs.${wdr.toLocaleString()}</td></tr>`
+      rows += `<tr><td colspan="3" style="color:#666">Owner this month</td><td class="text-right mono" style="color:#666">${ownerNet === 0 ? "even" : (ownerNet > 0 ? "put in Rs." + ownerNet.toLocaleString() + " net" : "took Rs." + (-ownerNet).toLocaleString() + " net")}</td></tr>`
+    }
     const html = `<div class="header"><div><div class="shop-name">MacForce Auto Engineering</div><div class="shop-detail">Workshop Monthly Summary</div></div><div><div class="doc-title">MONTHLY SUMMARY</div><div class="doc-sub">${monthLabel}</div></div></div><table><tbody>${rows}</tbody></table><div style="margin-top:14px;font-size:12px;color:#666;line-height:1.6">Notes: Tax-invoice revenue is shown NET of VAT (the 18% is payable to IRD, not profit). Contractor <em>payments</em> are settlements of the work costs above and are not counted again. Wages, rent and utilities are included only if entered as cash-book expenses.</div><div class="footer"><span>Workshop Pulse</span><span>Generated ${new Date().toLocaleString()}</span></div>`
     openPDF("Workshop Monthly " + month, html)
   }
