@@ -34,6 +34,177 @@ function toLocalDate(iso) {
 }
 
 function num(v) { const n = Number(v); return isFinite(n) ? n : 0 }
+function entryId() { return "exp_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 6) }
+
+// ── Money moved vs money spent ───────────────────────────────────────────────
+// Three buttons, three meanings, and the app never blurs them:
+//
+//   Money In    owner puts cash in · cash drawn from the bank   drawer ↑  profit —
+//   Money Out   the day's cash banked · handed to the owner     drawer ↓  profit —
+//   Expense     money actually spent running the workshop       drawer ↓  profit ↓
+//
+// Moving money between the owner's pocket, the till and the bank earns nothing
+// and spends nothing, so it must never reach profit. Owner drawings used to be
+// reachable BOTH as an expense category and as a transfer — the same act, with
+// opposite effects on the month's figure depending on which door was used. It
+// is a movement, and only a movement.
+const MOVE_TYPES = [
+  { v: "o2c", dir: "in",  icon: "👤", l: "From owner", d: "Owner's own money into the till" },
+  { v: "b2c", dir: "in",  icon: "🏦", l: "From bank",  d: "Cash drawn from the business account" },
+  { v: "c2b", dir: "out", icon: "🏦", l: "To bank",    d: "Banking the day's takings" },
+  { v: "c2o", dir: "out", icon: "👤", l: "To owner",   d: "Drawings / excess cash handed over" },
+]
+const MOVE_LABEL = { o2c: "Owner put money in", b2c: "Drawn from bank", c2b: "Banked to account", c2o: "Given to owner" }
+const MOVE_ICON = { o2c: "👤→💵", b2c: "🏦→💵", c2b: "💵→🏦", c2o: "💵→👤" }
+const isMovementEntry = (e) => e.category === "transfer" || e.category === "capital"
+const isMoveIn = (e) => e.direction === "o2c" || e.direction === "b2c"
+
+// What the operator picks for a real expense. "Owner Drawings" is deliberately
+// absent — it is Money Out → To owner. Legacy rows keep their label below.
+const EXP_CATEGORIES = [
+  { key: "food", label: "🍽 Food" },
+  { key: "utility", label: "💡 Utility" },
+  { key: "transport", label: "🚗 Transport" },
+  { key: "salary", label: "👷 Salary" },
+  { key: "advance", label: "🤝 Staff Advance" },
+  { key: "other", label: "📦 Other" },
+]
+const EXP_LABEL = {
+  ...Object.fromEntries(EXP_CATEGORIES.map(c => [c.key, c.label])),
+  drawings: "💼 Owner Drawings",
+}
+
+// Shared shell so all three money forms look and behave identically.
+function MoneySheet({ title, sub, accent, onClose, onSave, saveLabel, saveDisabled, children }) {
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: "#fff", borderRadius: 16, padding: 20, maxWidth: 420, width: "100%", maxHeight: "88vh", overflowY: "auto" }}>
+        <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>{title}</div>
+        <div style={{ fontSize: 12, color: C.muted, marginBottom: 14, lineHeight: 1.4 }}>{sub}</div>
+        {children}
+        <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+          <button onClick={onClose} style={{ flex: 1, padding: "13px", borderRadius: 10, border: `1.5px solid ${C.border}`, background: "#fff", color: C.sub, fontWeight: 600, fontSize: 14, cursor: "pointer", fontFamily: FONT }}>Cancel</button>
+          <button onClick={onSave} disabled={saveDisabled} style={{ flex: 2, padding: "13px", borderRadius: 10, border: "none", background: saveDisabled ? C.border : accent, color: "#fff", fontWeight: 700, fontSize: 14, cursor: saveDisabled ? "not-allowed" : "pointer", fontFamily: FONT }}>{saveLabel}</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// Money in / money out of the till. Never income, never an expense.
+function MoneyModal({ dir, viewDate, today, drawerExpected, movements, onClose, onSave, tt }) {
+  const opts = MOVE_TYPES.filter(t => t.dir === dir)
+  const [type, setType] = useState(opts[0].v)
+  const [amount, setAmount] = useState("")
+  const [date, setDate] = useState(viewDate)
+  const [note, setNote] = useState("")
+  const amt = num(amount)
+  const accent = dir === "in" ? C.green : C.orange
+
+  const save = () => {
+    if (amt <= 0) { tt("⚠️ Enter the amount"); return }
+    // Guardrail 1 — taking out more than the drawer holds is nearly always a
+    // typo. Checked against the day's CALCULATED balance, not the opening float.
+    if (dir === "out" && date === today && drawerExpected != null && amt > drawerExpected) {
+      if (!confirm(`The drawer only holds Rs.${drawerExpected.toLocaleString()} right now — taking out Rs.${amt.toLocaleString()} would leave it negative.\n\nRecord anyway?`)) return
+    }
+    // Guardrail 2 — the same movement twice on one day is nearly always a
+    // double entry (two people recording the same deposit).
+    if ((movements || []).some(m => m.direction === type && num(m.amount) === amt && m.date === date)) {
+      if (!confirm(`${MOVE_LABEL[type]} of Rs.${amt.toLocaleString()} is already recorded on this day.\n\nRecord it a second time?`)) return
+    }
+    onSave({ direction: type, amount: amt, date, note: note.trim() })
+  }
+
+  return (
+    <MoneySheet
+      title={dir === "in" ? "⬆ Money into the till" : "⬇ Money out of the till"}
+      sub={(dir === "in" ? "Not a sale — " : "Not an expense — ") + "the drawer count follows it, profit never sees it."}
+      accent={accent} onClose={onClose} onSave={save}
+      saveLabel="✓ Record" saveDisabled={amt <= 0}
+    >
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 14 }}>
+        {opts.map(t => (
+          <div key={t.v} onClick={() => setType(t.v)} style={{
+            padding: "12px 10px", borderRadius: 12, cursor: "pointer",
+            background: type === t.v ? accent + "12" : C.bg,
+            border: `1.5px solid ${type === t.v ? accent : C.border}`,
+          }}>
+            <div style={{ fontSize: 20, lineHeight: 1 }}>{t.icon}</div>
+            <div style={{ fontSize: 13, fontWeight: 700, marginTop: 6, color: type === t.v ? accent : C.sub }}>{t.l}</div>
+            <div style={{ fontSize: 11, color: C.muted, lineHeight: 1.3, marginTop: 2 }}>{t.d}</div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ fontSize: 12, color: C.muted, marginBottom: 4 }}>Amount</div>
+      <input type="number" inputMode="numeric" autoFocus value={amount} min="0"
+        onChange={e => setAmount(e.target.value)} placeholder="Rs."
+        style={{ ...inp, fontSize: 22, fontFamily: MONO, fontWeight: 700, padding: "13px 14px" }} />
+      {amt > 0 && (
+        <div style={{ fontSize: 12, fontWeight: 600, color: accent, marginTop: 8, lineHeight: 1.4 }}>
+          {MOVE_LABEL[type]} — the drawer will expect Rs.{amt.toLocaleString()} {dir === "in" ? "more" : "less"}. Profit is untouched.
+        </div>
+      )}
+
+      <div style={{ fontSize: 12, color: C.muted, margin: "12px 0 4px" }}>Date</div>
+      <input type="date" max={today} value={date} onChange={e => setDate(e.target.value)} style={{ ...inp, fontSize: 14 }} />
+      <div style={{ fontSize: 12, color: C.muted, margin: "12px 0 4px" }}>Note (optional)</div>
+      <input value={note} onChange={e => setNote(e.target.value)} placeholder="e.g. daily deposit" style={{ ...inp, fontSize: 14 }} />
+    </MoneySheet>
+  )
+}
+
+// A real cost — this one DOES reduce profit.
+function ExpenseModal({ viewDate, today, drawerExpected, onClose, onSave, tt }) {
+  const [cat, setCat] = useState("food")
+  const [desc, setDesc] = useState("")
+  const [amount, setAmount] = useState("")
+  const [date, setDate] = useState(viewDate)
+  const amt = num(amount)
+
+  const save = () => {
+    if (!desc.trim()) { tt("⚠️ What was the money spent on?"); return }
+    if (amt <= 0) { tt("⚠️ Enter the amount"); return }
+    if (date === today && drawerExpected != null && amt > drawerExpected) {
+      if (!confirm(`This expense (Rs.${amt.toLocaleString()}) is more than the drawer holds (Rs.${drawerExpected.toLocaleString()}).\n\nNew balance would be Rs.${(drawerExpected - amt).toLocaleString()}.\n\nRecord anyway?`)) return
+    }
+    onSave({ description: desc.trim(), amount: amt, category: cat, date })
+  }
+
+  return (
+    <MoneySheet
+      title="🧾 Expense"
+      sub="Money actually spent running the workshop — food, fuel, bills, wages. This reduces profit."
+      accent={C.red} onClose={onClose} onSave={save}
+      saveLabel="✓ Add expense" saveDisabled={!desc.trim() || amt <= 0}
+    >
+      <div style={{ fontSize: 12, color: C.muted, marginBottom: 4 }}>What was it for?</div>
+      <input value={desc} autoFocus onChange={e => setDesc(e.target.value)} placeholder="e.g. lunch for the crew"
+        style={{ ...inp, fontSize: 15, padding: "12px 14px", marginBottom: 12 }} />
+
+      <div style={{ fontSize: 12, color: C.muted, marginBottom: 6 }}>Category</div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6, marginBottom: 12 }}>
+        {EXP_CATEGORIES.map(c => (
+          <div key={c.key} onClick={() => setCat(c.key)} style={{
+            padding: "10px 4px", borderRadius: 10, textAlign: "center", cursor: "pointer", fontSize: 12, fontWeight: 600,
+            background: cat === c.key ? C.red + "12" : C.bg,
+            color: cat === c.key ? C.red : C.sub,
+            border: `1.5px solid ${cat === c.key ? C.red : C.border}`,
+          }}>{c.label}</div>
+        ))}
+      </div>
+
+      <div style={{ fontSize: 12, color: C.muted, marginBottom: 4 }}>Amount</div>
+      <input type="number" inputMode="numeric" value={amount} min="0"
+        onChange={e => setAmount(e.target.value)} placeholder="Rs."
+        style={{ ...inp, fontSize: 22, fontFamily: MONO, fontWeight: 700, padding: "13px 14px" }} />
+
+      <div style={{ fontSize: 12, color: C.muted, margin: "12px 0 4px" }}>Date</div>
+      <input type="date" max={today} value={date} onChange={e => setDate(e.target.value)} style={{ ...inp, fontSize: 14 }} />
+    </MoneySheet>
+  )
+}
 
 function CashBookScreen({ cashBook, setCashBook, grns, setGrns, jobs, loadClosedJobs, tt, onBack }) {
   const { contractorPayments, openPDF, esc } = useWorkshop()
@@ -41,9 +212,8 @@ function CashBookScreen({ cashBook, setCashBook, grns, setGrns, jobs, loadClosed
   // Load closed jobs on mount so late payments on closed jobs appear in cashbook
   useEffect(() => { if (loadClosedJobs) loadClosedJobs() }, [loadClosedJobs])
   const [viewDate, setViewDate] = useState(localDateStr()) // the date being viewed
-  const [addExpDesc, setAddExpDesc] = useState("")
-  const [addExpAmt, setAddExpAmt] = useState("")
-  const [addExpCat, setAddExpCat] = useState("food")
+  // One piece of state for all three money forms: "in" | "out" | "expense" | null
+  const [moneyModal, setMoneyModal] = useState(null)
   const [countAmt, setCountAmt] = useState("")
   const [countNote, setCountNote] = useState("")
   const [editingBank, setEditingBank] = useState(false)
@@ -51,10 +221,6 @@ function CashBookScreen({ cashBook, setCashBook, grns, setGrns, jobs, loadClosed
   const [openingCash, setOpeningCash] = useState(String(num(cashBook.openingCash)))
   const [editingOpening, setEditingOpening] = useState(false)
   const [editingCount, setEditingCount] = useState(false)
-  const [showTransfer, setShowTransfer] = useState(false)
-  const [transferDir, setTransferDir] = useState("c2b") // c2b: cash to bank, b2c: bank to cash
-  const [transferAmt, setTransferAmt] = useState("")
-  const [transferNote, setTransferNote] = useState("")
 
   // Refresh "today" every minute to catch midnight rollover
   const [today, setTodayState] = useState(localDateStr())
@@ -68,16 +234,6 @@ function CashBookScreen({ cashBook, setCashBook, grns, setGrns, jobs, loadClosed
 
   const isToday = viewDate === today
   const isPast = viewDate < today
-
-  const expCategories = [
-    { key: "food", label: "🍽 Food" },
-    { key: "utility", label: "💡 Utility" },
-    { key: "transport", label: "🚗 Transport" },
-    { key: "salary", label: "👷 Salary" },
-    { key: "drawings", label: "💼 Owner Drawings" },
-    { key: "advance", label: "🤝 Staff Advance" },
-    { key: "other", label: "📦 Other" },
-  ]
 
   // ── Compute cash income for a given date ──
   function computeIncome(date) {
@@ -152,14 +308,21 @@ function CashBookScreen({ cashBook, setCashBook, grns, setGrns, jobs, loadClosed
 
   const totalCashIn = cashIn.reduce((s, i) => s + i.amount, 0)
   const totalCashOut = cashOut.reduce((s, e) => s + e.amount, 0)
-  // Cash↔bank transfers are cash MOVEMENTS, not expenses: a cash→bank deposit is
-  // cash out of the drawer, a bank→cash withdrawal is cash into it. They were
-  // previously double-counted (opening adjusted AND summed as an expense).
-  const plainMisc = dayMisc.filter(e => e.category !== "transfer" && e.category !== "capital")
-  const transferOut = dayMisc.filter(e => (e.category === "transfer" && e.direction === "c2b") || (e.category === "capital" && e.direction === "c2o")).reduce((s, e) => s + num(e.amount), 0)
-  const transferIn = dayMisc.filter(e => (e.category === "transfer" && e.direction === "b2c") || (e.category === "capital" && e.direction === "o2c")).reduce((s, e) => s + num(e.amount), 0)
+  // Cash↔bank and owner movements are MOVEMENTS, not expenses: a cash→bank
+  // deposit is cash out of the drawer, a bank→cash withdrawal is cash into it.
+  // They change what the drawer should hold and nothing else — so they get
+  // their own list on screen and never sit inside the Expenses total.
+  const plainMisc = dayMisc.filter(e => !isMovementEntry(e))
+  const dayMovements = dayMisc.filter(isMovementEntry)
+  const transferOut = dayMovements.filter(e => !isMoveIn(e)).reduce((s, e) => s + num(e.amount), 0)
+  const transferIn = dayMovements.filter(isMoveIn).reduce((s, e) => s + num(e.amount), 0)
   const totalMisc = plainMisc.reduce((s, e) => s + num(e.amount), 0)
-  const totalExpenses = totalCashOut + totalMisc + transferOut
+  // What the workshop actually spent — the figure that reduces profit.
+  const totalSpent = totalCashOut + totalMisc
+  // Everything that left the drawer, spending and movements alike. Drawer
+  // arithmetic only; it is not a cost figure.
+  const totalExpenses = totalSpent + transferOut
+  const allMovements = (cashBook.miscExpenses || []).filter(isMovementEntry)
 
   // Opening cash: openingCash in cashBook is always for TODAY at start
   // For historical dates, we use the stored dailyCounts to reconstruct
@@ -174,27 +337,38 @@ function CashBookScreen({ cashBook, setCashBook, grns, setGrns, jobs, loadClosed
   // Cheques count as paid the day they're written (owner decision) — no
   // pending/cleared tracking, and the app does not mirror the bank account.
 
-  // ── Add misc expense ──
-  const addMiscExpense = () => {
-    if (!addExpDesc.trim() || !addExpAmt) { tt("⚠️ Enter description & amount"); return }
-    const amt = num(addExpAmt)
-    if (amt <= 0) { tt("⚠️ Amount must be positive"); return }
-    // Warn if expense pushes cash balance negative (only for today, drawings allowed)
-    if (isToday && addExpCat !== "drawings" && (calculatedBalance - amt) < 0) {
-      if (!confirm(`⚠️ This expense (Rs.${amt.toLocaleString()}) exceeds available cash (Rs.${calculatedBalance.toLocaleString()}).\n\nNew balance will be Rs.${(calculatedBalance - amt).toLocaleString()}.\n\nProceed anyway?`)) return
-    }
-    const exp = { id: "exp_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 6), date: viewDate, description: addExpDesc.trim(), amount: amt, category: addExpCat }
-    setCashBook(prev => ({ ...prev, miscExpenses: [...(prev.miscExpenses || []), exp] }))
-    setAddExpDesc(""); setAddExpAmt("")
-    tt("✓ Expense added")
+  // ── Writing to the book ──
+  // One append for both kinds of entry; what separates them is the category,
+  // and that single field is what every report keys off.
+  const addEntry = (entry) => {
+    setCashBook(prev => ({ ...prev, miscExpenses: [...(prev.miscExpenses || []), { id: entryId(), ...entry }] }))
+    setMoneyModal(null)
+  }
+
+  const saveExpense = ({ description, amount, category, date }) => {
+    addEntry({ date, description, amount, category })
+    tt(`✓ Expense added — Rs.${amount.toLocaleString()}`)
+  }
+
+  const saveMovement = ({ direction, amount, date, note }) => {
+    const isOwner = direction === "o2c" || direction === "c2o"
+    addEntry({
+      date, amount,
+      description: `${MOVE_LABEL[direction]}${note ? ": " + note : ""}`,
+      // "capital" is the owner's own money; "transfer" is the bank. Both are
+      // movements — the drawer follows them, profit never sees them.
+      category: isOwner ? "capital" : "transfer",
+      direction,
+    })
+    tt(`✓ ${MOVE_LABEL[direction]} — Rs.${amount.toLocaleString()}`)
   }
 
   const deleteMisc = (id, desc) => {
     const entry = (cashBook.miscExpenses || []).find(e => e.id === id)
-    const isMovement = entry?.category === "transfer" || entry?.category === "capital"
-    if (!confirm(`Delete ${isMovement ? "movement" : "expense"} "${desc}"?`)) return
+    const movement = entry ? isMovementEntry(entry) : false
+    if (!confirm(`Delete ${movement ? "movement" : "expense"} "${desc}"?`)) return
     setCashBook(prev => ({ ...prev, miscExpenses: (prev.miscExpenses || []).filter(e => e.id !== id) }))
-    tt(isMovement ? "Movement removed" : "Expense removed")
+    tt(movement ? "Movement removed" : "Expense removed")
   }
 
   // ── Save cash count (does NOT overwrite openingCash) ──
@@ -254,6 +428,12 @@ function CashBookScreen({ cashBook, setCashBook, grns, setGrns, jobs, loadClosed
     rows += offs.length ? offs.map(({ o, j }) => `<tr><td class="mono">${esc(o.serial)}</td><td>${esc((j.jobNumber || "") + " " + (j.jobInfo?.vehicle_reg || ""))}</td><td class="text-right mono">Rs.${num(o.total).toLocaleString()}</td></tr>`).join("") : `<tr><td colspan="3" style="color:#999">None</td></tr>`
     rows += sec("📤 Expenses — Rs." + totalExp.toLocaleString())
     rows += expAll.length ? expAll.map(e => `<tr><td>${esc(e.desc)}</td><td class="text-center">${esc(e.method)}</td><td class="text-right mono">Rs.${e.amount.toLocaleString()}</td></tr>`).join("") : `<tr><td colspan="3" style="color:#999">No expenses</td></tr>`
+    // Movements are listed in full, not just totalled. The owner reads this
+    // report — an entry claiming cash was handed over has to be visible here.
+    if (dayMovements.length) {
+      rows += sec("🔁 Money moved — not income, not an expense")
+      rows += dayMovements.map(m => `<tr><td>${esc(m.description)}</td><td class="text-center">${esc(MOVE_ICON[m.direction] || "")}</td><td class="text-right mono">${isMoveIn(m) ? "+" : "−"}Rs.${num(m.amount).toLocaleString()}</td></tr>`).join("")
+    }
     rows += sec("💵 Cash Drawer")
     rows += `<tr><td colspan="2">Opening cash</td><td class="text-right mono">Rs.${prevBalance.toLocaleString()}</td></tr>`
     rows += `<tr><td colspan="2">+ Cash income</td><td class="text-right mono">Rs.${totalCashIn.toLocaleString()}</td></tr>`
@@ -356,38 +536,6 @@ function CashBookScreen({ cashBook, setCashBook, grns, setGrns, jobs, loadClosed
     tt("✓ Bank balance updated")
   }
 
-  // Cash ↔ Bank transfer (e.g., owner deposits cash to bank)
-  const doTransfer = () => {
-    const amt = num(transferAmt)
-    if (amt <= 0) { tt("⚠️ Enter valid amount"); return }
-    const isC2B = transferDir === "c2b"
-    const isOwner = transferDir === "o2c" || transferDir === "c2o"
-    const cashNow = num(cashBook.openingCash)
-    const bankNow = num(cashBook.bankBalance)
-    if ((isC2B || transferDir === "c2o") && amt > cashNow && !confirm(`Cash balance is only Rs.${cashNow.toLocaleString()}. Continue?`)) return
-    if (transferDir === "b2c" && amt > bankNow && !confirm(`Bank balance is only Rs.${bankNow.toLocaleString()}. Continue?`)) return
-    const DESC = {
-      c2b: "Cash → Bank transfer", b2c: "Bank → Cash transfer",
-      o2c: "Owner put money in", c2o: "Owner took drawings",
-    }
-    // Transfers are category "transfer"; owner money is "capital". Both are
-    // movements — the drawer follows them, profit never sees them.
-    const exp = {
-      id: "exp_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 6),
-      date: viewDate, description: `${DESC[transferDir]}${transferNote ? ": " + transferNote : ""}`,
-      amount: amt, category: isOwner ? "capital" : "transfer", direction: transferDir
-    }
-    // The CASH side flows through the day's calculation via the transfer entry
-    // itself; the bank balance is a manual note and is not touched
-    setCashBook(prev => ({
-      ...prev,
-      miscExpenses: [...(prev.miscExpenses || []), exp],
-    }))
-    setShowTransfer(false); setTransferAmt(""); setTransferNote("")
-    tt(`✓ ${DESC[transferDir]} — Rs.${amt.toLocaleString()}`)
-  }
-
-
   // ── Historical days with any activity ──
   const activeDays = [...new Set([
     ...(cashBook.miscExpenses || []).map(e => e.date),
@@ -408,35 +556,22 @@ function CashBookScreen({ cashBook, setCashBook, grns, setGrns, jobs, loadClosed
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
         <span onClick={onBack} style={{ fontSize: 14, color: C.accent, cursor: "pointer", fontWeight: 600 }}>← Back</span>
         <span style={{ fontSize: 20, fontWeight: 700 }}>Cash Book</span>
-        <span onClick={() => setShowTransfer(true)} style={{ marginLeft: "auto", fontSize: 13, color: C.accent, cursor: "pointer", fontWeight: 600, padding: "6px 12px", background: C.accent + "10", borderRadius: 8 }}>⇄ Transfer</span>
       </div>
 
-      {/* Transfer Modal */}
-      {showTransfer && (
-        <div onClick={() => setShowTransfer(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
-          <div onClick={e => e.stopPropagation()} style={{ background: "#fff", borderRadius: 16, padding: 20, maxWidth: 400, width: "100%" }}>
-            <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>⇄ Move Money</div>
-            <div style={{ fontSize: 12, color: C.muted, marginBottom: 14 }}>Between cash, bank and the owner — never income or an expense</div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginBottom: 14 }}>
-              {[
-                { v: "c2b", icon: "💵 → 🏦", label: "Deposit to bank" },
-                { v: "b2c", icon: "🏦 → 💵", label: "Withdraw to cash" },
-                { v: "o2c", icon: "👤 → 💵", label: "Owner puts in" },
-                { v: "c2o", icon: "💵 → 👤", label: "Owner takes out" },
-              ].map(t => (
-                <div key={t.v} onClick={() => setTransferDir(t.v)} style={{ padding: "10px", borderRadius: 10, textAlign: "center", cursor: "pointer", background: transferDir === t.v ? C.accent + "15" : C.bg, color: transferDir === t.v ? C.accent : C.sub, fontWeight: 600, fontSize: 13, border: `1.5px solid ${transferDir === t.v ? C.accent : C.border}` }}>{t.icon}<div style={{ fontSize: 11, marginTop: 2 }}>{t.label}</div></div>
-              ))}
-            </div>
-            <div style={{ fontSize: 12, color: C.muted, marginBottom: 4 }}>Amount</div>
-            <input type="number" value={transferAmt} onChange={e => setTransferAmt(e.target.value)} placeholder="Rs." min="0" style={{ ...inp, fontSize: 18, fontFamily: MONO, fontWeight: 700, marginBottom: 10 }} />
-            <div style={{ fontSize: 12, color: C.muted, marginBottom: 4 }}>Note (optional)</div>
-            <input value={transferNote} onChange={e => setTransferNote(e.target.value)} placeholder="e.g. Daily deposit" style={{ ...inp, fontSize: 14, marginBottom: 14 }} />
-            <div style={{ display: "flex", gap: 8 }}>
-              <button onClick={() => setShowTransfer(false)} style={{ flex: 1, padding: "12px", borderRadius: 10, border: `1.5px solid ${C.border}`, background: "#fff", color: C.sub, fontWeight: 600, fontSize: 14, cursor: "pointer", fontFamily: FONT }}>Cancel</button>
-              <button onClick={doTransfer} style={{ flex: 2, padding: "12px", borderRadius: 10, border: "none", background: C.accent, color: "#fff", fontWeight: 600, fontSize: 14, cursor: "pointer", fontFamily: FONT }}>✓ Transfer</button>
-            </div>
-          </div>
-        </div>
+      {/* The three money forms — one door each, no overlap */}
+      {moneyModal === "expense" && (
+        <ExpenseModal
+          viewDate={viewDate} today={today}
+          drawerExpected={calculatedBalance}
+          onClose={() => setMoneyModal(null)} onSave={saveExpense} tt={tt}
+        />
+      )}
+      {(moneyModal === "in" || moneyModal === "out") && (
+        <MoneyModal
+          dir={moneyModal} viewDate={viewDate} today={today}
+          drawerExpected={calculatedBalance} movements={allMovements}
+          onClose={() => setMoneyModal(null)} onSave={saveMovement} tt={tt}
+        />
       )}
 
       {/* Date navigation */}
@@ -475,6 +610,30 @@ function CashBookScreen({ cashBook, setCashBook, grns, setGrns, jobs, loadClosed
       {/* ═══ CASH TAB ═══ */}
       {tab === "cash" && (
         <>
+          {/* Money in · money out · expense — the only three ways cash changes
+              by hand. Big targets: this is used standing at the counter. */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 12 }}>
+            {[
+              { k: "in", icon: "⬆", label: "Money In", sub: "owner · bank", color: C.green },
+              { k: "out", icon: "⬇", label: "Money Out", sub: "bank · owner", color: C.orange },
+              { k: "expense", icon: "🧾", label: "Expense", sub: "spent on the shop", color: C.red },
+            ].map(b => (
+              <div key={b.k} onClick={() => setMoneyModal(b.k)} style={{
+                padding: "14px 6px", borderRadius: 14, textAlign: "center", cursor: "pointer",
+                background: b.color + "0e", border: `1.5px solid ${b.color}45`,
+              }}>
+                <div style={{ fontSize: 20, lineHeight: 1 }}>{b.icon}</div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: b.color, marginTop: 5 }}>{b.label}</div>
+                <div style={{ fontSize: 10, color: C.muted, marginTop: 1 }}>{b.sub}</div>
+              </div>
+            ))}
+          </div>
+          {!isToday && (
+            <div style={{ fontSize: 11, color: C.orange, fontWeight: 600, marginBottom: 10, textAlign: "center" }}>
+              Entries default to {dateLabel} — change the date inside the form if that is wrong.
+            </div>
+          )}
+
           {/* Opening Balance */}
           <div style={{ ...card, display: "flex", justifyContent: "space-between", alignItems: "center", background: C.accent + "08" }}>
             <div>
@@ -515,8 +674,9 @@ function CashBookScreen({ cashBook, setCashBook, grns, setGrns, jobs, loadClosed
 
           {/* Expenses */}
           <div style={card}>
-            <div style={{ fontSize: 14, fontWeight: 600, color: C.red, textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 8 }}>📤 Expenses (Petty Cash + Purchases)</div>
-            {cashOut.length === 0 && dayMisc.length === 0 ? (
+            <div style={{ fontSize: 14, fontWeight: 600, color: C.red, textTransform: "uppercase", letterSpacing: 0.8 }}>📤 Expenses</div>
+            <div style={{ fontSize: 11, color: C.muted, marginBottom: 8 }}>Money spent running the workshop — this reduces profit.</div>
+            {cashOut.length === 0 && plainMisc.length === 0 ? (
               <div style={{ fontSize: 13, color: C.muted, padding: "8px 0" }}>No expenses</div>
             ) : (
               <>
@@ -526,11 +686,11 @@ function CashBookScreen({ cashBook, setCashBook, grns, setGrns, jobs, loadClosed
                     <span style={{ fontFamily: MONO, fontSize: 14, fontWeight: 700, color: C.red }}>-{exp.amount.toLocaleString()}</span>
                   </div>
                 ))}
-                {dayMisc.map(exp => (
+                {plainMisc.map(exp => (
                   <div key={exp.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderBottom: `1px solid ${C.border}` }}>
                     <div>
                       <span style={{ fontSize: 13, color: C.sub }}>{exp.description}</span>
-                      <span style={{ fontSize: 11, color: C.muted, marginLeft: 6 }}>{expCategories.find(c => c.key === exp.category)?.label || exp.category}</span>
+                      <span style={{ fontSize: 11, color: C.muted, marginLeft: 6 }}>{EXP_LABEL[exp.category] || exp.category}</span>
                     </div>
                     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                       <span style={{ fontFamily: MONO, fontSize: 14, fontWeight: 700, color: C.red }}>-{num(exp.amount).toLocaleString()}</span>
@@ -542,27 +702,39 @@ function CashBookScreen({ cashBook, setCashBook, grns, setGrns, jobs, loadClosed
             )}
             <div style={{ display: "flex", justifyContent: "space-between", paddingTop: 8, borderTop: `1px solid ${C.border}`, marginTop: 4 }}>
               <span style={{ fontSize: 13, fontWeight: 600 }}>Total</span>
-              <span style={{ fontFamily: MONO, fontSize: 16, fontWeight: 700, color: C.red }}>Rs.{totalExpenses.toLocaleString()}</span>
+              <span style={{ fontFamily: MONO, fontSize: 16, fontWeight: 700, color: C.red }}>Rs.{totalSpent.toLocaleString()}</span>
             </div>
           </div>
 
-          {/* Add Petty Cash / Misc Expense */}
-          <div style={{ ...card, border: `2px solid ${C.red}20`, background: C.red + "04" }}>
-            <div style={{ fontSize: 15, fontWeight: 700, color: C.red, marginBottom: 2 }}>Add Petty Cash Expense</div>
-            <div style={{ fontSize: 12, color: C.muted, marginBottom: 10 }}>Food, fuel, utility bills, stationery, tea, etc. {!isToday && <span style={{ color: C.orange, fontWeight: 600 }}>— for {dateLabel}</span>}</div>
-            <input value={addExpDesc} onChange={e => setAddExpDesc(e.target.value)} placeholder="What did you spend on?"
-              onKeyDown={e => { if (e.key === "Enter") addMiscExpense() }}
-              style={{ ...inp, fontSize: 15, padding: "12px 14px", marginBottom: 8 }} />
-            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-              <select value={addExpCat} onChange={e => setAddExpCat(e.target.value)} style={{ ...inp, flex: "0 0 130px", fontSize: 14, padding: "12px 10px" }}>
-                {expCategories.map(c => <option key={c.key} value={c.key}>{c.label}</option>)}
-              </select>
-              <input type="number" value={addExpAmt} onChange={e => setAddExpAmt(e.target.value)} placeholder="Rs. amount" min="0"
-                onKeyDown={e => { if (e.key === "Enter") addMiscExpense() }}
-                style={{ ...inp, flex: 1, fontSize: 18, fontFamily: MONO, fontWeight: 700, padding: "12px 14px" }} />
-              <div onClick={addMiscExpense} style={{ width: 54, height: 54, borderRadius: 12, background: C.red, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24, fontWeight: 700, cursor: "pointer", flexShrink: 0, boxShadow: `0 2px 8px ${C.red}40` }}>+</div>
+          {/* Money moved — its own list. It changes the drawer and nothing else,
+              so it must not sit inside the Expenses total above. */}
+          {dayMovements.length > 0 && (
+            <div style={{ ...card, background: C.accent + "06", border: `1.5px solid ${C.accent}25` }}>
+              <div style={{ fontSize: 14, fontWeight: 600, color: C.accent, textTransform: "uppercase", letterSpacing: 0.8 }}>🔁 Money moved</div>
+              <div style={{ fontSize: 11, color: C.muted, marginBottom: 8 }}>Between the till, the bank and the owner — not income, not an expense.</div>
+              {dayMovements.map(m => {
+                const inward = isMoveIn(m)
+                return (
+                  <div key={m.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderBottom: `1px solid ${C.border}` }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+                      <span style={{ fontSize: 12 }}>{MOVE_ICON[m.direction]}</span>
+                      <span style={{ fontSize: 13, color: C.sub, overflow: "hidden", textOverflow: "ellipsis" }}>{m.description}</span>
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+                      <span style={{ fontFamily: MONO, fontSize: 14, fontWeight: 700, color: inward ? C.green : C.orange }}>{inward ? "+" : "−"}{num(m.amount).toLocaleString()}</span>
+                      <span onClick={() => deleteMisc(m.id, m.description)} style={{ fontSize: 14, color: C.muted, cursor: "pointer", padding: 2 }}>×</span>
+                    </div>
+                  </div>
+                )
+              })}
+              <div style={{ display: "flex", justifyContent: "space-between", paddingTop: 8, marginTop: 4 }}>
+                <span style={{ fontSize: 12, color: C.muted }}>Net effect on the drawer</span>
+                <span style={{ fontFamily: MONO, fontSize: 14, fontWeight: 700, color: transferIn - transferOut >= 0 ? C.green : C.orange }}>
+                  {transferIn - transferOut >= 0 ? "+" : "−"}Rs.{Math.abs(transferIn - transferOut).toLocaleString()}
+                </span>
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Balance */}
           <div style={{ ...card, background: calculatedBalance >= 0 ? C.green + "08" : C.red + "08" }}>
@@ -572,7 +744,12 @@ function CashBookScreen({ cashBook, setCashBook, grns, setGrns, jobs, loadClosed
                 <div style={{ fontFamily: MONO, fontSize: 24, fontWeight: 700, color: calculatedBalance >= 0 ? C.green : C.red, marginTop: 2 }}>Rs.{calculatedBalance.toLocaleString()}</div>
               </div>
             </div>
-            <div style={{ fontSize: 11, color: C.muted, marginTop: 6 }}>Opening {prevBalance.toLocaleString()} + Income {totalCashIn.toLocaleString()} - Expenses {totalExpenses.toLocaleString()}</div>
+            <div style={{ fontSize: 11, color: C.muted, marginTop: 6, lineHeight: 1.5 }}>
+              Opening {prevBalance.toLocaleString()} + Income {totalCashIn.toLocaleString()}
+              {transferIn > 0 && ` + Moved in ${transferIn.toLocaleString()}`}
+              {" "}− Expenses {totalSpent.toLocaleString()}
+              {transferOut > 0 && ` − Moved out ${transferOut.toLocaleString()}`}
+            </div>
           </div>
 
           {/* Cash Count Verification */}
