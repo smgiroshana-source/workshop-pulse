@@ -892,6 +892,21 @@ export function WorkshopProvider({ children }) {
   // The result snapshot is stored on the workshop invoice; reprints always
   // use the snapshot so they can never drift from what was legally issued.
   const KURUMA_WORKSHOP_API = "https://www.kuruma.lk/api/workshop/sales"
+  // Job-close guard: does this vehicle's insurance claim still have money the
+  // insurer did not pay sitting UNCLASSIFIED in WHEEL MART? A job must not
+  // close while that decision (recover / write down / discount / keep chasing)
+  // has not been made. Returns null when the check itself could not run.
+  const checkClaimShortfalls = async (vehicleReg) => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session || !vehicleReg) return null
+      const res = await fetch("https://www.kuruma.lk/api/workshop/claim-status?vehicle=" + encodeURIComponent(vehicleReg), {
+        headers: { Authorization: "Bearer " + session.access_token },
+      })
+      if (!res.ok) return null
+      return await res.json()
+    } catch { return null }
+  }
   const issueOfficialInvoice = async (payload) => {
     const { data: { session } } = await supabase.auth.getSession()
     if (!session) throw new Error("Not signed in — please sign in again")
@@ -1747,7 +1762,7 @@ export function WorkshopProvider({ children }) {
     saveEstimate,
     startApproval, setApproved, approveAsIs, markUseSame, approveAllCatAsIs, handleApprovalEnter, finalizeApproval,
     generateInvoice, generateMinorInvoice,
-    issueOfficialInvoice, printOfficialInvoice,
+    issueOfficialInvoice, printOfficialInvoice, checkClaimShortfalls,
     invTotal, invNet, invInsPayments, invCustPayments, invInsTotal, invInsReceivedTotal, invInsOutstanding, invCustPaidTotal,
     invCustDiscount, invCustPortion, invCustOwes, invCustBalance, invTotalDiscount, invFullyPaid,
     invExcess, invInsExpected, jobOutstandingTotal,

@@ -212,6 +212,7 @@ export default function JobScreen() {
   const {
     screen, setScreen,
     jobInfo, setJobInfo,
+    checkClaimShortfalls,
     jobStage, jobPaused, setJobPaused,
     partsOrdered, setPartsOrdered,
     partsArrived, setPartsArrived,
@@ -521,8 +522,19 @@ export default function JobScreen() {
             }} style={{ ...btn(C.orange + "15", C.orange), flex: 1, border: `1px solid ${C.orange}40`, fontSize: 15 }}>No Answer {followUpAttempts > 0 ? `(${followUpAttempts}/3)` : ""}</button>
 
             {/* Close Job */}
-            <button onClick={() => {
+            <button onClick={async () => {
               if (!followUpNote.trim()) { tt("⚠️ Add a follow-up comment first"); return }
+              // Insurance jobs: the claim in WHEEL MART must have no
+              // unclassified shortfall — closing would bury an undecided
+              // rupee. Network trouble degrades to a confirm, never silence.
+              if (isInsurance) {
+                const cs = await checkClaimShortfalls(jobInfo.vehicle_reg)
+                if (cs && cs.unclassifiedTotal > 0) {
+                  tt(`⛔ ${cs.unclassifiedTotal} unclassified shortfall${cs.unclassifiedTotal > 1 ? "s" : ""} on this vehicle's claim — classify in WHEEL MART → Insurance Claims first`)
+                  return
+                }
+                if (!cs && !confirm("Could not reach WHEEL MART to check the claim for unclassified shortfalls.\n\nClose the job anyway?")) return
+              }
               const outstanding = jobOutstandingTotal({ invoices })
               if (outstanding > 0 && !confirm(`⚠️ Rs.${fmt(outstanding)} is still outstanding on this job${isInsurance ? " (insurance not yet received?)" : ""}.\n\nClose anyway? The amount will still show in Receivable.`)) return
               const now = new Date().toISOString()
