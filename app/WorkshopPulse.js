@@ -74,19 +74,34 @@ const EXP_LABEL = {
   drawings: "💼 Owner Drawings",
 }
 
-// Shared shell so all three money forms look and behave identically.
+// Shared shell so all three money forms look and behave identically. A bottom
+// sheet, not a centered dialog — thumbs live at the bottom of the phone.
 function MoneySheet({ title, sub, accent, onClose, onSave, saveLabel, saveDisabled, children }) {
   return (
-    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
-      <div onClick={e => e.stopPropagation()} style={{ background: "#fff", borderRadius: 16, padding: 20, maxWidth: 420, width: "100%", maxHeight: "88vh", overflowY: "auto" }}>
-        <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>{title}</div>
-        <div style={{ fontSize: 12, color: C.muted, marginBottom: 14, lineHeight: 1.4 }}>{sub}</div>
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 1000, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+      <style>{`@keyframes wpSheetUp { from { transform: translateY(48px); opacity: .4 } to { transform: translateY(0); opacity: 1 } }`}</style>
+      <div onClick={e => e.stopPropagation()} style={{ background: "#fff", borderRadius: "22px 22px 0 0", padding: "10px 20px 24px", maxWidth: 480, width: "100%", maxHeight: "90vh", overflowY: "auto", animation: "wpSheetUp .22s ease-out", boxShadow: "0 -8px 40px rgba(0,0,0,0.18)" }}>
+        <div style={{ width: 36, height: 4, borderRadius: 2, background: C.border, margin: "0 auto 14px" }} />
+        <div style={{ fontSize: 19, fontWeight: 700, letterSpacing: "-0.3px" }}>{title}</div>
+        <div style={{ fontSize: 12.5, color: C.muted, margin: "3px 0 16px", lineHeight: 1.45 }}>{sub}</div>
         {children}
-        <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
-          <button onClick={onClose} style={{ flex: 1, padding: "13px", borderRadius: 10, border: `1.5px solid ${C.border}`, background: "#fff", color: C.sub, fontWeight: 600, fontSize: 14, cursor: "pointer", fontFamily: FONT }}>Cancel</button>
-          <button onClick={onSave} disabled={saveDisabled} style={{ flex: 2, padding: "13px", borderRadius: 10, border: "none", background: saveDisabled ? C.border : accent, color: "#fff", fontWeight: 700, fontSize: 14, cursor: saveDisabled ? "not-allowed" : "pointer", fontFamily: FONT }}>{saveLabel}</button>
+        <div style={{ display: "flex", gap: 8, marginTop: 18 }}>
+          <button onClick={onClose} style={{ flex: 1, padding: "14px", borderRadius: 12, border: `1.5px solid ${C.border}`, background: "#fff", color: C.sub, fontWeight: 600, fontSize: 15, cursor: "pointer", fontFamily: FONT }}>Cancel</button>
+          <button onClick={onSave} disabled={saveDisabled} style={{ flex: 2, padding: "14px", borderRadius: 12, border: "none", background: saveDisabled ? C.border : accent, color: "#fff", fontWeight: 700, fontSize: 15, cursor: saveDisabled ? "not-allowed" : "pointer", fontFamily: FONT, boxShadow: saveDisabled ? "none" : `0 4px 14px ${accent}50`, transition: "all .15s ease" }}>{saveLabel}</button>
         </div>
       </div>
+    </div>
+  )
+}
+
+// Big money field with the Rs. prefix — the centrepiece of every sheet.
+function AmountField({ value, onChange, autoFocus }) {
+  return (
+    <div style={{ position: "relative" }}>
+      <span style={{ position: "absolute", left: 16, top: "50%", transform: "translateY(-50%)", fontSize: 17, fontWeight: 700, color: C.muted }}>Rs.</span>
+      <input type="number" inputMode="numeric" min="0" value={value} autoFocus={autoFocus}
+        onChange={e => onChange(e.target.value)} placeholder="0"
+        style={{ ...inp, paddingLeft: 52, fontSize: 24, fontFamily: MONO, fontWeight: 700, padding: "14px 16px 14px 52px" }} />
     </div>
   )
 }
@@ -138,9 +153,7 @@ function MoneyModal({ dir, viewDate, today, drawerExpected, movements, onClose, 
       </div>
 
       <div style={{ fontSize: 12, color: C.muted, marginBottom: 4 }}>Amount</div>
-      <input type="number" inputMode="numeric" autoFocus value={amount} min="0"
-        onChange={e => setAmount(e.target.value)} placeholder="Rs."
-        style={{ ...inp, fontSize: 22, fontFamily: MONO, fontWeight: 700, padding: "13px 14px" }} />
+      <AmountField value={amount} onChange={setAmount} autoFocus />
       {amt > 0 && (
         <div style={{ fontSize: 12, fontWeight: 600, color: accent, marginTop: 8, lineHeight: 1.4 }}>
           {MOVE_LABEL[type]} — the drawer will expect Rs.{amt.toLocaleString()} {dir === "in" ? "more" : "less"}. Profit is untouched.
@@ -196,9 +209,7 @@ function ExpenseModal({ viewDate, today, drawerExpected, onClose, onSave, tt }) 
       </div>
 
       <div style={{ fontSize: 12, color: C.muted, marginBottom: 4 }}>Amount</div>
-      <input type="number" inputMode="numeric" value={amount} min="0"
-        onChange={e => setAmount(e.target.value)} placeholder="Rs."
-        style={{ ...inp, fontSize: 22, fontFamily: MONO, fontWeight: 700, padding: "13px 14px" }} />
+      <AmountField value={amount} onChange={setAmount} />
 
       <div style={{ fontSize: 12, color: C.muted, margin: "12px 0 4px" }}>Date</div>
       <input type="date" max={today} value={date} onChange={e => setDate(e.target.value)} style={{ ...inp, fontSize: 14 }} />
@@ -551,11 +562,40 @@ function CashBookScreen({ cashBook, setCashBook, grns, setGrns, jobs, loadClosed
 
   const dateLabel = new Date(viewDate + "T00:00:00").toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric" })
 
+  const rs = (n) => "Rs." + Math.round(num(n)).toLocaleString()
+  const movedNet = transferIn - transferOut
+  const bookEmpty = cashIn.length === 0 && cashOut.length === 0 && plainMisc.length === 0 && dayMovements.length === 0
+
+  // One row of the day's book — dot, description, signed mono amount.
+  const BookRow = ({ color, desc, chip, amount, sign, onDelete }) => (
+    <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 16px", borderTop: `1px solid ${C.border}50` }}>
+      <span style={{ width: 7, height: 7, borderRadius: 4, background: color, flexShrink: 0 }} />
+      <span style={{ flex: 1, fontSize: 14, color: C.text, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        {desc}
+        {chip && <span style={{ fontSize: 10.5, color: C.muted, marginLeft: 6, fontWeight: 600 }}>{chip}</span>}
+      </span>
+      <span style={{ fontFamily: MONO, fontSize: 14, fontWeight: 700, color, flexShrink: 0 }}>{sign}{Math.round(num(amount)).toLocaleString()}</span>
+      {onDelete && <span onClick={onDelete} style={{ fontSize: 16, color: C.muted, cursor: "pointer", padding: "0 2px", lineHeight: 1, flexShrink: 0 }}>×</span>}
+    </div>
+  )
+
+  const BookHeader = ({ label, total, color }) => (
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", padding: "11px 16px 5px" }}>
+      <span style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: 1.1, textTransform: "uppercase", color: C.muted }}>{label}</span>
+      <span style={{ fontFamily: MONO, fontSize: 12, fontWeight: 700, color }}>{total}</span>
+    </div>
+  )
+
   return (
     <div>
-      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
-        <span onClick={onBack} style={{ fontSize: 14, color: C.accent, cursor: "pointer", fontWeight: 600 }}>← Back</span>
-        <span style={{ fontSize: 20, fontWeight: 700 }}>Cash Book</span>
+      {/* Header — reports live up here, out of the working area */}
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+        <span onClick={onBack} style={{ fontSize: 14, color: C.accent, cursor: "pointer", fontWeight: 600, flexShrink: 0 }}>← Back</span>
+        <span style={{ fontSize: 20, fontWeight: 700, letterSpacing: "-0.4px" }}>Cash Book</span>
+        <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
+          <span onClick={generateDailyPDF} style={{ fontSize: 12, fontWeight: 600, color: C.accent, background: C.accentLight, padding: "7px 11px", borderRadius: 9, cursor: "pointer", whiteSpace: "nowrap" }}>📄 Daily</span>
+          <span onClick={generateMonthlyPDF} style={{ fontSize: 12, fontWeight: 600, color: C.purple, background: C.purple + "12", padding: "7px 11px", borderRadius: 9, cursor: "pointer", whiteSpace: "nowrap" }}>📊 Month</span>
+        </div>
       </div>
 
       {/* The three money forms — one door each, no overlap */}
@@ -574,224 +614,216 @@ function CashBookScreen({ cashBook, setCashBook, grns, setGrns, jobs, loadClosed
         />
       )}
 
-      {/* Date navigation */}
-      <div style={{ ...card, display: "flex", alignItems: "center", gap: 8, padding: "10px 12px", marginBottom: 12 }}>
-        <span onClick={() => shiftDate(-1)} style={{ padding: "6px 10px", borderRadius: 8, background: C.bg, cursor: "pointer", fontSize: 16, fontWeight: 700 }}>‹</span>
-        <div style={{ flex: 1, textAlign: "center" }}>
-          <div style={{ fontSize: 14, fontWeight: 700 }}>{dateLabel}</div>
-          {!isToday && <div style={{ fontSize: 11, color: C.orange, fontWeight: 600 }}>📅 Historical view</div>}
-        </div>
-        <span onClick={() => shiftDate(1)} style={{ padding: "6px 10px", borderRadius: 8, background: C.bg, cursor: isToday ? "not-allowed" : "pointer", fontSize: 16, fontWeight: 700, opacity: isToday ? 0.3 : 1 }}>›</span>
-        {!isToday && <span onClick={() => setViewDate(today)} style={{ fontSize: 12, color: C.accent, fontWeight: 600, cursor: "pointer", marginLeft: 4 }}>Today</span>}
-      </div>
-
-      {/* Report PDFs — download, then attach on WhatsApp */}
-      <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
-        <button onClick={generateDailyPDF} style={{ flex: 1, padding: "11px 8px", borderRadius: 12, border: "none", background: C.accent, color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: FONT }}>📄 Daily Report PDF</button>
-        <button onClick={generateMonthlyPDF} style={{ flex: 1, padding: "11px 8px", borderRadius: 12, border: "none", background: C.purple, color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: FONT }}>📊 Monthly Summary PDF</button>
-      </div>
-
-      {/* Tabs */}
-      <div style={{ display: "flex", gap: 0, marginBottom: 16, borderRadius: 12, overflow: "hidden", border: `1.5px solid ${C.border}` }}>
+      {/* Segmented tabs */}
+      <div style={{ display: "flex", gap: 2, marginBottom: 12, borderRadius: 12, background: "#E3E3E8", padding: 3 }}>
         {[{ key: "cash", label: "💵 Cash" }, { key: "bank", label: "🏦 Bank" }, { key: "history", label: "📅 History" }].map(t => (
           <div key={t.key} onClick={() => setTab(t.key)} style={{
-            flex: 1, padding: "12px", textAlign: "center", fontSize: 14, fontWeight: 600, cursor: "pointer",
-            background: tab === t.key ? C.accent : "#fff", color: tab === t.key ? "#fff" : C.sub,
+            flex: 1, padding: "10px 4px", textAlign: "center", fontSize: 13.5, fontWeight: 700, cursor: "pointer",
+            borderRadius: 10, transition: "all .15s ease",
+            background: tab === t.key ? "#fff" : "transparent",
+            color: tab === t.key ? C.text : C.sub,
+            boxShadow: tab === t.key ? "0 1px 4px rgba(0,0,0,0.10)" : "none",
           }}>{t.label}</div>
         ))}
       </div>
 
-      {/* Alert: day-close overdue — a stale opening makes every count look off */}
-      {staleClose && tab !== "history" && (
-        <div style={{ ...card, background: C.orange + "10", border: `1.5px solid ${C.orange}40`, padding: "10px 14px", marginBottom: 10 }}>
-          <span style={{ fontSize: 13, fontWeight: 600, color: C.orange }}>⚠️ Day not closed since {new Date(staleClose + "T00:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short" })} — opening cash may be stale. Count &amp; close each business day.</span>
-        </div>
-      )}
       {/* ═══ CASH TAB ═══ */}
       {tab === "cash" && (
         <>
-          {/* Money in · money out · expense — the only three ways cash changes
-              by hand. Big targets: this is used standing at the counter. */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 12 }}>
+          {/* Hero — the drawer. The only dark card in the app, so the eye lands
+              on the one number that matters at the counter. */}
+          <div style={{ background: "#1D1D1F", borderRadius: 20, padding: "16px 16px 14px", marginBottom: 12, color: "#fff", boxShadow: "0 10px 28px rgba(0,0,0,0.16)" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+              <span onClick={() => shiftDate(-1)} style={{ width: 36, height: 36, borderRadius: 11, background: "rgba(255,255,255,0.09)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontSize: 18, fontWeight: 700 }}>‹</span>
+              <div style={{ textAlign: "center" }}>
+                <div style={{ fontSize: 14.5, fontWeight: 700 }}>{isToday ? "Today" : dateLabel}</div>
+                {isToday
+                  ? <div style={{ fontSize: 10.5, color: "rgba(255,255,255,0.45)", marginTop: 1 }}>{dateLabel}</div>
+                  : <div onClick={() => setViewDate(today)} style={{ fontSize: 11.5, color: "#7CC7FF", fontWeight: 700, cursor: "pointer", marginTop: 1 }}>Back to today →</div>}
+              </div>
+              <span onClick={() => !isToday && shiftDate(1)} style={{ width: 36, height: 36, borderRadius: 11, background: "rgba(255,255,255,0.09)", display: "flex", alignItems: "center", justifyContent: "center", cursor: isToday ? "default" : "pointer", fontSize: 18, fontWeight: 700, opacity: isToday ? 0.25 : 1 }}>›</span>
+            </div>
+
+            <div style={{ textAlign: "center", marginBottom: 13 }}>
+              <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: 1.6, color: "rgba(255,255,255,0.45)", textTransform: "uppercase" }}>
+                {isToday ? "Cash in the drawer" : "Drawer at end of day"}
+              </div>
+              <div style={{ fontFamily: MONO, fontSize: 37, fontWeight: 700, letterSpacing: "-1.2px", lineHeight: 1.15, color: calculatedBalance < 0 ? "#FF7B72" : "#fff" }}>
+                {rs(calculatedBalance)}
+              </div>
+              {dayCount && (
+                <div style={{ display: "inline-block", marginTop: 6, fontSize: 11.5, fontWeight: 700, padding: "4px 11px", borderRadius: 999, background: cashDiff === 0 ? "rgba(52,199,89,0.18)" : "rgba(255,59,48,0.20)", color: cashDiff === 0 ? "#5BD97C" : "#FF9C94" }}>
+                  {cashDiff === 0 ? "✓ Counted — balanced" : `Counted ${rs(dayCount.actualCash)} · ${Math.abs(cashDiff).toLocaleString()} ${cashDiff > 0 ? "over" : "short"}`}
+                </div>
+              )}
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 4, background: "rgba(255,255,255,0.06)", borderRadius: 13, padding: "9px 4px" }}>
+              {[
+                { l: "Opening", v: prevBalance.toLocaleString(), c: "rgba(255,255,255,0.85)" },
+                { l: "In", v: "+" + totalCashIn.toLocaleString(), c: "#5BD97C" },
+                { l: "Spent", v: "−" + totalSpent.toLocaleString(), c: "#FF9F8A" },
+                { l: "Moved", v: (movedNet >= 0 ? "+" : "−") + Math.abs(movedNet).toLocaleString(), c: movedNet === 0 ? "rgba(255,255,255,0.38)" : "#7CC7FF" },
+              ].map(s => (
+                <div key={s.l} style={{ textAlign: "center" }}>
+                  <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: 0.9, textTransform: "uppercase", color: "rgba(255,255,255,0.4)", marginBottom: 2 }}>{s.l}</div>
+                  <div style={{ fontFamily: MONO, fontSize: 12.5, fontWeight: 700, color: s.c }}>{s.v}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* The three doors — solid, unmissable, thumb-sized */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 6 }}>
             {[
               { k: "in", icon: "⬆", label: "Money In", sub: "owner · bank", color: C.green },
               { k: "out", icon: "⬇", label: "Money Out", sub: "bank · owner", color: C.orange },
-              { k: "expense", icon: "🧾", label: "Expense", sub: "spent on the shop", color: C.red },
+              { k: "expense", icon: "🧾", label: "Expense", sub: "shop spending", color: C.red },
             ].map(b => (
               <div key={b.k} onClick={() => setMoneyModal(b.k)} style={{
-                padding: "14px 6px", borderRadius: 14, textAlign: "center", cursor: "pointer",
-                background: b.color + "0e", border: `1.5px solid ${b.color}45`,
+                padding: "13px 4px 11px", borderRadius: 15, textAlign: "center", cursor: "pointer",
+                background: b.color, color: "#fff", boxShadow: `0 5px 15px ${b.color}40`,
               }}>
-                <div style={{ fontSize: 20, lineHeight: 1 }}>{b.icon}</div>
-                <div style={{ fontSize: 13, fontWeight: 700, color: b.color, marginTop: 5 }}>{b.label}</div>
-                <div style={{ fontSize: 10, color: C.muted, marginTop: 1 }}>{b.sub}</div>
+                <div style={{ fontSize: 19, lineHeight: 1 }}>{b.icon}</div>
+                <div style={{ fontSize: 13.5, fontWeight: 800, marginTop: 4, letterSpacing: "-0.2px" }}>{b.label}</div>
+                <div style={{ fontSize: 9.5, opacity: 0.85, marginTop: 1, fontWeight: 600 }}>{b.sub}</div>
               </div>
             ))}
           </div>
-          {!isToday && (
-            <div style={{ fontSize: 11, color: C.orange, fontWeight: 600, marginBottom: 10, textAlign: "center" }}>
-              Entries default to {dateLabel} — change the date inside the form if that is wrong.
+          <div style={{ fontSize: 10.5, color: C.muted, textAlign: "center", marginBottom: 12 }}>
+            Moved money never touches profit — only the Expense button does.
+            {!isToday && <span style={{ color: C.orange, fontWeight: 700 }}> Entries will be dated {dateLabel}.</span>}
+          </div>
+
+          {staleClose && (
+            <div style={{ ...card, background: C.warningBg, border: `1.5px solid ${C.orange}40`, padding: "10px 14px" }}>
+              <span style={{ fontSize: 13, fontWeight: 600, color: C.orange }}>⚠️ Day not closed since {new Date(staleClose + "T00:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short" })} — count &amp; close each business day so the opening stays true.</span>
             </div>
           )}
 
-          {/* Opening Balance */}
-          <div style={{ ...card, display: "flex", justifyContent: "space-between", alignItems: "center", background: C.accent + "08" }}>
-            <div>
-              <div style={{ fontSize: 12, color: C.muted }}>Opening Balance {!isToday && "(carried from prev day)"}</div>
-              {editingOpening && isToday ? (
-                <div style={{ display: "flex", gap: 6, alignItems: "center", marginTop: 4 }}>
-                  <input type="number" value={openingCash}
-                    onFocus={e => { e.target._orig = openingCash; e.target.value = ""; setOpeningCash("") }}
-                    onBlur={e => { if (!openingCash) setOpeningCash(e.target._orig || "0") }}
-                    onChange={e => setOpeningCash(e.target.value)}
-                    style={{ ...inp, width: 140, fontSize: 16, fontFamily: MONO, fontWeight: 700, padding: "8px 10px" }} />
-                  <span onClick={saveOpening} style={{ fontSize: 13, color: C.green, fontWeight: 600, cursor: "pointer" }}>Save</span>
-                  <span onClick={() => { setEditingOpening(false); setOpeningCash(String(num(cashBook.openingCash))) }} style={{ fontSize: 13, color: C.muted, cursor: "pointer" }}>Cancel</span>
-                </div>
-              ) : (
-                <div style={{ fontFamily: MONO, fontSize: 20, fontWeight: 700, marginTop: 2 }}>Rs.{prevBalance.toLocaleString()}</div>
+          {/* The day's book — one ledger, three sections */}
+          <div style={{ ...card, padding: 0, overflow: "hidden" }}>
+            <div style={{ padding: "13px 16px 11px", borderBottom: `1px solid ${C.border}60` }}>
+              <span style={{ fontSize: 15, fontWeight: 700 }}>📖 The day&apos;s book</span>
+            </div>
+            {bookEmpty ? (
+              <div style={{ textAlign: "center", padding: "28px 20px 30px", color: C.muted }}>
+                <div style={{ fontSize: 26, marginBottom: 6 }}>🗒</div>
+                <div style={{ fontSize: 13.5, fontWeight: 600, color: C.sub }}>Nothing in the book for this day</div>
+                <div style={{ fontSize: 12, marginTop: 3, lineHeight: 1.5 }}>Cash job payments appear here on their own.<br />Use the buttons above for everything else.</div>
+              </div>
+            ) : (
+              <div style={{ paddingBottom: 6 }}>
+                {cashIn.length > 0 && (
+                  <>
+                    <BookHeader label="Came in" total={"+" + totalCashIn.toLocaleString()} color={C.green} />
+                    {cashIn.map(i => <BookRow key={i.id} color={C.green} desc={i.desc} amount={i.amount} sign="+" />)}
+                  </>
+                )}
+                {(cashOut.length > 0 || plainMisc.length > 0) && (
+                  <>
+                    <BookHeader label="Spent" total={"−" + totalSpent.toLocaleString()} color={C.red} />
+                    {cashOut.map(e => <BookRow key={e.id} color={C.red} desc={e.desc} amount={e.amount} sign="−" />)}
+                    {plainMisc.map(e => (
+                      <BookRow key={e.id} color={C.red} desc={e.description} chip={EXP_LABEL[e.category] || e.category}
+                        amount={e.amount} sign="−" onDelete={() => deleteMisc(e.id, e.description)} />
+                    ))}
+                  </>
+                )}
+                {dayMovements.length > 0 && (
+                  <>
+                    <BookHeader label="Moved — not in profit" total={(movedNet >= 0 ? "+" : "−") + Math.abs(movedNet).toLocaleString()} color={C.accent} />
+                    {dayMovements.map(m => (
+                      <BookRow key={m.id} color={isMoveIn(m) ? C.green : C.orange} desc={m.description}
+                        chip={MOVE_ICON[m.direction]} amount={m.amount} sign={isMoveIn(m) ? "+" : "−"}
+                        onDelete={() => deleteMisc(m.id, m.description)} />
+                    ))}
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* End of day — count the drawer, see the variance live, close */}
+          <div style={{ ...card, padding: 0, overflow: "hidden" }}>
+            <div style={{ padding: "13px 16px 11px", borderBottom: `1px solid ${C.border}60`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span style={{ fontSize: 15, fontWeight: 700 }}>🔒 End of day</span>
+              {dayCount && !editingCount && (
+                <span onClick={() => { setEditingCount(true); setCountAmt(String(dayCount.actualCash)); setCountNote(dayCount.note || "") }}
+                  style={{ fontSize: 12, color: C.accent, fontWeight: 600, cursor: "pointer" }}>Edit count</span>
               )}
             </div>
-            {!editingOpening && isToday && <span onClick={() => setEditingOpening(true)} style={{ fontSize: 12, color: C.accent, fontWeight: 600, cursor: "pointer" }}>✏️ Edit</span>}
-          </div>
-
-          {/* Income */}
-          <div style={card}>
-            <div style={{ fontSize: 14, fontWeight: 600, color: C.green, textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 8 }}>📥 Cash Income</div>
-            {cashIn.length === 0 ? (
-              <div style={{ fontSize: 13, color: C.muted, padding: "8px 0" }}>No cash income</div>
-            ) : cashIn.map((inc, i) => (
-              <div key={inc.id} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: i < cashIn.length - 1 ? `1px solid ${C.border}` : "none" }}>
-                <span style={{ fontSize: 13, color: C.sub }}>{inc.desc}</span>
-                <span style={{ fontFamily: MONO, fontSize: 14, fontWeight: 700, color: C.green }}>+{inc.amount.toLocaleString()}</span>
-              </div>
-            ))}
-            <div style={{ display: "flex", justifyContent: "space-between", paddingTop: 8, borderTop: `1px solid ${C.border}`, marginTop: 4 }}>
-              <span style={{ fontSize: 13, fontWeight: 600 }}>Total</span>
-              <span style={{ fontFamily: MONO, fontSize: 16, fontWeight: 700, color: C.green }}>Rs.{totalCashIn.toLocaleString()}</span>
-            </div>
-          </div>
-
-          {/* Expenses */}
-          <div style={card}>
-            <div style={{ fontSize: 14, fontWeight: 600, color: C.red, textTransform: "uppercase", letterSpacing: 0.8 }}>📤 Expenses</div>
-            <div style={{ fontSize: 11, color: C.muted, marginBottom: 8 }}>Money spent running the workshop — this reduces profit.</div>
-            {cashOut.length === 0 && plainMisc.length === 0 ? (
-              <div style={{ fontSize: 13, color: C.muted, padding: "8px 0" }}>No expenses</div>
-            ) : (
-              <>
-                {cashOut.map(exp => (
-                  <div key={exp.id} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: `1px solid ${C.border}` }}>
-                    <span style={{ fontSize: 13, color: C.sub }}>{exp.desc}</span>
-                    <span style={{ fontFamily: MONO, fontSize: 14, fontWeight: 700, color: C.red }}>-{exp.amount.toLocaleString()}</span>
-                  </div>
-                ))}
-                {plainMisc.map(exp => (
-                  <div key={exp.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderBottom: `1px solid ${C.border}` }}>
-                    <div>
-                      <span style={{ fontSize: 13, color: C.sub }}>{exp.description}</span>
-                      <span style={{ fontSize: 11, color: C.muted, marginLeft: 6 }}>{EXP_LABEL[exp.category] || exp.category}</span>
-                    </div>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <span style={{ fontFamily: MONO, fontSize: 14, fontWeight: 700, color: C.red }}>-{num(exp.amount).toLocaleString()}</span>
-                      <span onClick={() => deleteMisc(exp.id, exp.description)} style={{ fontSize: 14, color: C.muted, cursor: "pointer", padding: 2 }}>×</span>
-                    </div>
-                  </div>
-                ))}
-              </>
-            )}
-            <div style={{ display: "flex", justifyContent: "space-between", paddingTop: 8, borderTop: `1px solid ${C.border}`, marginTop: 4 }}>
-              <span style={{ fontSize: 13, fontWeight: 600 }}>Total</span>
-              <span style={{ fontFamily: MONO, fontSize: 16, fontWeight: 700, color: C.red }}>Rs.{totalSpent.toLocaleString()}</span>
-            </div>
-          </div>
-
-          {/* Money moved — its own list. It changes the drawer and nothing else,
-              so it must not sit inside the Expenses total above. */}
-          {dayMovements.length > 0 && (
-            <div style={{ ...card, background: C.accent + "06", border: `1.5px solid ${C.accent}25` }}>
-              <div style={{ fontSize: 14, fontWeight: 600, color: C.accent, textTransform: "uppercase", letterSpacing: 0.8 }}>🔁 Money moved</div>
-              <div style={{ fontSize: 11, color: C.muted, marginBottom: 8 }}>Between the till, the bank and the owner — not income, not an expense.</div>
-              {dayMovements.map(m => {
-                const inward = isMoveIn(m)
-                return (
-                  <div key={m.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderBottom: `1px solid ${C.border}` }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
-                      <span style={{ fontSize: 12 }}>{MOVE_ICON[m.direction]}</span>
-                      <span style={{ fontSize: 13, color: C.sub, overflow: "hidden", textOverflow: "ellipsis" }}>{m.description}</span>
-                    </div>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
-                      <span style={{ fontFamily: MONO, fontSize: 14, fontWeight: 700, color: inward ? C.green : C.orange }}>{inward ? "+" : "−"}{num(m.amount).toLocaleString()}</span>
-                      <span onClick={() => deleteMisc(m.id, m.description)} style={{ fontSize: 14, color: C.muted, cursor: "pointer", padding: 2 }}>×</span>
-                    </div>
-                  </div>
-                )
-              })}
-              <div style={{ display: "flex", justifyContent: "space-between", paddingTop: 8, marginTop: 4 }}>
-                <span style={{ fontSize: 12, color: C.muted }}>Net effect on the drawer</span>
-                <span style={{ fontFamily: MONO, fontSize: 14, fontWeight: 700, color: transferIn - transferOut >= 0 ? C.green : C.orange }}>
-                  {transferIn - transferOut >= 0 ? "+" : "−"}Rs.{Math.abs(transferIn - transferOut).toLocaleString()}
-                </span>
-              </div>
-            </div>
-          )}
-
-          {/* Balance */}
-          <div style={{ ...card, background: calculatedBalance >= 0 ? C.green + "08" : C.red + "08" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <div>
-                <div style={{ fontSize: 12, color: C.muted }}>Calculated Cash Balance</div>
-                <div style={{ fontFamily: MONO, fontSize: 24, fontWeight: 700, color: calculatedBalance >= 0 ? C.green : C.red, marginTop: 2 }}>Rs.{calculatedBalance.toLocaleString()}</div>
-              </div>
-            </div>
-            <div style={{ fontSize: 11, color: C.muted, marginTop: 6, lineHeight: 1.5 }}>
-              Opening {prevBalance.toLocaleString()} + Income {totalCashIn.toLocaleString()}
-              {transferIn > 0 && ` + Moved in ${transferIn.toLocaleString()}`}
-              {" "}− Expenses {totalSpent.toLocaleString()}
-              {transferOut > 0 && ` − Moved out ${transferOut.toLocaleString()}`}
-            </div>
-          </div>
-
-          {/* Cash Count Verification */}
-          <div style={{ ...card, border: `2px solid ${C.orange}30` }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-              <div style={{ fontSize: 14, fontWeight: 600, color: C.orange, textTransform: "uppercase", letterSpacing: 0.8 }}>🔢 Cash Count</div>
-              {dayCount && !editingCount && <span onClick={() => { setEditingCount(true); setCountAmt(String(dayCount.actualCash)); setCountNote(dayCount.note || "") }} style={{ fontSize: 12, color: C.accent, fontWeight: 600, cursor: "pointer" }}>✏️ Edit</span>}
-            </div>
-            {dayCount && !editingCount ? (
-              <div>
-                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                  <span style={{ fontSize: 13, color: C.sub }}>Actual Cash</span>
-                  <span style={{ fontFamily: MONO, fontSize: 18, fontWeight: 700 }}>Rs.{num(dayCount.actualCash).toLocaleString()}</span>
-                </div>
-                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                  <span style={{ fontSize: 13, color: C.sub }}>Calculated</span>
-                  <span style={{ fontFamily: MONO, fontSize: 14, color: C.muted }}>Rs.{calculatedBalance.toLocaleString()}</span>
-                </div>
-                <div style={{ display: "flex", justifyContent: "space-between", paddingTop: 8, borderTop: `1px solid ${C.border}` }}>
-                  <span style={{ fontSize: 13, fontWeight: 600 }}>Difference</span>
-                  <span style={{ fontFamily: MONO, fontSize: 16, fontWeight: 700, color: cashDiff === 0 ? C.green : C.red }}>
-                    {cashDiff === 0 ? "✓ Balanced" : `Rs.${cashDiff.toLocaleString()} ${cashDiff > 0 ? "(excess)" : "(short)"}`}
+            <div style={{ padding: "12px 16px 16px" }}>
+              {/* Opening float, editable only for today */}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                <span style={{ fontSize: 13, color: C.sub }}>Opening float</span>
+                {editingOpening && isToday ? (
+                  <span style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                    <input type="number" value={openingCash} autoFocus
+                      onChange={e => setOpeningCash(e.target.value)}
+                      style={{ ...inp, width: 120, fontSize: 15, fontFamily: MONO, fontWeight: 700, padding: "7px 10px" }} />
+                    <span onClick={saveOpening} style={{ fontSize: 13, color: C.green, fontWeight: 700, cursor: "pointer" }}>Save</span>
+                    <span onClick={() => { setEditingOpening(false); setOpeningCash(String(num(cashBook.openingCash))) }} style={{ fontSize: 13, color: C.muted, cursor: "pointer" }}>✕</span>
                   </span>
-                </div>
-                {dayCount.note && <div style={{ fontSize: 12, color: C.muted, marginTop: 6 }}>Note: {dayCount.note}</div>}
-                {isToday && <button onClick={closeDay} style={{ width: "100%", padding: "12px", borderRadius: 10, border: "none", background: C.green, fontSize: 14, fontWeight: 600, color: "#fff", cursor: "pointer", fontFamily: FONT, marginTop: 10 }}>🔒 Close Day (Set as Tomorrow's Opening)</button>}
+                ) : (
+                  <span style={{ display: "flex", gap: 8, alignItems: "baseline" }}>
+                    <span style={{ fontFamily: MONO, fontSize: 15, fontWeight: 700 }}>{rs(prevBalance)}</span>
+                    {isToday && <span onClick={() => { setEditingOpening(true); setOpeningCash(String(num(cashBook.openingCash))) }} style={{ fontSize: 12, color: C.accent, fontWeight: 600, cursor: "pointer" }}>edit</span>}
+                  </span>
+                )}
               </div>
-            ) : (
-              <div>
-                <div style={{ fontSize: 13, color: C.muted, marginBottom: 8 }}>Count actual cash and enter below to verify</div>
-                <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-                  <input type="number" value={countAmt} onChange={e => setCountAmt(e.target.value)} placeholder="Actual cash in hand" min="0"
-                    onFocus={e => { if (countAmt === "0") setCountAmt("") }}
-                    style={{ ...inp, flex: 1, fontSize: 16, fontFamily: MONO, fontWeight: 700, padding: "10px 12px" }} />
-                </div>
-                <input value={countNote} onChange={e => setCountNote(e.target.value)} placeholder="Note (optional)" style={{ ...inp, fontSize: 13, padding: "8px 12px", marginBottom: 8 }} />
-                <div style={{ display: "flex", gap: 8 }}>
-                  {editingCount && <button onClick={() => { setEditingCount(false); setCountAmt(""); setCountNote("") }} style={{ flex: 1, padding: "12px", borderRadius: 10, border: `1.5px solid ${C.border}`, background: "#fff", fontSize: 14, fontWeight: 600, color: C.sub, cursor: "pointer", fontFamily: FONT }}>Cancel</button>}
-                  <button onClick={saveCashCount} style={{ flex: 2, padding: "12px", borderRadius: 10, border: "none", background: C.orange, fontSize: 14, fontWeight: 600, color: "#fff", cursor: "pointer", fontFamily: FONT }}>✓ Save Cash Count</button>
-                </div>
-              </div>
-            )}
+
+              {dayCount && !editingCount ? (
+                <>
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                    <span style={{ fontSize: 13, color: C.sub }}>Book says</span>
+                    <span style={{ fontFamily: MONO, fontSize: 15, fontWeight: 700 }}>{rs(calculatedBalance)}</span>
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                    <span style={{ fontSize: 13, color: C.sub }}>Counted in the drawer</span>
+                    <span style={{ fontFamily: MONO, fontSize: 15, fontWeight: 700 }}>{rs(dayCount.actualCash)}</span>
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "9px 12px", borderRadius: 11, background: cashDiff === 0 ? C.successBg : C.errorBg, marginTop: 4 }}>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: cashDiff === 0 ? C.green : C.red }}>{cashDiff === 0 ? "Balanced" : cashDiff > 0 ? "Over" : "Short"}</span>
+                    <span style={{ fontFamily: MONO, fontSize: 15, fontWeight: 800, color: cashDiff === 0 ? C.green : C.red }}>
+                      {cashDiff === 0 ? "✓" : (cashDiff > 0 ? "+" : "−") + "Rs." + Math.abs(cashDiff).toLocaleString()}
+                    </span>
+                  </div>
+                  {dayCount.note && <div style={{ fontSize: 12, color: C.muted, marginTop: 8 }}>Note: {dayCount.note}</div>}
+                  {isToday && (
+                    <button onClick={closeDay} style={{ ...btn(C.green), marginTop: 12, fontSize: 15 }}>
+                      🔒 Close the day
+                    </button>
+                  )}
+                  {isToday && <div style={{ fontSize: 11, color: C.muted, textAlign: "center", marginTop: 6 }}>The counted amount becomes tomorrow&apos;s opening float.</div>}
+                </>
+              ) : (
+                <>
+                  <div style={{ fontSize: 12.5, color: C.muted, marginBottom: 8 }}>Count the notes and coins, then type the total:</div>
+                  <div style={{ position: "relative", marginBottom: 8 }}>
+                    <span style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", fontSize: 15, fontWeight: 700, color: C.muted }}>Rs.</span>
+                    <input type="number" inputMode="numeric" value={countAmt} min="0"
+                      onChange={e => setCountAmt(e.target.value)} placeholder="0"
+                      style={{ ...inp, paddingLeft: 46, fontSize: 20, fontFamily: MONO, fontWeight: 700 }} />
+                  </div>
+                  {countAmt !== "" && (
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 12px", borderRadius: 10, marginBottom: 8, background: num(countAmt) - calculatedBalance === 0 ? C.successBg : C.errorBg }}>
+                      <span style={{ fontSize: 12.5, fontWeight: 700, color: num(countAmt) - calculatedBalance === 0 ? C.green : C.red }}>
+                        {num(countAmt) - calculatedBalance === 0 ? "Matches the book" : num(countAmt) - calculatedBalance > 0 ? "Over the book" : "Short of the book"}
+                      </span>
+                      <span style={{ fontFamily: MONO, fontSize: 13.5, fontWeight: 800, color: num(countAmt) - calculatedBalance === 0 ? C.green : C.red }}>
+                        {num(countAmt) - calculatedBalance === 0 ? "✓" : (num(countAmt) - calculatedBalance > 0 ? "+" : "−") + Math.abs(num(countAmt) - calculatedBalance).toLocaleString()}
+                      </span>
+                    </div>
+                  )}
+                  <input value={countNote} onChange={e => setCountNote(e.target.value)} placeholder="Note (optional)" style={{ ...inp, fontSize: 13.5, padding: "10px 14px", marginBottom: 10 }} />
+                  <div style={{ display: "flex", gap: 8 }}>
+                    {editingCount && <button onClick={() => { setEditingCount(false); setCountAmt(""); setCountNote("") }} style={{ flex: 1, padding: "13px", borderRadius: 12, border: `1.5px solid ${C.border}`, background: "#fff", fontSize: 14, fontWeight: 600, color: C.sub, cursor: "pointer", fontFamily: FONT }}>Cancel</button>}
+                    <button onClick={saveCashCount} style={{ flex: 2, padding: "13px", borderRadius: 12, border: "none", background: C.text, fontSize: 14.5, fontWeight: 700, color: "#fff", cursor: "pointer", fontFamily: FONT }}>✓ Save count</button>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         </>
       )}
@@ -799,78 +831,68 @@ function CashBookScreen({ cashBook, setCashBook, grns, setGrns, jobs, loadClosed
       {/* ═══ BANK TAB ═══ */}
       {tab === "bank" && (
         <>
-          {/* Bank Balance */}
           <div style={{ ...card, background: C.accent + "08" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <div>
-                <div style={{ fontSize: 12, color: C.muted }}>Bank Balance</div>
+                <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", color: C.muted }}>Bank balance</div>
                 {editingBank ? (
-                  <div style={{ display: "flex", gap: 6, alignItems: "center", marginTop: 4 }}>
-                    <input type="number" value={bankBal}
-                      onFocus={e => { e.target._orig = bankBal; e.target.value = ""; setBankBal("") }}
-                      onBlur={e => { if (!bankBal) setBankBal(e.target._orig || "0") }}
+                  <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 6 }}>
+                    <input type="number" value={bankBal} autoFocus
                       onChange={e => setBankBal(e.target.value)}
                       style={{ ...inp, width: 160, fontSize: 16, fontFamily: MONO, fontWeight: 700, padding: "8px 10px" }} />
-                    <span onClick={saveBankBal} style={{ fontSize: 13, color: C.green, fontWeight: 600, cursor: "pointer" }}>Save</span>
-                    <span onClick={() => { setEditingBank(false); setBankBal(String(num(cashBook.bankBalance))) }} style={{ fontSize: 13, color: C.muted, cursor: "pointer" }}>Cancel</span>
+                    <span onClick={saveBankBal} style={{ fontSize: 13, color: C.green, fontWeight: 700, cursor: "pointer" }}>Save</span>
+                    <span onClick={() => { setEditingBank(false); setBankBal(String(num(cashBook.bankBalance))) }} style={{ fontSize: 13, color: C.muted, cursor: "pointer" }}>✕</span>
                   </div>
                 ) : (
-                  <div style={{ fontFamily: MONO, fontSize: 24, fontWeight: 700, color: C.accent, marginTop: 2 }}>Rs.{num(cashBook.bankBalance).toLocaleString()}</div>
+                  <div style={{ fontFamily: MONO, fontSize: 26, fontWeight: 700, color: C.accent, marginTop: 2 }}>{rs(cashBook.bankBalance)}</div>
                 )}
               </div>
               {!editingBank && <span onClick={() => setEditingBank(true)} style={{ fontSize: 12, color: C.accent, fontWeight: 600, cursor: "pointer" }}>✏️ Reconcile</span>}
             </div>
-            <div style={{ fontSize: 11, color: C.muted, marginTop: 6 }}>Manual note only — the app does not track your bank account. Tap Reconcile to update it.</div>
+            <div style={{ fontSize: 11, color: C.muted, marginTop: 6 }}>A manual note only — the app does not mirror your bank account.</div>
           </div>
 
-          {/* Bank Transactions */}
-          <div style={card}>
-            <div style={{ fontSize: 14, fontWeight: 600, color: C.sub, textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 8 }}>Bank Transactions</div>
+          <div style={{ ...card, padding: 0, overflow: "hidden" }}>
+            <div style={{ padding: "13px 16px 11px", borderBottom: `1px solid ${C.border}60` }}>
+              <span style={{ fontSize: 15, fontWeight: 700 }}>🏦 Through the bank {isToday ? "today" : "this day"}</span>
+            </div>
             {bankIn.length === 0 && bankOut.length === 0 ? (
-              <div style={{ fontSize: 13, color: C.muted, padding: "8px 0" }}>No bank transactions</div>
+              <div style={{ fontSize: 13, color: C.muted, padding: "18px 16px 22px", textAlign: "center" }}>No bank payments on this day</div>
             ) : (
-              <>
-                {bankIn.map(t => (
-                  <div key={t.id} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: `1px solid ${C.border}` }}>
-                    <span style={{ fontSize: 13, color: C.sub }}>📥 {t.desc}</span>
-                    <span style={{ fontFamily: MONO, fontSize: 14, fontWeight: 700, color: C.green }}>+{t.amount.toLocaleString()}</span>
-                  </div>
-                ))}
-                {bankOut.map(t => (
-                  <div key={t.id} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: `1px solid ${C.border}` }}>
-                    <span style={{ fontSize: 13, color: C.sub }}>📤 {t.desc}</span>
-                    <span style={{ fontFamily: MONO, fontSize: 14, fontWeight: 700, color: C.red }}>-{t.amount.toLocaleString()}</span>
-                  </div>
-                ))}
-              </>
+              <div style={{ paddingBottom: 6 }}>
+                {bankIn.map(t => <BookRow key={t.id} color={C.green} desc={t.desc} amount={t.amount} sign="+" />)}
+                {bankOut.map(t => <BookRow key={t.id} color={C.red} desc={t.desc} amount={t.amount} sign="−" />)}
+              </div>
             )}
           </div>
-
         </>
       )}
 
       {/* ═══ HISTORY TAB ═══ */}
       {tab === "history" && (
-        <div style={card}>
-          <div style={{ fontSize: 14, fontWeight: 600, color: C.sub, textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 10 }}>Past Days</div>
+        <div style={{ ...card, padding: 0, overflow: "hidden" }}>
+          <div style={{ padding: "13px 16px 11px", borderBottom: `1px solid ${C.border}60` }}>
+            <span style={{ fontSize: 15, fontWeight: 700 }}>📅 Past days</span>
+          </div>
           {activeDays.length === 0 ? (
-            <div style={{ fontSize: 13, color: C.muted, padding: "8px 0" }}>No historical data yet</div>
+            <div style={{ fontSize: 13, color: C.muted, padding: "18px 16px 22px", textAlign: "center" }}>Nothing recorded yet</div>
           ) : activeDays.map(d => {
             const inc = computeIncome(d).filter(i => i.method === "cash").reduce((s, i) => s + i.amount, 0)
             const exp = computeExpenses(d).filter(e => e.method === "cash").reduce((s, e) => s + e.amount, 0)
-            const misc = (cashBook.miscExpenses || []).filter(e => e.date === d && e.category !== "transfer" && e.category !== "capital").reduce((s, e) => s + num(e.amount), 0)
+            const misc = (cashBook.miscExpenses || []).filter(e => e.date === d && !isMovementEntry(e)).reduce((s, e) => s + num(e.amount), 0)
             const count = (cashBook.dailyCounts || []).find(c => c.date === d)
             return (
-              <div key={d} onClick={() => { setViewDate(d); setTab("cash") }} style={{ padding: "10px 0", borderBottom: `1px solid ${C.border}`, cursor: "pointer" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <div>
-                    <div style={{ fontSize: 14, fontWeight: 600 }}>{new Date(d + "T00:00:00").toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })}</div>
-                    <div style={{ fontSize: 11, color: C.muted }}>
-                      In: Rs.{inc.toLocaleString()} · Out: Rs.{(exp + misc).toLocaleString()}
-                    </div>
+              <div key={d} onClick={() => { setViewDate(d); setTab("cash") }} style={{ display: "flex", alignItems: "center", gap: 10, padding: "11px 16px", borderTop: `1px solid ${C.border}50`, cursor: "pointer" }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 14, fontWeight: 700 }}>{new Date(d + "T00:00:00").toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })}</div>
+                  <div style={{ fontSize: 11.5, color: C.muted, marginTop: 1, fontFamily: MONO }}>
+                    <span style={{ color: C.green, fontWeight: 700 }}>+{inc.toLocaleString()}</span>
+                    <span style={{ margin: "0 5px" }}>·</span>
+                    <span style={{ color: C.red, fontWeight: 700 }}>−{(exp + misc).toLocaleString()}</span>
                   </div>
-                  {count && <span style={{ fontSize: 11, color: C.green, fontWeight: 600 }}>✓ Counted</span>}
                 </div>
+                {count && <span style={{ fontSize: 10.5, color: C.green, fontWeight: 700, background: C.successBg, padding: "3px 8px", borderRadius: 999 }}>✓ Counted</span>}
+                <span style={{ fontSize: 16, color: C.muted }}>›</span>
               </div>
             )
           })}
@@ -2181,3 +2203,4 @@ export default function App() {
     </WorkshopProvider>
   )
 }
+
